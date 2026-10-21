@@ -90,7 +90,7 @@ TA §6) → then wires them to the real view models as Phase 1 packages land.
 Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
 - [ ] **B1 Shell, settings, rates** (M) — sidebar, toolbar, display-currency state, settings
   (R-SET-*), rates screen and manual overrides (R-FX-2/5), backup UI.
-- [ ] **B2 Dashboard** (M) — net worth, budget with per-category bars, donut with drill-down,
+- [x] **B2 Dashboard** (M) — merged 2026-10-21 on preview data; wiring pending (after B1) — net worth, budget with per-category bars, donut with drill-down,
   month selector (R-HOME-*). Swift Charts.
 - [x] **B3 Transaction list** (M) — merged 2026-10-21 on preview data; wiring to the real store pending (after B1) — filters, search, sort, day grouping, nested attached records,
   totals (R-LIST-*).

@@ -33,9 +33,10 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | A1 Calculators | background agent | `wp/A1-calc` | **merged** 2026-10-21 (balances, net worth + series, reporting, budget, events) |
 | B1 Shell, settings, rates | background agent (own worktree) | `wp/B1-shell` | running since 2026-10-21 (on PreviewData) |
 | B3 Transaction list | background agent | `wp/B3-transactions` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B3-screens/`; wiring notes in `docs/status/B3.md` |
-| B2 Dashboard | background agent (own worktree) | `wp/B2-dashboard` | running since 2026-10-21 (on PreviewData + Calc) |
+| B2 Dashboard | background agent | `wp/B2-dashboard` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B2-screens/`; wiring notes in `docs/status/B2.md` |
 | A6 Import pipeline | background agent (own worktree) | `wp/A6-pipeline` | running since 2026-10-21 |
 | B4 Editor | background agent (own worktree) | `wp/B4-editor` | running since 2026-10-21 (on PreviewData) |
+| B5 Management | background agent (own worktree) | `wp/B5-manage` | running since 2026-10-21 (on PreviewData) |
 
 ## Contract-change requests (orchestrator queue)
 
@@ -62,3 +63,6 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - Done on `main`: `AbacusImportTests` depends on `AbacusStore` (pipeline integration tests).
 - Done on `main`: migration v3 `importBatchID` on accounts, categories, events; undo removes the
   batch's created entities when unused (D28).
+- Done on `main`: `Calc.convert` returns 0 for a zero amount without needing a rate (B2 request).
+- B2 request (backlog): `TxnQuery` filter for uncategorised transactions, so the Uncategorised slice
+  can drill down.

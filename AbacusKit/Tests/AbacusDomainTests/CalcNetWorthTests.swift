@@ -1,4 +1,4 @@
-import AbacusDomain
+@testable import AbacusDomain
 import Foundation
 import Testing
 
@@ -95,5 +95,19 @@ struct CalcNetWorthTests {
     #expect(series.points[0].netWorth.unconverted.missingRates == [MissingRate(from: .EUR, to: .PLN, day: Day("2026-07-31")!)])
     #expect(series.points[0].value.minorUnits == 1_000_00)
     #expect(series.points[1].netWorth.unconverted.isEmpty)
+  }
+
+  @Test("R-FX-3: a zero amount converts without a rate and is not reported as missing")
+  func zeroNeedsNoRate() {
+    var gaps = Unconverted()
+    let converted = Calc.convert(0, from: .EUR, to: .UAH, at: .latest, using: NoRates(), gaps: &gaps)
+    #expect(converted == 0)
+    #expect(gaps.isEmpty)
+  }
+
+  private struct NoRates: CurrencyConverter {
+    func rate(from: Currency, to: Currency, on day: Day) -> Decimal? { nil }
+    func latestRate(from: Currency, to: Currency) -> Decimal? { nil }
+    var latestDay: Day? { nil }
   }
 }

@@ -88,7 +88,8 @@ extension Calc {
     _ minor: Int64, from: Currency, to: Currency, at rateDate: RateDate,
     using converter: some CurrencyConverter, gaps: inout Unconverted
   ) -> Int64? {
-    if from == to { return minor }
+    // Zero needs no rate (e.g. an account before its opening day).
+    if from == to || minor == 0 { return minor }
     let money = Money(minorUnits: minor, currency: from)
     let converted =
       switch rateDate {
