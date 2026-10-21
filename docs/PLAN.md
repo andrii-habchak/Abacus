@@ -92,7 +92,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   (R-SET-*), rates screen and manual overrides (R-FX-2/5), backup UI.
 - [ ] **B2 Dashboard** (M) — net worth, budget with per-category bars, donut with drill-down,
   month selector (R-HOME-*). Swift Charts.
-- [ ] **B3 Transaction list** (M) — filters, search, sort, day grouping, nested attached records,
+- [x] **B3 Transaction list** (M) — merged 2026-10-21 on preview data; wiring to the real store pending (after B1) — filters, search, sort, day grouping, nested attached records,
   totals (R-LIST-*).
 - [ ] **B4 Editor** (M) — 3 types, attached records, refunds, original amount, event pre-select,
   category suggestion, shortcuts (R-EDIT-*, R-TX-*, R-EVT-2).
