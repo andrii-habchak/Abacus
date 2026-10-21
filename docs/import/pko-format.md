@@ -51,18 +51,27 @@ Description = merchant (from `Lokalizacja` `Adres`) or counterparty name, else `
 
 ## Fingerprint (`R-IMP-3`)
 
-`pko:<abacus account id>:<Data operacji>:<Data waluty>:<Kwota>:<Saldo po transakcji>:<sha1 of
-the joined detail columns>`. The running balance keeps two identical same-day purchases apart
+`Fingerprint.pko(accountID:parts:)` = `pko:` + SHA-256 of the Abacus account id and the parts
+`<Data operacji>|<Data waluty>|<Kwota>|<Saldo po transakcji>|<trimmed non-empty detail columns>`. The running balance keeps two identical same-day purchases apart
 (11 same-day/same-amount pairs in one month of data).
 
-Pending `Blokada` rows have no booking date and no balance, so their fingerprint is
-`pko:<abacus account id>:hold:<Data waluty>:<Kwota>:<Tytuł>`. A hold disappears from later
+Pending `Blokada` rows have no booking date and no balance, so their parts are
+`hold|<Data waluty>|<Kwota>|<Tytuł>`. A hold disappears from later
 exports once it settles; the settled row (type `Płatność kartą`) gets a normal fingerprint and is
 matched to the pending transaction by account, value date ± 3 days, merchant (`Lokalizacja`
 address) and amount (equal or within 5 %) — then the existing transaction is upgraded, not
 duplicated. A hold that never settles (released by the bank) stays pending; the user deletes it.
-Unverified: whether the hold's `Tytuł` equals the settled row's — check on the first real
-re-import and tighten the match if it does.
+Verified on the real file: a hold's `Tytuł` has a different shape from the settled row's, so
+matching relies on merchant, date and amount only.
+
+## Observed in the real file (A4)
+- `Oryginalna kwota operacji` carried no currency code (all rows PLN); a foreign purchase's shape
+  is still unknown.
+- Values have leading/trailing spaces; web merchants have only `Adres` (no `Miasto`/`Kraj`).
+- Currency exchange: the title holds both legs (`FX… USD/PLN <rate> <amt> PLN -<amt> USD`,
+  no-break-space thousands, comma decimals); the sender account is the PKO currency account.
+- "Przelew na telefon przychodz. zew." rows can be outgoing — the sign decides.
+- Rows are not strictly newest first. Card payments are booked 1–3 days after `Data waluty`.
 
 ## Cross-source overlap
 

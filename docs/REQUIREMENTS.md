@@ -292,7 +292,10 @@ AI categorisation.
 | Q21 | Categorisation rules learned from import choices (`R-IMP-8`). |
 | — | PKO "Blokada" rows are imported as completed payments and upgraded when they settle (`R-IMP-PKO-2`). |
 
-No open questions. New ones go in a new "Open" table here and block only the requirements they touch.
+### Open
+| # | Question | Proposed default |
+|---|----------|------------------|
+| Q22 | PKO card payments are booked 1–3 days after the purchase (`Data waluty`). Date settled rows by the **purchase day** or the **booking day**? (`R-IMP-PKO-2` currently says the booking date wins when a hold settles.) | Purchase day (value date); booking day kept for reference |
 
 ## 10. Change log
 

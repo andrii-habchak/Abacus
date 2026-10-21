@@ -71,7 +71,7 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
   amounts, splits pro rata, opening balances, archived accounts, tags as event candidates,
   unbalanced warnings → `NormalizedRow`s (R-IMP-SALDO-*). `.realData` test: the full export parses,
   pairing ≥ 950 transfers.
-- [ ] **A4 PKO parser** (M) — owns `AbacusImport/PKO/**`, PKO fixtures + tests.
+- [x] **A4 PKO parser** (M) — merged 2026-10-21 — owns `AbacusImport/PKO/**`, PKO fixtures + tests.
   Per `docs/import/pko-format.md`: CP1250, detail keys, types, holds as pending, fingerprints,
   own-IBAN → transfer candidates, ATM → cash, original amount (R-IMP-PKO-*).
 - [ ] **A5 Store** (L) — owns `AbacusStore/**` except `Migrations/`, its tests.

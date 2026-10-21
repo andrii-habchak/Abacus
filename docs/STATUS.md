@@ -29,4 +29,10 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | A5 Store | background agent (own worktree) | `wp/A5-store` | running since 2026-10-21 |
 | A3 Saldo parser | background agent (own worktree) | `wp/A3-saldo` | running since 2026-10-21 |
 | A2 FX | background agent (own worktree) | `wp/A2-fx` | running since 2026-10-21 |
-| A4 PKO parser | background agent (own worktree) | `wp/A4-pko` | running since 2026-10-21 |
+| A4 PKO parser | background agent | `wp/A4-pko` | **merged** 2026-10-21 (79/79 real rows parse) |
+
+## Contract-change requests (orchestrator queue)
+
+- A4: currency minor-unit helper for any ISO code in `Money.swift` (A3 likely needs it too).
+- A4 → A6: normalise `Account.iban` (no spaces, no `PL`) before comparing with `counterpartyIBAN`;
+  ATM rows arrive as `.transfer` to external account "Cash", currency exchange as `.transferHalf`.
