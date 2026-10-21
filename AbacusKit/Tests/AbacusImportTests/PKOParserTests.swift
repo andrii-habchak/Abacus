@@ -119,7 +119,9 @@ struct PKOParserTests {
     let refunds = parsed.rows.filter(\.isRefund)
     let web = try parsed.row(payee: "www.shop.example")
     #expect(purchase.kind == .expense && !purchase.isRefund)
-    #expect(purchase.occurredAt == PKOFixtures.date("2026-01-14"))
+    // Q22: dated by the purchase (value) day; the booking day is kept for reference.
+    #expect(purchase.occurredAt == PKOFixtures.date(try #require(purchase.valueDay).string))
+    #expect(purchase.bookedDay == Day("2026-01-14"))
     #expect(purchase.valueDay == Day("2026-01-13"))
     #expect(refunds.count == 1)
     #expect(refunds.first?.kind == .expense)
@@ -175,7 +177,9 @@ struct PKOParserTests {
     #expect(atm.counterAccount == PKOParser.cashAccount(currency: .PLN))
     #expect(atm.counterAccount?.kind == .cash)
     #expect(atm.amountMinor == 20000 && atm.counterAmountMinor == 20000)
-    #expect(atm.occurredAt == PKOFixtures.date("2026-01-09"))
+    // Q22: dated by the purchase (value) day; the booking day is kept for reference.
+    #expect(atm.occurredAt == PKOFixtures.date(try #require(atm.valueDay).string))
+    #expect(atm.bookedDay == Day("2026-01-09"))
   }
 
   @Test("R-IMP-PKO-3: a currency exchange is a transfer half carrying the foreign amount")
@@ -227,7 +231,9 @@ struct PKOParserTests {
     #expect(settled.fingerprints != hold.fingerprints)
     #expect(settled.valueDay == hold.valueDay)
     #expect(settled.amountMinor == hold.amountMinor)
-    #expect(settled.occurredAt == PKOFixtures.date("2026-01-17"))
+    // Q22: dated by the purchase (value) day; the booking day is kept for reference.
+    #expect(settled.occurredAt == PKOFixtures.date(try #require(settled.valueDay).string))
+    #expect(settled.bookedDay == Day("2026-01-17"))
   }
 
   // MARK: R-IMP-3 — fingerprints

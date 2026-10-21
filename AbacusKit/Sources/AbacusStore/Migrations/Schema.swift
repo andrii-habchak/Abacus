@@ -18,6 +18,9 @@ extension AbacusDatabase {
         try db.execute(sql: statement)
       }
     }
+    migrator.registerMigration("v2: txns.bookedDay") { db in
+      try db.execute(sql: #"ALTER TABLE "txns" ADD COLUMN "bookedDay" TEXT"#)
+    }
     return migrator
   }
 

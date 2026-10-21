@@ -139,21 +139,16 @@ public struct PKOParser: ImportParser {
     let magnitude = abs(signed)
     let isCredit = signed > 0
 
-    // Dates: holds have only a value date; settled rows are dated by the booking date
-    // (R-IMP-PKO-2: the booking date wins when a hold settles).
+    // Dates (TA Q22, R-IMP-PKO-2): every row is dated by the purchase day (`Data waluty`); the
+    // booking day (`Data operacji`, 1–3 days later for cards) is kept as `bookedDay`.
     let valueDay = Day(valueDateText)
     let operationDay = Day(operationDateText)
     let day: Day
-    if type == .hold {
-      guard let valueDay else {
-        return .failure(Problem(message: "Hold without a value date “\(valueDateText)”; row skipped."))
-      }
+    if let valueDay {
       day = valueDay
-    } else if let operationDay {
+    } else if type != .hold, let operationDay {
       day = operationDay
-    } else if let valueDay {
-      day = valueDay
-      warnings.append("No booking date; dated by the value date.")
+      warnings.append("No value date; dated by the booking date.")
     } else {
       return .failure(Problem(message: "No valid date (“\(operationDateText)”, “\(valueDateText)”); row skipped."))
     }
@@ -239,7 +234,7 @@ public struct PKOParser: ImportParser {
 
     let row = NormalizedRow(
       fingerprints: [fingerprint], kind: kind, occurredAt: day.date(calendar: calendar),
-      valueDay: valueDay, account: rowAccount, amountMinor: magnitude,
+      valueDay: valueDay, bookedDay: operationDay, account: rowAccount, amountMinor: magnitude,
       counterAccount: counterAccount, counterAmountMinor: counterAmount, isRefund: isRefund,
       original: original, payee: payee, note: note, isPending: type == .hold,
       transferHalf: transferHalf, counterpartyIBAN: details.counterpartyAccount, warnings: warnings)

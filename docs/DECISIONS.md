@@ -24,3 +24,4 @@ Settled decisions, newest last. Each: what, why, date. Re-opening one needs the 
 | D18 | 2026-10-21 | Entities are SQLiteData `@Table` structs in AbacusDomain (one model for store, calculators, views); transaction type named `Txn`; import fingerprints are the primary key of `importFingerprints` | Single source of truth; sync-safe uniqueness without UNIQUE constraints |
 | D19 | 2026-10-21 | No CloudKit-incompatible FK actions: `ON DELETE` only CASCADE / SET NULL; "can't delete while used" rules live in repositories | SQLiteData SyncEngine supports only those actions |
 | D20 | 2026-10-21 | Phone notifications unavailable: Remote Control is disabled by the owner's organization policy; desktop banners only | Org policy |
+| D21 | 2026-10-21 | PKO rows dated by the purchase day (`Data waluty`); booking day kept in `Txn.bookedDay` (migration v2) | Owner (Q22): spending lands on the day it happened |

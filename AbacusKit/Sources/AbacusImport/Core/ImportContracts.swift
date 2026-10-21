@@ -106,8 +106,10 @@ public struct NormalizedRow: Hashable, Sendable, Identifiable {
   public var fingerprints: [String]
   public var kind: Kind
   public var occurredAt: Date
-  /// Value/booking day where the source has one (PKO `Data waluty`).
+  /// Value (purchase) day where the source has one (PKO `Data waluty`); `occurredAt` uses it.
   public var valueDay: Day?
+  /// Booking day where it differs from the purchase day (PKO `Data operacji`), for reference.
+  public var bookedDay: Day?
   /// Source account; for a transfer the from-account.
   public var account: ExternalAccount
   /// Positive, in `account.currency`. Opening balance: signed.
@@ -136,7 +138,7 @@ public struct NormalizedRow: Hashable, Sendable, Identifiable {
 
   public init(
     fingerprints: [String], kind: Kind, occurredAt: Date, valueDay: Day? = nil,
-    account: ExternalAccount, amountMinor: Int64, category: ExternalCategory? = nil,
+    bookedDay: Day? = nil, account: ExternalAccount, amountMinor: Int64, category: ExternalCategory? = nil,
     counterAccount: ExternalAccount? = nil, counterAmountMinor: Int64? = nil,
     isRefund: Bool = false, original: OriginalAmount? = nil, lines: [NormalizedLine] = [],
     payee: String = "", note: String = "", tag: String? = nil, isPending: Bool = false,
@@ -147,6 +149,7 @@ public struct NormalizedRow: Hashable, Sendable, Identifiable {
     self.kind = kind
     self.occurredAt = occurredAt
     self.valueDay = valueDay
+    self.bookedDay = bookedDay
     self.account = account
     self.amountMinor = amountMinor
     self.category = category

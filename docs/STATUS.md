@@ -37,3 +37,6 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - ~~A4: currency minor-unit helper~~ → done: `CurrencyDigits` in `Money.swift`.
 - A4 → A6: normalise `Account.iban` (no spaces, no `PL`) before comparing with `counterpartyIBAN`;
   ATM rows arrive as `.transfer` to external account "Cash", currency exchange as `.transferHalf`.
+- Contract change on `main` (2026-10-21): `Txn.bookedDay` (migration "v2: txns.bookedDay") and
+  `NormalizedRow.bookedDay`. Running lanes (A5, A3, A2, A1) rebase onto `main` before merge; A5
+  must include the column in backup/restore.

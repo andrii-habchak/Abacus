@@ -17,8 +17,8 @@ they are first imported._
 
 | Column | Example | Notes |
 |--------|---------|-------|
-| Data operacji | `2026-01-14` | booking date; **empty** for pending rows |
-| Data waluty | `2026-01-13` | value date (card payment date) |
+| Data operacji | `2026-01-14` | booking date (kept as `bookedDay`); **empty** for pending rows |
+| Data waluty | `2026-01-13` | value date = purchase day; **the transaction's date** (R-IMP-PKO-4) |
 | Typ transakcji | `Płatność kartą` | see types |
 | Kwota | `-17.35`, `+120.00` | signed, dot decimal |
 | Waluta | `PLN` | account currency |

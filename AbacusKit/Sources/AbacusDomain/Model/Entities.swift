@@ -162,6 +162,9 @@ public struct Txn: Hashable, Identifiable, Sendable {
   /// Imported PKO hold not yet settled (R-IMP-PKO-2).
   public var isPendingAtBank: Bool
   public var createdAt: Date
+  /// `YYYY-MM-DD` the bank booked it, when that differs from the purchase day `occurredAt`
+  /// (PKO `Data operacji`, TA Q22). Reference only.
+  public var bookedDay: String?
 
   public init(
     id: UUID = UUID(), type: TxnType, occurredAt: Date, accountID: Account.ID,
@@ -169,7 +172,7 @@ public struct Txn: Hashable, Identifiable, Sendable {
     toAmountMinor: Int64? = nil, isRefund: Bool = false, originalAmountMinor: Int64? = nil,
     originalCurrencyCode: String? = nil, payee: String = "", note: String = "",
     eventID: Event.ID? = nil, source: TxnSource = .manual, importBatchID: ImportBatch.ID? = nil,
-    isPendingAtBank: Bool = false, createdAt: Date = Date()
+    isPendingAtBank: Bool = false, createdAt: Date = Date(), bookedDay: String? = nil
   ) {
     self.id = id
     self.type = type
@@ -189,6 +192,7 @@ public struct Txn: Hashable, Identifiable, Sendable {
     self.importBatchID = importBatchID
     self.isPendingAtBank = isPendingAtBank
     self.createdAt = createdAt
+    self.bookedDay = bookedDay
   }
 }
 

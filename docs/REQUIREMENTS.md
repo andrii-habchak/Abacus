@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.2 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
+_Status: **v1.3 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -211,9 +211,12 @@ Common pipeline for all sources: **parse → normalise → match/dedupe → prev
   completed payments** (expense dated by `Data waluty`), marked *pending at the bank*. When a later
   export contains the settled row of the same purchase (same account, value date ± 3 days, same
   merchant, amount equal or within 5 %), the importer **upgrades** the existing transaction
-  instead of adding a new one: settled amount and booking date win, the settled fingerprint is
-  added, the pending mark is cleared. This is automatic (not a "possible duplicate"), but listed
+  instead of adding a new one: the settled amount wins, the date stays the purchase day, the
+  booking day is recorded, the settled fingerprint is added, the pending mark is cleared. This is automatic (not a "possible duplicate"), but listed
   in the preview as "settles N pending payments".
+- `R-IMP-PKO-4` Every PKO row is dated by its **purchase day** (`Data waluty`); the booking day
+  (`Data operacji`, 1–3 days later for card payments) is kept on the transaction for reference
+  (`Txn.bookedDay`).
 - `R-IMP-PKO-3` Signed amount → expense/income; a counterparty account number that belongs to an
   Abacus account (`R-ACC-1`) → transfer (paired with the other side if already imported);
   "Oryginalna kwota operacji" → original amount (`R-CUR-4`); merchant/recipient + title →
@@ -292,10 +295,9 @@ AI categorisation.
 | Q21 | Categorisation rules learned from import choices (`R-IMP-8`). |
 | — | PKO "Blokada" rows are imported as completed payments and upgraded when they settle (`R-IMP-PKO-2`). |
 
-### Open
-| # | Question | Proposed default |
-|---|----------|------------------|
-| Q22 | PKO card payments are booked 1–3 days after the purchase (`Data waluty`). Date settled rows by the **purchase day** or the **booking day**? (`R-IMP-PKO-2` currently says the booking date wins when a hold settles.) | Purchase day (value date); booking day kept for reference |
+| Q22 | PKO rows are dated by the purchase day (`Data waluty`); the booking day is kept for reference (`R-IMP-PKO-4`). |
+
+No open questions.
 
 ## 10. Change log
 
@@ -303,4 +305,5 @@ AI categorisation.
 |---------|------|--------|
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
+| 1.3 | 2026-10-21 | Q22: PKO rows dated by the purchase day, booking day kept (`R-IMP-PKO-2`, new `R-IMP-PKO-4`). |
 | 1.2 | 2026-10-21 | Editor review: currency picker replaces "paid in another currency" (`R-CUR-4`, `R-EDIT-4`); last-used currency/account and transfer accounts as defaults (`R-EDIT-4/5`). |
