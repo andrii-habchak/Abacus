@@ -90,6 +90,23 @@ struct RateRefresherTests {
     #expect(recovered.latestDay == d("2024-01-16"))
   }
 
+  @Test("R-FX-4: after a failure, lazy fetches wait for the retry; Try again fetches at once")
+  func failureBackoff() async throws {
+    let h = Harness()
+    h.source.setFailing(true)
+    await h.refresher.start()
+    #expect(h.source.calls.count == 1)
+    await h.refresher.ensureRates(for: [d("2023-12-05")])
+    #expect(h.source.calls.count == 1)
+    #expect(await h.refresher.status.pendingDays > 0)
+
+    h.source.setFailing(false)
+    await h.refresher.refreshNow()  // "Try again" on the warning banner
+    #expect(await h.refresher.status.failure == nil)
+    #expect(await h.refresher.status.pendingDays == 0)
+    #expect(await h.refresher.table.rate(from: .USD, to: .UAH, on: d("2023-12-05")) != nil)
+  }
+
   @Test("R-FX-1: daily refresh runs once per day while auto-refresh is on")
   func daily() async throws {
     let h = Harness()

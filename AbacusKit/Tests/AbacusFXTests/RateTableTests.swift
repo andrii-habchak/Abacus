@@ -184,7 +184,7 @@ struct OverrideTests {
       == dec("41.3879"))
   }
 
-  @Test("R-FX-2 R-FX-3: the fast rate() path agrees with quote() for every pair and day")
+  @Test("R-CUR-1 R-FX-2 R-FX-3: every pair of the four currencies converts; rate() agrees with quote()")
   func fastPathAgrees() {
     let table = with(
       FXOverride(base: .EUR, quote: .PLN, rateE8: 430_000_000, fromDay: "2024-01-12", untilDay: "2024-01-15"),
@@ -194,6 +194,9 @@ struct OverrideTests {
         for to in Currency.allCases {
           #expect(table.rate(from: from, to: to, on: d(dayText))
             == table.quote(from: from, to: to, on: d(dayText))?.rate, "\(from)→\(to) \(dayText)")
+          if dayText != "2024-01-09" {
+            #expect(table.rate(from: from, to: to, on: d(dayText)) != nil)
+          }
         }
       }
     }

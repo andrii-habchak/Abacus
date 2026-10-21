@@ -11,7 +11,8 @@ import Foundation
 ///   are fetched, in as few ranges as possible. With auto-refresh off nothing goes to the
 ///   network: the days wait for the next `refreshNow()` (R-NF-1).
 /// - A failed fetch keeps every known rate and sets `status.failure` until a fetch succeeds
-///   (R-FX-4). Storage is reached only through `RateStore`.
+///   (R-FX-4); automatic fetches (daily, lazy) then hold off for `retryAfter`, "Refresh rates"
+///   does not. Storage is reached only through `RateStore`.
 public actor RateRefresher {
   public struct Failure: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
@@ -127,14 +128,15 @@ public actor RateRefresher {
   /// Whether the daily refresh should run now: auto-refresh on, no fetch today yet (or days
   /// pending), and no failure within `retryAfter`.
   public var isDue: Bool {
-    guard status.autoRefresh else { return false }
-    if let failure = status.failure, failure.kind == .network,
-      now().timeIntervalSince(failure.at) < retryAfter
-    {
-      return false
-    }
+    guard status.autoRefresh, !recentlyFailed else { return false }
     guard let last = status.lastUpdate else { return true }
     return Day(last, calendar: calendar) < today || !pending.isEmpty
+  }
+
+  /// A network failure within `retryAfter`: automatic fetches hold off until then.
+  private var recentlyFailed: Bool {
+    guard let failure = status.failure, failure.kind == .network else { return false }
+    return now().timeIntervalSince(failure.at) < retryAfter
   }
 
   /// The daily check. Returns whether a refresh ran.
@@ -168,7 +170,8 @@ public actor RateRefresher {
     if !cacheLoaded { await loadCache() }
     let missing = missingDays(days)
     guard !missing.isEmpty else { return }
-    guard status.autoRefresh else {
+    // Auto-refresh off, or the network failed moments ago: wait for the next refresh.
+    guard status.autoRefresh, !recentlyFailed else {
       pending.formUnion(missing)
       status.pendingDays = pending.count
       publish()
