@@ -19,6 +19,15 @@ struct MoneyTests {
     #expect((a - b).decimal == Decimal(string: "-0.1")!)
   }
 
+  @Test("R-CUR-4: minor units for any ISO code")
+  func currencyDigits() {
+    #expect(CurrencyDigits.minorUnits("JPY") == 0)
+    #expect(CurrencyDigits.minorUnits("kwd") == 3)
+    #expect(CurrencyDigits.minorUnits("CHF") == 2)
+    #expect(CurrencyDigits.minorUnits(from: Decimal(string: "1234.5")!, code: "HUF") == 123450)
+    #expect(CurrencyDigits.minorUnits(from: Decimal(string: "1.2345")!, code: "KWD") == 1234)
+  }
+
   @Test("Rates are stored scaled by 10^8")
   func rateScale() {
     let rate = Decimal(string: "41.5872")!

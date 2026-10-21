@@ -33,6 +33,6 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 
 ## Contract-change requests (orchestrator queue)
 
-- A4: currency minor-unit helper for any ISO code in `Money.swift` (A3 likely needs it too).
+- ~~A4: currency minor-unit helper~~ → done: `CurrencyDigits` in `Money.swift`.
 - A4 → A6: normalise `Account.iban` (no spaces, no `PL`) before comparing with `counterpartyIBAN`;
   ATM rows arrive as `.transfer` to external account "Cash", currency exchange as `.transferHalf`.
