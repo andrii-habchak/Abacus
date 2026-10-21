@@ -2,7 +2,8 @@ import AbacusDomain
 import Foundation
 
 /// What the filter bar of the transaction list holds (approved prototype 2): date range,
-/// categories, accounts, types, event, search and sort (R-LIST-1…3, R-LIST-6, R-EVT-3).
+/// categories (with "Uncategorised"), accounts, types, event, import batch, search and sort
+/// (R-LIST-1…3, R-LIST-6, R-EVT-3, R-HOME-3, R-IMP-6).
 /// Plain values; `query(today:)` turns them into the repository's `TxnQuery`.
 public struct TransactionFilters: Hashable, Sendable {
   /// Date presets of the date menu, in menu order.
@@ -47,13 +48,23 @@ public struct TransactionFilters: Hashable, Sendable {
     case custom(from: Day, to: Day)
   }
 
+  /// Every day: the range the import filter opens with.
+  public static let allDates = DateRange.custom(
+    from: Day(year: 1900, month: 1, day: 1), to: Day(year: 9999, month: 12, day: 31))
+
   public var dateRange: DateRange
   /// Selected categories; a selected parent covers its children (R-LIST-2).
   public var categoryIDs: Set<AbacusDomain.Category.ID>
+  /// "Uncategorised" ticked: expenses and incomes without a category, in addition to
+  /// `categoryIDs` (dashboard drill-down, R-HOME-3).
+  public var includeUncategorised: Bool
   public var accountIDs: Set<Account.ID>
   /// Type toggles; all three on by default. None on matches nothing.
   public var types: Set<TxnType>
   public var eventID: Event.ID?
+  /// "Show transactions" after an import (R-IMP-6): only that batch's transactions. The batch is
+  /// kept whole for the chip ("Import: <file> · <date>").
+  public var importBatch: ImportBatch?
   /// Matches description (payee) and note (R-LIST-6).
   public var search: String
   /// R-LIST-3: newest first by default.
@@ -62,10 +73,13 @@ public struct TransactionFilters: Hashable, Sendable {
   public init(
     dateRange: DateRange = .preset(.last30Days), categoryIDs: Set<AbacusDomain.Category.ID> = [],
     accountIDs: Set<Account.ID> = [], types: Set<TxnType> = Set(TxnType.allCases),
-    eventID: Event.ID? = nil, search: String = "", newestFirst: Bool = true
+    eventID: Event.ID? = nil, search: String = "", newestFirst: Bool = true,
+    includeUncategorised: Bool = false, importBatch: ImportBatch? = nil
   ) {
     self.dateRange = dateRange
     self.categoryIDs = categoryIDs
+    self.includeUncategorised = includeUncategorised
+    self.importBatch = importBatch
     self.accountIDs = accountIDs
     self.types = types
     self.eventID = eventID
@@ -76,13 +90,16 @@ public struct TransactionFilters: Hashable, Sendable {
   /// R-LIST-1: the last 30 days, every type, newest first.
   public static let `default` = TransactionFilters()
 
-  /// Dashboard drill-down (R-HOME-3): one category in one month.
+  /// Dashboard drill-down (R-HOME-3): one category in one month; a nil category is the
+  /// "Uncategorized" slice of the expenses donut (expenses without a category).
   public static func drillDown(
-    category: AbacusDomain.Category.ID, month: Month, calendar: Calendar = .current
+    category: AbacusDomain.Category.ID?, month: Month, calendar: Calendar = .current
   ) -> TransactionFilters {
-    TransactionFilters(
-      dateRange: .custom(from: month.firstDay, to: month.lastDay(calendar: calendar)),
-      categoryIDs: [category])
+    let days = DateRange.custom(from: month.firstDay, to: month.lastDay(calendar: calendar))
+    guard let category else {
+      return TransactionFilters(dateRange: days, types: [.expense], includeUncategorised: true)
+    }
+    return TransactionFilters(dateRange: days, categoryIDs: [category])
   }
 
   /// Event view "Show N transactions" (R-EVT-3): every transaction of the event, any date.
@@ -90,6 +107,11 @@ public struct TransactionFilters: Hashable, Sendable {
     let from = event.startDay.flatMap(Day.init) ?? Day(year: 1900, month: 1, day: 1)
     let to = event.endDay.flatMap(Day.init) ?? Day(year: 9999, month: 12, day: 31)
     return TransactionFilters(dateRange: .custom(from: from, to: to), eventID: event.id)
+  }
+
+  /// Import "Show transactions" (R-IMP-6): every transaction the import created, any date.
+  public static func importBatch(_ batch: ImportBatch) -> TransactionFilters {
+    TransactionFilters(dateRange: allDates, importBatch: batch)
   }
 
   // MARK: State
@@ -104,6 +126,7 @@ public struct TransactionFilters: Hashable, Sendable {
 
   public var isDateFiltered: Bool { dateRange != Self.default.dateRange }
   public var isTypeFiltered: Bool { types != Self.default.types }
+  public var isCategoryFiltered: Bool { !categoryIDs.isEmpty || includeUncategorised }
 
   /// "Clear filters": back to the default; the sort order stays.
   public mutating func clear() {
@@ -144,6 +167,7 @@ public struct TransactionFilters: Hashable, Sendable {
       fromDay: days.lowerBound, toDay: days.upperBound, categoryIDs: categoryIDs,
       accountIDs: accountIDs, types: types == Set(TxnType.allCases) ? [] : types,
       eventIDs: eventID.map { [$0] } ?? [],
-      search: search.trimmingCharacters(in: .whitespacesAndNewlines), newestFirst: newestFirst)
+      search: search.trimmingCharacters(in: .whitespacesAndNewlines), newestFirst: newestFirst,
+      includeUncategorised: includeUncategorised, importBatchIDs: importBatch.map { [$0.id] } ?? [])
   }
 }

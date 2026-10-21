@@ -213,6 +213,15 @@ public final class AppSession {
     app.showTransactions(.event(event))
   }
 
+  /// An import's "Show transactions" (done step, history): the list filtered to the
+  /// transactions that import created (R-IMP-6).
+  public func showTransactions(ofImport id: ImportBatch.ID) {
+    guard let wizard = importWizard else { return }
+    let batch = wizard.history.first { $0.id == id } ?? wizard.summary.map(\.batch).flatMap { $0.id == id ? $0 : nil }
+    guard let batch else { return }
+    app.showTransactions(.importBatch(batch))
+  }
+
   /// The editor closed: after a save or delete the list and the dashboard re-read the data.
   public func editorFinished(_ result: TransactionEditorResult) async {
     guard result != .cancelled else { return }

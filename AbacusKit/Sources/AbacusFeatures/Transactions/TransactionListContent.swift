@@ -117,17 +117,19 @@ public struct TransactionListContent: Equatable, Sendable {
   /// - Parameters:
   ///   - rows: as fetched, already filtered and sorted; days keep that order.
   ///   - categoryFilter: the expanded category filter, if any (see `TransactionTotalsRule`).
+  ///   - includeUncategorised: "Uncategorised" is ticked in the category filter.
   ///   - converter: every day's amounts convert at that day's rate (R-FX-3).
   public init(
     rows: [TxnWithLines], reference: TransactionsReference, displayCurrency: Currency,
     converter: any CurrencyConverter, today: Day,
-    categoryFilter: Set<AbacusDomain.Category.ID>? = nil, refundsReduceSpending: Bool = false,
+    categoryFilter: Set<AbacusDomain.Category.ID>? = nil, includeUncategorised: Bool = false,
+    refundsReduceSpending: Bool = false,
     calendar: Calendar = .current, format: TransactionMoneyFormat = TransactionMoneyFormat()
   ) {
     let tree = reference.categories
     let rule = TransactionTotalsRule(
       refundsReduceSpending: refundsReduceSpending, categoryFilter: categoryFilter,
-      categoryKinds: tree.byID.mapValues(\.kind))
+      categoryKinds: tree.byID.mapValues(\.kind), includeUncategorised: includeUncategorised)
     let titles = TransactionDayTitles(today: today, calendar: calendar, locale: format.locale)
 
     var order: [Day] = []

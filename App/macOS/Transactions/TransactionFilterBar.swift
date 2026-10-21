@@ -2,8 +2,9 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// Date · Categories · Accounts · Type · Event … Clear filters · sort (approved prototype 2,
-/// R-LIST-2/3).
+/// Date · Categories · Accounts · Type · Event · Import … Clear filters · sort (approved
+/// prototype 2, R-LIST-2/3). The import chip appears only while the list shows one import
+/// (R-IMP-6) and has its own clear button.
 struct TransactionFilterBar: View {
   @Bindable var model: TransactionsViewModel
   @State private var open: Popover?
@@ -17,6 +18,7 @@ struct TransactionFilterBar: View {
       accountsChip
       typeToggles
       eventChip
+      importChip
       Spacer(minLength: 8)
       if model.filters.hasActiveFilters {
         Button("Clear filters") { model.clearFilters() }
@@ -56,7 +58,7 @@ struct TransactionFilterBar: View {
   }
 
   private var categoriesChip: some View {
-    chip(.categories, active: !model.filters.categoryIDs.isEmpty, label: model.categoryLabel)
+    chip(.categories, active: model.filters.isCategoryFiltered, label: model.categoryLabel)
   }
 
   private var accountsChip: some View {
@@ -65,6 +67,28 @@ struct TransactionFilterBar: View {
 
   private var eventChip: some View {
     chip(.event, active: model.filters.eventID != nil, label: model.eventLabel)
+  }
+
+  /// "Import: <file> · <date>" with an × that removes only this filter.
+  @ViewBuilder
+  private var importChip: some View {
+    if let label = model.importLabel {
+      HStack(spacing: 6) {
+        Image(systemName: "square.and.arrow.down").font(.system(size: 12))
+        Text(label).lineLimit(1).truncationMode(.middle)
+        Button {
+          model.clearImportFilter()
+        } label: {
+          Image(systemName: "xmark.circle.fill").font(.system(size: 12))
+        }
+        .buttonStyle(.plain)
+        .help("Show all transactions, not only this import")
+        .accessibilityLabel("Remove import filter")
+      }
+      .modifier(TxnChipLook(isActive: true))
+      .frame(maxWidth: 320)
+      .accessibilityElement(children: .contain)
+    }
   }
 
   private var typeToggles: some View {
@@ -151,6 +175,21 @@ struct TransactionFilterBar: View {
   private var categoriesPopover: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 2) {
+        if model.showsUncategorisedOption {
+          Toggle(
+            isOn: Binding(
+              get: { model.filters.includeUncategorised },
+              set: { _ in model.toggleUncategorised() })
+          ) {
+            HStack(spacing: 8) {
+              Circle().strokeBorder(.secondary, lineWidth: 1).frame(width: 8, height: 8)
+              Text(TransactionsViewModel.uncategorisedTitle).fontWeight(.medium)
+            }
+          }
+          .toggleStyle(.checkbox)
+          .padding(.vertical, 3)
+          Divider().padding(.vertical, 4)
+        }
         ForEach(model.reference.categories.options) { option in
           Toggle(
             isOn: Binding(

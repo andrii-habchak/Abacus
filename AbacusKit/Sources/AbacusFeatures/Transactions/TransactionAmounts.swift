@@ -44,19 +44,24 @@ public struct TransactionMoneyFormat: Sendable {
 /// - Attached records count by their own kind (R-TX-6); an `.income` record in an expense
 ///   category is a refund line and follows the refund rule (D22).
 /// - With a category filter only the matching parts count: the main amount when its category
-///   matches, each attached record whose category matches.
+///   matches (or it has none and "Uncategorised" is ticked), each attached record whose
+///   category matches.
 public struct TransactionTotalsRule: Sendable {
   public var refundsReduceSpending: Bool
   /// Expanded category filter (parents with their children), or nil for "any".
   public var categoryFilter: Set<AbacusDomain.Category.ID>?
+  /// "Uncategorised" ticked: a main amount without a category matches (the filter is on even
+  /// when `categoryFilter` is nil).
+  public var includeUncategorised: Bool
   public var categoryKinds: [AbacusDomain.Category.ID: CategoryKind]
 
   public init(
     refundsReduceSpending: Bool = false, categoryFilter: Set<AbacusDomain.Category.ID>? = nil,
-    categoryKinds: [AbacusDomain.Category.ID: CategoryKind] = [:]
+    categoryKinds: [AbacusDomain.Category.ID: CategoryKind] = [:], includeUncategorised: Bool = false
   ) {
     self.refundsReduceSpending = refundsReduceSpending
     self.categoryFilter = categoryFilter
+    self.includeUncategorised = includeUncategorised
     self.categoryKinds = categoryKinds
   }
 
@@ -66,7 +71,7 @@ public struct TransactionTotalsRule: Sendable {
     var income: Int64 = 0
     var expense: Int64 = 0
     let txn = row.txn
-    if matches(txn.categoryID) {
+    if includeUncategorised && txn.categoryID == nil || matches(txn.categoryID) {
       switch (txn.type, txn.isRefund) {
       case (.expense, false): expense += txn.amountMinor
       case (.expense, true): addRefund(txn.amountMinor, &income, &expense)
@@ -95,7 +100,7 @@ public struct TransactionTotalsRule: Sendable {
   }
 
   private func matches(_ id: AbacusDomain.Category.ID?) -> Bool {
-    guard let categoryFilter else { return true }
+    guard let categoryFilter else { return !includeUncategorised }
     return id.map(categoryFilter.contains) ?? false
   }
 }

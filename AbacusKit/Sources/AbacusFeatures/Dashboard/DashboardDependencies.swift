@@ -86,11 +86,17 @@ extension DashboardDependencies {
 }
 
 /// Builds the Transactions query a donut drill-down opens: one category (its children
-/// included, R-LIST-2) over one month (R-HOME-3).
+/// included, R-LIST-2) over one month (R-HOME-3). A nil category is the "Uncategorized"
+/// slice: expenses without a category.
 public enum DashboardDrillDown {
   public static func query(
-    categoryID: AbacusDomain.Category.ID, month: Month, calendar: Calendar = .autoupdatingCurrent
+    categoryID: AbacusDomain.Category.ID?, month: Month, calendar: Calendar = .autoupdatingCurrent
   ) -> TxnQuery {
-    TxnQuery(fromDay: month.firstDay, toDay: month.lastDay(calendar: calendar), categoryIDs: [categoryID])
+    guard let categoryID else {
+      return TxnQuery(
+        fromDay: month.firstDay, toDay: month.lastDay(calendar: calendar), types: [.expense],
+        includeUncategorised: true)
+    }
+    return TxnQuery(fromDay: month.firstDay, toDay: month.lastDay(calendar: calendar), categoryIDs: [categoryID])
   }
 }

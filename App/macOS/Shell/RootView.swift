@@ -105,7 +105,7 @@ struct SectionDetail: View {
       if let wizard = session.importWizard {
         ImportView(
           model: wizard,
-          onShowTransactions: { _ in app.section = .transactions },
+          onShowTransactions: { session.showTransactions(ofImport: $0) },
           onDataChanged: { Task { await session.dataChanged() } }
         )
         .shellToolbar()

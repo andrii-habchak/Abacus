@@ -44,7 +44,7 @@ struct ImportView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .overlay(alignment: .trailing) {
           if model.isHistoryShown {
-            ImportHistoryPanel(model: model)
+            ImportHistoryPanel(model: model, showTransactions: onShowTransactions)
               .transition(.move(edge: .trailing))
           }
         }
@@ -254,9 +254,11 @@ struct ImportDoneStep: View {
 
 // MARK: - History
 
-/// The import history (R-IMP-6): batches with their counts, "Undo import…", undone ones greyed.
+/// The import history (R-IMP-6): batches with their counts, "Show transactions" and
+/// "Undo import…", undone ones greyed.
 struct ImportHistoryPanel: View {
   let model: ImportWizardModel
+  var showTransactions: (ImportBatch.ID) -> Void = { _ in }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -285,7 +287,9 @@ struct ImportHistoryPanel: View {
       ScrollView {
         VStack(spacing: 10) {
           ForEach(model.historyItems) { item in
-            ImportHistoryEntry(item: item) { model.requestUndo(item.batch) }
+            ImportHistoryEntry(item: item, showTransactions: { showTransactions(item.id) }) {
+              model.requestUndo(item.batch)
+            }
           }
         }
       }
@@ -304,6 +308,7 @@ struct ImportHistoryPanel: View {
 
 struct ImportHistoryEntry: View {
   let item: ImportHistoryItem
+  var showTransactions: () -> Void = {}
   let undo: () -> Void
 
   var body: some View {
@@ -329,6 +334,8 @@ struct ImportHistoryEntry: View {
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
         } else {
+          Button("Show transactions", action: showTransactions)
+            .controlSize(.small)
           Button("Undo import…", action: undo)
             .controlSize(.small)
         }

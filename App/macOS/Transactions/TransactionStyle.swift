@@ -108,6 +108,18 @@ struct TxnChipStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
+      .modifier(TxnChipLook(isActive: isActive))
+      .opacity(configuration.isPressed ? 0.75 : 1)
+      .contentShape(Rectangle())
+  }
+}
+
+/// The chip look without the button (a chip holding its own buttons, e.g. the import filter).
+struct TxnChipLook: ViewModifier {
+  var isActive: Bool
+
+  func body(content: Content) -> some View {
+    content
       .font(.system(size: 13))
       .foregroundStyle(isActive ? TxnPalette.chipActiveText : Color.primary)
       .padding(.horizontal, 10)
@@ -120,8 +132,6 @@ struct TxnChipStyle: ButtonStyle {
         RoundedRectangle(cornerRadius: 6)
           .strokeBorder(isActive ? TxnPalette.chipActiveBorder : TxnPalette.chipBorder)
       )
-      .opacity(configuration.isPressed ? 0.75 : 1)
-      .contentShape(Rectangle())
   }
 }
 

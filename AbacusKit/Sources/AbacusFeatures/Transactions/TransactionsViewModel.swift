@@ -20,6 +20,9 @@ public final class TransactionsViewModel {
   public var selection: Txn.ID?
 
   public private(set) var reference = TransactionsReference()
+  /// Whether any expense or income has no category; the categories menu then offers
+  /// "Uncategorised" (R-LIST-2, R-HOME-3). Checked on `load()`.
+  public private(set) var hasUncategorised = false
   public private(set) var rows: [TxnWithLines] = []
   public private(set) var content: TransactionListContent
   public private(set) var isLoading = false
@@ -85,6 +88,9 @@ public final class TransactionsViewModel {
     } catch {
       errorMessage = "Couldn't load accounts and categories."
     }
+    hasUncategorised =
+      (try? await transactions.transactions(matching: TxnQuery(includeUncategorised: true)).isEmpty == false)
+      ?? false
     await reload()
   }
 
@@ -125,6 +131,7 @@ public final class TransactionsViewModel {
       rows: rows, reference: reference, displayCurrency: displayCurrency, converter: converter,
       today: today(),
       categoryFilter: filters.categoryIDs.isEmpty ? nil : reference.categories.expanded(filters.categoryIDs),
+      includeUncategorised: filters.includeUncategorised,
       refundsReduceSpending: refundsReduceSpending, calendar: calendar)
   }
 
@@ -138,6 +145,8 @@ public final class TransactionsViewModel {
   public var dateLabel: String {
     switch filters.dateRange {
     case .preset(let preset): return preset.title
+    case .custom where filters.dateRange == TransactionFilters.allDates:
+      return "All dates"
     case .custom(let from, let to):
       let style = Date.FormatStyle(date: .abbreviated, time: .omitted).locale(Locale(identifier: "en_US"))
       let fromText = from.date(calendar: calendar).formatted(style)
@@ -146,7 +155,30 @@ public final class TransactionsViewModel {
     }
   }
 
-  public var categoryLabel: String { reference.categories.label(for: filters.categoryIDs) }
+  /// "All categories", "Uncategorised", one category's path, or "N categories" (Uncategorised
+  /// counts as one).
+  public var categoryLabel: String {
+    guard filters.includeUncategorised else { return reference.categories.label(for: filters.categoryIDs) }
+    return filters.categoryIDs.isEmpty ? Self.uncategorisedTitle : "\(filters.categoryIDs.count + 1) categories"
+  }
+
+  public static let uncategorisedTitle = "Uncategorised"
+
+  /// The categories menu offers "Uncategorised" when such transactions exist or it is ticked.
+  public var showsUncategorisedOption: Bool { hasUncategorised || filters.includeUncategorised }
+
+  public func toggleUncategorised() { filters.includeUncategorised.toggle() }
+
+  /// "Import: pko_2026-10.csv · Oct 21, 2026" while the list shows one import (R-IMP-6).
+  public var importLabel: String? {
+    guard let batch = filters.importBatch else { return nil }
+    let style = Date.FormatStyle(date: .abbreviated, time: .omitted).locale(Locale(identifier: "en_US"))
+    let day = Day(batch.importedAt, calendar: calendar).date(calendar: calendar).formatted(style)
+    return "Import: \(batch.fileName) · \(day)"
+  }
+
+  /// Removes the import filter only; the other filters stay.
+  public func clearImportFilter() { filters.importBatch = nil }
 
   public var accountLabel: String {
     switch filters.accountIDs.count {

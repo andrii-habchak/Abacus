@@ -371,7 +371,7 @@ public struct DashboardBudget: Sendable {
 public struct DashboardExpenses: Sendable {
   public struct Slice: Hashable, Sendable, Identifiable {
     public let id: CategoryKey
-    /// nil for "Uncategorized" (no drill-down target).
+    /// nil for "Uncategorized" (drills down to expenses without a category).
     public let categoryID: AbacusDomain.Category.ID?
     public let name: String
     /// "#RRGGBB".
@@ -384,6 +384,11 @@ public struct DashboardExpenses: Sendable {
     public let percentText: String
     /// Subcategories with spending, largest first (R-HOME-3 "expandable to subcategories").
     public let children: [Slice]
+
+    /// Picking it opens Transactions: a category or "Uncategorized", not "Refunds".
+    public var drillsDown: Bool {
+      if case .refunds = id { false } else { true }
+    }
   }
 
   public let month: Month
