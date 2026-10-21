@@ -156,4 +156,68 @@ struct TxnRepositoryTests {
     sums = try await f.txns.list(matching: march).totals.converted(to: .PLN, using: FixedConverter(rates: [:]))
     #expect(sums.unconverted == 1)
   }
+
+  /// The seeded month plus transactions without a category: an expense, an income, an expense
+  /// whose fee line has no category, and a transfer.
+  static func seededWithUncategorised() async throws -> F {
+    let f = try await seeded()
+    try await f.insert(F.expense(110, "2026-03-07", 7_00, nil, payee: "Kiosk"))
+    try await f.insert(F.income(111, "2026-03-08", 20_00, nil, payee: "Friend"))
+    try await f.insert(
+      F.expense(112, "2026-03-09", 30_00, F.transport, payee: "Taxi"),
+      lines: [AttachedRecord(txnID: F.id(112), kind: .expense, categoryID: nil, amountMinor: 2_00)])
+    try await f.insert(F.transfer(113, "2026-03-09", from: F.bank, to: F.card, 50_00, received: 12_00))
+    return f
+  }
+
+  @Test("R-HOME-3, R-LIST-2: Uncategorised matches expenses and incomes without a category, never transfers")
+  func uncategorised() async throws {
+    let f = try await Self.seededWithUncategorised()
+    #expect(ids(try await f.txns.transactions(matching: TxnQuery(includeUncategorised: true))) == [111, 110])
+    // Combined with categories: uncategorised OR one of these (attached records still match).
+    let either = TxnQuery(categoryIDs: [F.fees.id], includeUncategorised: true)
+    #expect(ids(try await f.txns.transactions(matching: either)) == [111, 110, 101])
+    // Other filters still apply (AND).
+    let expenses = TxnQuery(types: [.expense], includeUncategorised: true)
+    #expect(ids(try await f.txns.transactions(matching: expenses)) == [110])
+    // Off: categories only, as before.
+    #expect(ids(try await f.txns.transactions(matching: TxnQuery(categoryIDs: [F.fees.id]))) == [101])
+  }
+
+  @Test("R-LIST-5: with Uncategorised only the main amounts without a category count in the totals")
+  func uncategorisedTotals() async throws {
+    let f = try await Self.seededWithUncategorised()
+    let converter = FixedConverter(rates: ["EURPLN": 4])
+    var sums = try await f.txns.list(matching: TxnQuery(includeUncategorised: true))
+      .totals.converted(to: .PLN, using: converter)
+    #expect(sums.expense == Money(minorUnits: 7_00, currency: .PLN))
+    #expect(sums.income == Money(minorUnits: 20_00, currency: .PLN))
+    // With Fees as well: plus the 3.00 EUR fee line (12.00 PLN).
+    sums = try await f.txns.list(matching: TxnQuery(categoryIDs: [F.fees.id], includeUncategorised: true))
+      .totals.converted(to: .PLN, using: converter)
+    #expect(sums.expense == Money(minorUnits: 19_00, currency: .PLN))
+    #expect(sums.income == Money(minorUnits: 20_00, currency: .PLN))
+  }
+
+  @Test("R-IMP-6: an import batch filter keeps only the transactions that import created")
+  func importBatch() async throws {
+    let f = try await Self.seeded()
+    let first = ImportBatch(id: F.id(900), source: .saldo, fileName: "saldo.csv")
+    let second = ImportBatch(id: F.id(901), source: .pko, fileName: "pko.csv")
+    try await f.database.write { db in try db.seed { first; second } }
+    var imported = F.expense(120, "2026-03-02", 9_00, nil, payee: "Imported")
+    imported.importBatchID = first.id
+    var other = F.expense(121, "2026-03-03", 8_00, F.fees, payee: "Other import")
+    other.importBatchID = second.id
+    try await f.insert(imported)
+    try await f.insert(other)
+    #expect(ids(try await f.txns.transactions(matching: TxnQuery(importBatchIDs: [first.id]))) == [120])
+    #expect(ids(try await f.txns.transactions(matching: TxnQuery(importBatchIDs: [first.id, second.id]))) == [121, 120])
+    // Combines with the other filters.
+    let feesOfFirst = TxnQuery(categoryIDs: [F.fees.id], importBatchIDs: [first.id])
+    #expect(try await f.txns.transactions(matching: feesOfFirst).isEmpty)
+    let totals = try await f.txns.list(matching: TxnQuery(importBatchIDs: [first.id]))
+      .totals.converted(to: .PLN, using: FixedConverter(rates: [:]))
+    #expect(totals.expense == Money(minorUnits: 9_00, currency: .PLN))
+  }
 }
