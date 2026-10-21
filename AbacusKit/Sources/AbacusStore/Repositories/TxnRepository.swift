@@ -48,9 +48,11 @@ public struct SQLiteTxnRepository: TxnRepository {
       let currencies = try Dictionary(
         uniqueKeysWithValues: Account.fetchAll(db).map { ($0.id, $0.currency) })
       let reduce = try refundsReduceSpending ?? SQLiteSettingsRepository.refundsReduceSpending(db)
+      let expenseCategories = try Set(
+        AbacusDomain.Category.where { $0.kind.eq(CategoryKind.expense) }.select(\.id).fetchAll(db))
       let totals = try TxnTotals(
         rows, currencies: currencies, categoryIDs: filter.categoryIDs(db),
-        refundsReduceSpending: reduce, calendar: calendar)
+        refundsReduceSpending: reduce, expenseCategoryIDs: expenseCategories, calendar: calendar)
       return (rows, totals)
     }
   }
@@ -179,7 +181,8 @@ struct TxnFilter: Sendable {
 /// own kind (R-TX-6). With a category filter only the matching parts count (the main amount
 /// when its category matches, each attached record whose category matches).
 /// Refunds (R-TX-4, R-SET-3): an expense refund is income unless refunds reduce spending, then it
-/// subtracts from expense; an income reversal subtracts from income.
+/// subtracts from expense; an income reversal subtracts from income. An income attached record
+/// in an expense category is a refund line (D22) and counts the same way.
 public struct TxnTotals: Hashable, Sendable {
   public struct Bucket: Hashable, Sendable {
     public var currency: Currency
@@ -196,7 +199,8 @@ public struct TxnTotals: Hashable, Sendable {
 
   public init(
     _ rows: [TxnWithLines], currencies: [Account.ID: Currency],
-    categoryIDs: Set<AbacusDomain.Category.ID>?, refundsReduceSpending: Bool, calendar: Calendar
+    categoryIDs: Set<AbacusDomain.Category.ID>?, refundsReduceSpending: Bool,
+    expenseCategoryIDs: Set<AbacusDomain.Category.ID> = [], calendar: Calendar
   ) {
     struct Key: Hashable {
       var currency: Currency
@@ -226,7 +230,13 @@ public struct TxnTotals: Hashable, Sendable {
       for line in row.lines where matches(line.categoryID) {
         switch line.kind {
         case .expense: expense += line.amountMinor
-        case .income: income += line.amountMinor
+        case .income:
+          let isRefundLine = line.categoryID.map(expenseCategoryIDs.contains) ?? false
+          if isRefundLine && refundsReduceSpending {
+            expense -= line.amountMinor
+          } else {
+            income += line.amountMinor
+          }
         }
       }
       guard income != 0 || expense != 0 else { continue }

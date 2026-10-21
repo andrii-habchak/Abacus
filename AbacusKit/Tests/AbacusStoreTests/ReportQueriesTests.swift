@@ -59,6 +59,36 @@ struct ReportQueriesTests {
     #expect(sums(report.expenses)[F.groceries.id] == 40_00)
   }
 
+  @Test("R-TX-4, R-SET-3: an income line in an expense category is a refund line (D22)")
+  func refundLine() async throws {
+    let f = try F()
+    try f.seedBasics()
+    try await f.insert(
+      F.expense(100, "2026-03-02", 50_00, F.groceries),
+      lines: [
+        AttachedRecord(txnID: F.id(100), kind: .income, categoryID: F.groceries.id, amountMinor: 8_00),
+        AttachedRecord(txnID: F.id(100), kind: .income, categoryID: F.cashback.id, amountMinor: 1_00),
+      ])
+    let march = Month(year: 2026, month: 3)
+    var report = try await f.reports.monthlySpending(march)
+    #expect(sums(report.expenses) == [F.groceries.id: 50_00])
+    #expect(sums(report.refunds) == [F.groceries.id: 8_00])
+    #expect(sums(report.income) == [F.cashback.id: 1_00])
+    var totals = try await f.txns.list(matching: TxnQuery()).totals.converted(to: .PLN, using: FixedConverter(rates: [:]))
+    #expect(totals.expense.minorUnits == 50_00)
+    #expect(totals.income.minorUnits == 9_00)
+
+    try await f.settings.set(.refundsReduceSpending, "true")
+    report = try await f.reports.monthlySpending(march)
+    #expect(sums(report.expenses) == [F.groceries.id: 42_00])
+    #expect(report.refunds.isEmpty)
+    totals = try await f.txns.list(matching: TxnQuery()).totals.converted(to: .PLN, using: FixedConverter(rates: [:]))
+    #expect(totals.expense.minorUnits == 42_00)
+    #expect(totals.income.minorUnits == 1_00)
+    // Balances are the same either way: 1000 − 50 + 8 + 1.
+    #expect(try await f.accounts.balances(asOf: Day("2026-03-31")!)[F.bank.id] == 959_00)
+  }
+
   @Test("R-BUD-2, R-CAT-2: spent per category in the budget currency, children rolled up into parents")
   func budgetSpent() async throws {
     let f = try await Self.seeded()

@@ -20,7 +20,8 @@ public struct SQLiteReportQueries: Sendable {
 
   /// R-HOME-3, R-BUD-2: expenses and income of `month` by category, attached records included
   /// under their own category (R-TX-6). Refunds follow R-SET-3 unless `refundsReduceSpending`
-  /// is given (R-TX-4).
+  /// is given (R-TX-4). An income attached record in an expense category is a refund line
+  /// (D22) and counts like a refunded expense.
   public func monthlySpending(_ month: Month, refundsReduceSpending: Bool? = nil) async throws -> SpendingReport {
     try await spending(from: month.firstDay, to: month.lastDay(calendar: calendar), refundsReduceSpending: refundsReduceSpending)
   }
@@ -40,10 +41,14 @@ public struct SQLiteReportQueries: Sendable {
       FROM "txns" AS "t" JOIN "accounts" AS "a" ON "a"."id" = "t"."accountID"
       WHERE "t"."type" <> 'transfer' AND \#(condition)
       UNION ALL
-      SELECT "r"."categoryID", "a"."currency", "t"."occurredAt", "r"."kind", 0, "r"."amountMinor"
+      SELECT "r"."categoryID", "a"."currency", "t"."occurredAt",
+        CASE WHEN "r"."kind" = 'income' AND "c"."kind" = 'expense' THEN 'expense' ELSE "r"."kind" END,
+        ("r"."kind" = 'income' AND coalesce("c"."kind" = 'expense', 0)),
+        "r"."amountMinor"
       FROM "attachedRecords" AS "r"
       JOIN "txns" AS "t" ON "t"."id" = "r"."txnID"
       JOIN "accounts" AS "a" ON "a"."id" = "t"."accountID"
+      LEFT JOIN "categories" AS "c" ON "c"."id" = "r"."categoryID"
       WHERE \#(condition)
       """#
     let bounds = self.bounds
