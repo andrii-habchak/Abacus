@@ -106,6 +106,7 @@ struct DataSettingsView: View {
             Button("Show in Finder", action: showInFinder)
               .disabled(model.databaseURL == nil)
             Button("Change…", action: chooseFolder)
+              .disabled(model.isWorking || model.databaseURL == nil)
           }
         }
       }
@@ -158,7 +159,8 @@ struct DataSettingsView: View {
     panel.canChooseFiles = false
     panel.canCreateDirectories = true
     panel.prompt = "Use This Folder"
-    panel.message = "Choose the folder for the Abacus database."
+    panel.message = "Choose the folder for the Abacus database. The file is moved there."
+    panel.directoryURL = model.databaseURL?.deletingLastPathComponent()
     guard panel.runModal() == .OK, let url = panel.url else { return }
     Task { await model.moveDatabase(to: url) }
   }

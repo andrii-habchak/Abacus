@@ -3,11 +3,12 @@ import SwiftUI
 
 @main
 struct AbacusApp: App {
-  @State private var session: AppSession
+  /// The current session; moving the data folder replaces it (R-SET-1).
+  @State private var host: AppSessionHost
 
   init() {
-    AppBootstrap.prepare()
     let launch = LaunchOptions.current
+    AppBootstrap.prepare(databasePath: launch.databasePath, previewData: launch.previewData)
     let session: AppSession
     if launch.previewData {
       session = .preview(offline: launch.offline)
@@ -19,21 +20,40 @@ struct AbacusApp: App {
       }
     }
     if let section = launch.section { session.app.section = section }
-    _session = State(initialValue: session)
+    _host = State(initialValue: AppSessionHost(session))
   }
 
   var body: some Scene {
     Window("Abacus", id: "main") {
-      RootView()
-        .environment(session)
-        .environment(session.app)
+      // A new session (data folder moved) rebuilds the window's screens from scratch.
+      SessionScope(host: host, rebuildOnChange: true) { RootView() }
     }
     .defaultSize(width: 1280, height: 860)
     .defaultLaunchBehavior(.presented)
-    .commands { AppCommands(session: session) }
+    .commands { AppCommands(host: host) }
 
     Settings {
-      SettingsView()
+      // Settings keeps its selected tab; its models come from the current session.
+      SessionScope(host: host, rebuildOnChange: false) { SettingsView() }
+    }
+  }
+}
+
+/// Puts the host's current session (and its `AppModel`) into the environment.
+struct SessionScope<Content: View>: View {
+  let host: AppSessionHost
+  let rebuildOnChange: Bool
+  @ViewBuilder let content: () -> Content
+
+  var body: some View {
+    let session = host.session
+    if rebuildOnChange {
+      content()
+        .environment(session)
+        .environment(session.app)
+        .id(ObjectIdentifier(session))
+    } else {
+      content()
         .environment(session)
         .environment(session.app)
     }

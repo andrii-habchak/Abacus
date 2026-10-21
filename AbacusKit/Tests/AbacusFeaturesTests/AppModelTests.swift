@@ -115,8 +115,8 @@ struct DataSettingsModelTests {
     let url = URL(filePath: "/tmp/abacus-backup-2026-10-21.abacus")
     await data.export(to: url)
     #expect(await setup.backup.exports == [url])
-    #expect(data.lastExport == B1Fixture.at(15))
-    #expect(setup.environment.lastExport.load() == B1Fixture.at(15))
+    #expect(data.lastExport == B1Fixture.today)
+    #expect(await setup.settings.values[.lastBackupExport] == "2026-10-21")
     #expect(data.backupNote.hasSuffix("Last export: 21 Oct 2026."))
     #expect(data.messageIsError == false)
   }

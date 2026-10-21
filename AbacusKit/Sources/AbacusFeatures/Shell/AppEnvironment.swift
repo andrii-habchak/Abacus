@@ -13,7 +13,8 @@ public struct AppEnvironment: Sendable {
   public var rates: any RatesService
   public var backup: any BackupService
   public var dataLocation: any DataLocationService
-  public var lastExport: LastExportStore
+  /// A last-export date still in `UserDefaults` from before it moved into the database.
+  public var legacyLastExport: LegacyLastExport
   public var today: @Sendable () -> Day
   public var now: @Sendable () -> Date
   public var formats: Formats
@@ -21,7 +22,7 @@ public struct AppEnvironment: Sendable {
   public init(
     settings: any SettingsRepository, rateStore: any RateStore, rates: any RatesService,
     backup: any BackupService, dataLocation: any DataLocationService,
-    lastExport: LastExportStore = .inMemory(),
+    legacyLastExport: LegacyLastExport = .none,
     today: @escaping @Sendable () -> Day = { Day(Date()) },
     now: @escaping @Sendable () -> Date = { Date() }, formats: Formats = Formats()
   ) {
@@ -30,7 +31,7 @@ public struct AppEnvironment: Sendable {
     self.rates = rates
     self.backup = backup
     self.dataLocation = dataLocation
-    self.lastExport = lastExport
+    self.legacyLastExport = legacyLastExport
     self.today = today
     self.now = now
     self.formats = formats
@@ -48,11 +49,13 @@ public struct AppEnvironment: Sendable {
       store: store,
       status: RatesStatus(autoRefresh: true, lastUpdate: lastUpdate),
       offline: offline, delay: refreshDelay)
-    let calendar = Calendar.current
-    let lastExport = calendar.date(from: DateComponents(year: 2026, month: 10, day: 14, hour: 20))!
+    var settings: [SettingKey: String] = [.lastBackupExport: "2026-10-14"]
+    for setting in PreviewData.settings {
+      if let key = SettingKey(rawValue: setting.id) { settings[key] = setting.value }
+    }
     return AppEnvironment(
-      settings: InMemorySettingsRepository.preview(), rateStore: store, rates: service,
+      settings: InMemorySettingsRepository(settings), rateStore: store, rates: service,
       backup: PreviewBackupService(), dataLocation: PreviewDataLocationService(),
-      lastExport: .inMemory(lastExport), today: { PreviewData.today })
+      today: { PreviewData.today })
   }
 }

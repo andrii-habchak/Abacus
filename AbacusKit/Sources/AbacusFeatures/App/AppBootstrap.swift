@@ -4,13 +4,24 @@ import SQLiteData
 
 /// Wires the app's dependencies at launch. Previews get the in-memory preview database.
 public enum AppBootstrap {
+  /// Opens the app database as `defaultDatabase`: the file remembered by "Change…" when it
+  /// exists, else `~/Library/Application Support/Abacus/abacus.sqlite` (R-SET-1).
+  /// `databasePath` (a demo database from the command line) and `previewData` (synthetic data
+  /// in memory) leave the app's own database unopened.
   @MainActor
-  public static func prepare() {
+  public static func prepare(
+    databasePath: String? = nil, previewData: Bool = false, defaults: UserDefaults = .standard
+  ) {
     prepareDependencies {
-      if $0.context == .preview {
+      if $0.context == .preview || previewData {
         $0.defaultDatabase = try! PreviewData.database()
+      } else if let databasePath {
+        let url = URL(filePath: databasePath)
+        try? FileManager.default.createDirectory(
+          at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        $0.defaultDatabase = try! AbacusDatabase.open(at: url)
       } else {
-        $0.defaultDatabase = try! AbacusDatabase.open(at: AbacusDatabase.defaultURL())
+        $0.defaultDatabase = try! AbacusDatabase.open(at: DatabaseLocation.resolve(defaults: defaults))
       }
     }
   }

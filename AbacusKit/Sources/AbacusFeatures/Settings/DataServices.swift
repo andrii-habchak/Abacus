@@ -17,27 +17,39 @@ public protocol DataLocationService: Sendable {
   func moveDatabase(to folder: URL) async throws
 }
 
-/// The date of the last backup export ("Last export: 14 Oct 2026"). Kept outside the database
-/// until a `SettingKey` exists for it (see docs/status/B1.md).
-public struct LastExportStore: Sendable {
+/// The last backup export date as B1 kept it, in `UserDefaults` (key `lastBackupExport`), before
+/// `SettingKey.lastBackupExport` existed. Read once at launch and moved into the database
+/// (R-SET-2); `none` when there is nothing to migrate (previews, tests, demo databases).
+public struct LegacyLastExport: Sendable {
   public var load: @Sendable () -> Date?
-  public var save: @Sendable (Date) -> Void
+  public var clear: @Sendable () -> Void
 
-  public init(load: @escaping @Sendable () -> Date?, save: @escaping @Sendable (Date) -> Void) {
+  public init(load: @escaping @Sendable () -> Date?, clear: @escaping @Sendable () -> Void) {
     self.load = load
-    self.save = save
+    self.clear = clear
   }
 
-  public static func userDefaults(key: String = "lastBackupExport") -> LastExportStore {
-    LastExportStore(
-      load: { UserDefaults.standard.object(forKey: key) as? Date },
-      save: { UserDefaults.standard.set($0, forKey: key) })
+  public static let defaultsKey = "lastBackupExport"
+
+  public static func userDefaults(_ defaults: UserDefaults = .standard, key: String = defaultsKey) -> LegacyLastExport {
+    let box = DefaultsBox(defaults)
+    return LegacyLastExport(
+      load: { box.defaults.object(forKey: key) as? Date },
+      clear: { box.defaults.removeObject(forKey: key) })
   }
 
-  public static func inMemory(_ initial: Date? = nil) -> LastExportStore {
+  public static let none = LegacyLastExport(load: { nil }, clear: {})
+
+  public static func inMemory(_ initial: Date?) -> LegacyLastExport {
     let box = LockedBox(initial)
-    return LastExportStore(load: { box.value }, save: { box.value = $0 })
+    return LegacyLastExport(load: { box.value }, clear: { box.value = nil })
   }
+}
+
+/// `UserDefaults` is thread-safe; the box only tells the compiler so.
+final class DefaultsBox: @unchecked Sendable {
+  let defaults: UserDefaults
+  init(_ defaults: UserDefaults) { self.defaults = defaults }
 }
 
 /// A tiny thread-safe box for in-memory fakes.

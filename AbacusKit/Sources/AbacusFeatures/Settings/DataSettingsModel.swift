@@ -8,7 +8,8 @@ import Observation
 @Observable
 public final class DataSettingsModel {
   public private(set) var databaseURL: URL?
-  public private(set) var lastExport: Date?
+  /// Day of the last backup export (`SettingKey.lastBackupExport`, R-SET-2).
+  public private(set) var lastExport: Day?
   public private(set) var isWorking = false
   /// A backup chosen for restore, waiting for the user's confirmation.
   public var pendingRestore: URL?
@@ -28,7 +29,26 @@ public final class DataSettingsModel {
 
   public func load() async {
     databaseURL = await environment.dataLocation.databaseURL()
-    lastExport = environment.lastExport.load()
+    lastExport = await loadLastExport()
+  }
+
+  /// The stored day; a date B1 kept in `UserDefaults` is moved into the database once.
+  private func loadLastExport() async -> Day? {
+    let stored = (try? await environment.settings.value(.lastBackupExport)).flatMap { Day($0) }
+    let legacy = environment.legacyLastExport
+    guard let date = legacy.load() else { return stored }
+    if let stored {
+      legacy.clear()
+      return stored
+    }
+    let day = Day(date, calendar: formats.calendar)
+    do {
+      try await environment.settings.set(.lastBackupExport, day.string)
+      legacy.clear()
+    } catch {
+      // Kept in UserDefaults; the next launch tries again.
+    }
+    return day
   }
 
   // MARK: Labels
@@ -44,7 +64,7 @@ public final class DataSettingsModel {
   public var backupNote: String {
     let base = "One file with all accounts, transactions, categories, budgets, events, rules and rates."
     guard let lastExport else { return base + " Not exported yet." }
-    return base + " Last export: \(formats.day(of: lastExport))."
+    return base + " Last export: \(formats.day(lastExport))."
   }
 
   /// "abacus-backup-2026-10-21.abacus".
@@ -70,10 +90,14 @@ public final class DataSettingsModel {
     defer { isWorking = false }
     do {
       try await environment.backup.export(to: url)
-      let now = environment.now()
-      environment.lastExport.save(now)
-      lastExport = now
+      let day = Day(environment.now(), calendar: formats.calendar)
+      lastExport = day
       show("Exported to \(url.lastPathComponent).")
+      do {
+        try await environment.settings.set(.lastBackupExport, day.string)
+      } catch {
+        show("Exported to \(url.lastPathComponent). Couldn't record the export date.")
+      }
     } catch {
       show("Couldn't export the backup: \(error.localizedDescription)", error: true)
     }
@@ -103,17 +127,27 @@ public final class DataSettingsModel {
     }
   }
 
-  /// Change…: moves the database into `folder` (R-SET-1).
+  /// Change…: moves the database into `folder` (R-SET-1). On success the app switches to a
+  /// new session on the moved file, whose Settings model announces it (`announce`).
   public func moveDatabase(to folder: URL) async {
     isWorking = true
     defer { isWorking = false }
     do {
       try await environment.dataLocation.moveDatabase(to: folder)
       databaseURL = await environment.dataLocation.databaseURL()
-      show("The database is now in \(folder.lastPathComponent).")
+      show(Self.movedMessage(folder: folder))
     } catch {
-      show("Couldn't move the database: \(error.localizedDescription)", error: true)
+      show("Couldn't move the database: \(error.localizedDescription). Nothing was changed.", error: true)
     }
+  }
+
+  static func movedMessage(folder: URL) -> String {
+    "The database is now in “\(folder.lastPathComponent)”."
+  }
+
+  /// Shows the outcome of an action finished by another session's model (the data folder move).
+  func announce(_ text: String) {
+    show(text)
   }
 
   private func show(_ text: String, error: Bool = false) {
