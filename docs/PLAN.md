@@ -94,7 +94,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   month selector (R-HOME-*). Swift Charts.
 - [x] **B3 Transaction list** (M) — merged 2026-10-21 on preview data; wiring to the real store pending (after B1) — filters, search, sort, day grouping, nested attached records,
   totals (R-LIST-*).
-- [ ] **B4 Editor** (M) — 3 types, attached records, refunds, original amount, event pre-select,
+- [x] **B4 Editor** (M) — merged 2026-10-21 on preview data; wiring pending — 3 types, attached records, refunds, original amount, event pre-select,
   category suggestion, shortcuts (R-EDIT-*, R-TX-*, R-EVT-2).
 - [ ] **B5 Management** (L) — accounts (archive warning), categories tree, budget editor,
   events, rules (R-MGMT-*).

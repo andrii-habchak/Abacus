@@ -35,8 +35,9 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | B3 Transaction list | background agent | `wp/B3-transactions` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B3-screens/`; wiring notes in `docs/status/B3.md` |
 | B2 Dashboard | background agent | `wp/B2-dashboard` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B2-screens/`; wiring notes in `docs/status/B2.md` |
 | A6 Import pipeline | background agent | `wp/A6-pipeline` | **merged** 2026-10-21 (real Saldo+PKO pass; decisions in `docs/status/A6.md`) |
-| B4 Editor | background agent (own worktree) | `wp/B4-editor` | running since 2026-10-21 (on PreviewData) |
+| B4 Editor | background agent | `wp/B4-editor` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B4-screens/`; wiring notes in `docs/status/B4.md` |
 | B5 Management | background agent (own worktree) | `wp/B5-manage` | running since 2026-10-21 (on PreviewData) |
+| B6 Import wizard | background agent (own worktree) | `wp/B6-import` | running since 2026-10-21 |
 
 ## Contract-change requests (orchestrator queue)
 
@@ -79,5 +80,9 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - 2026-10-21: `abacus-import` tool (AbacusKit executable) added; the owner's real Saldo export is
   imported into the app database: 3,888 transactions, 43 accounts (10 archived), 33 categories,
   280 unpaired halves under "Uncategorised"; all 24 account balances equal the export's.
-- PKO statement not imported yet: Saldo's "PKO private" (last activity 4 Sep) disagrees with the
-  bank's opening balance on 21 Sep — owner decides how to reconcile (Q24).
+- 2026-10-21: real PKO PLN statement imported into "PKO private" (owner: PLN → "PKO private",
+  USD → "PKO private $", EUR → "PKO Euro", remembered per currency). A "Balance correction" income
+  of the gap on 21 Sep aligns Saldo's stale balance with the bank's opening balance; the account
+  now equals the bank's latest booked balance with pending holds counted as spent. 1 currency
+  exchange half is under "Uncategorised" for review.
+- Done on `main`: `TxnRepository.transaction(_:)` (default implementation for fakes).

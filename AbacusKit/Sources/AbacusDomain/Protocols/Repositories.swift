@@ -78,9 +78,18 @@ public struct TxnWithLines: Hashable, Sendable {
 
 public protocol TxnRepository: Sendable {
   func transactions(matching query: TxnQuery) async throws -> [TxnWithLines]
+  /// One transaction with its attached records, or nil.
+  func transaction(_ id: Txn.ID) async throws -> TxnWithLines?
   /// Replaces the transaction's attached records with `lines`.
   func save(_ txn: Txn, lines: [AttachedRecord]) async throws
   func delete(_ id: Txn.ID) async throws
+}
+
+extension TxnRepository {
+  /// Fallback for simple implementations (fakes); stores provide a direct lookup.
+  public func transaction(_ id: Txn.ID) async throws -> TxnWithLines? {
+    try await transactions(matching: TxnQuery()).first { $0.txn.id == id }
+  }
 }
 
 public protocol BudgetRepository: Sendable {
