@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Abacus — Transaction editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+a{color:#0066CC}a:hover{color:#004C99}
+button,input,select,textarea{font-family:inherit}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 1000px; padding: 24px; display: flex; justify-content: center;">
+<div style="position: relative; width: 100%; max-width: 1232px; min-height: 950px; background: #F5F5F7; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 16px 48px rgba(0,0,0,0.18); overflow: hidden;">
+
+<div aria-hidden="true" style="display: flex; height: 100%; min-height: 950px; opacity: 0.55;">
+<div style="width: 220px; background: #EDEDF0; border-right: 1px solid #D6D6DB; padding: 16px 12px; display: flex; flex-direction: column; gap: 10px;">
+<div style="display: flex; gap: 8px; padding-bottom: 14px;">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FEBC2E;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #28C840;"></span>
+</div>
+<span style="height: 10px; width: 70%; background: #D4D4DA; border-radius: 4px;"></span>
+<span style="height: 22px; width: 100%; background: #D4D4DA; border-radius: 6px;"></span>
+<span style="height: 10px; width: 60%; background: #DCDCE1; border-radius: 4px;"></span>
+<span style="height: 10px; width: 75%; background: #DCDCE1; border-radius: 4px;"></span>
+<span style="height: 10px; width: 55%; background: #DCDCE1; border-radius: 4px;"></span>
+</div>
+<div style="flex-grow: 1; background: #FFFFFF; display: flex; flex-direction: column;">
+<div style="height: 54px; border-bottom: 1px solid #E0E0E5; display: flex; align-items: center; padding: 0 20px; font-size: 17px; font-weight: 600;">Transactions</div>
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 14px;">
+<span style="height: 12px; width: 40%; background: #EBEBF0; border-radius: 4px;"></span>
+<span style="height: 12px; width: 90%; background: #F0F0F3; border-radius: 4px;"></span>
+<span style="height: 12px; width: 85%; background: #F0F0F3; border-radius: 4px;"></span>
+<span style="height: 12px; width: 88%; background: #F0F0F3; border-radius: 4px;"></span>
+<span style="height: 12px; width: 35%; background: #EBEBF0; border-radius: 4px;"></span>
+<span style="height: 12px; width: 80%; background: #F0F0F3; border-radius: 4px;"></span>
+</div>
+</div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.12);"></div>
+
+<div role="dialog" aria-labelledby="ed-title" style="position: absolute; top: 40px; left: 50%; transform: translateX(-50%); width: 560px; max-width: calc(100% - 32px); background: #F6F6F8; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.14), 0 24px 70px rgba(0,0,0,0.30); display: flex; flex-direction: column; overflow: hidden;">
+
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 14px; background: #FFFFFF; border-bottom: 1px solid #E5E5EA;">
+<div style="display: flex; align-items: center; gap: 10px;">
+<h1 id="ed-title" style="margin: 0; font-size: 15px; font-weight: 600; flex-grow: 1;">{{title}}</h1>
+<sc-if value="{{isEdit}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 11px; color: #6E6E73;">Imported from PKO · 5 Oct 2026</span>
+</sc-if>
+</div>
+<div role="group" aria-label="Type" style="display: flex; background: #E8E8ED; border-radius: 7px; padding: 2px; gap: 2px; align-self: center;">
+<sc-for list="{{types}}" as="t" hint-placeholder-count="3">
+<button type="button" aria-pressed="{{t.pressed}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+</sc-for>
+</div>
+<div style="display: flex; align-items: baseline; justify-content: center; gap: 8px;">
+<span style="{{signStyle}}">{{sign}}</span>
+<label style="display: flex; align-items: baseline; gap: 6px;">
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">{{amountLabel}}</span>
+<input type="text" inputmode="decimal" placeholder="0.00" value="{{amount}}" onChange="{{onAmount}}" style="width: 200px; border: 0; background: transparent; outline: none; font-size: 34px; font-weight: 600; text-align: right; color: #1D1D1F;">
+</label>
+<sc-if value="{{isTransfer}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 18px; font-weight: 500; color: #6E6E73;">{{amountCur}}</span>
+</sc-if>
+<sc-if value="{{isNotTransfer}}" hint-placeholder-val="{{ true }}">
+<select aria-label="Currency" value="{{txnCur}}" onChange="{{onCur}}" style="font-size: 15px; font-weight: 500; padding: 3px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF; color: #1D1D1F; align-self: center;">
+<sc-for list="{{currencyOptions}}" as="o" hint-placeholder-count="8">
+<option value="{{o.value}}">{{o.label}}</option>
+</sc-for>
+</select>
+</sc-if>
+</div>
+<sc-if value="{{showRefund}}" hint-placeholder-val="{{ true }}">
+<label style="display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: #3A3A3C;">
+<input type="checkbox" checked="{{refund}}" onChange="{{toggleRefund}}">
+<span>{{refundLabel}}</span>
+</label>
+</sc-if>
+<sc-if value="{{hasDefaultsHint}}" hint-placeholder-val="{{ true }}">
+<span style="font-size: 11px; color: #6E6E73; text-align: center;">{{defaultsHint}}</span>
+</sc-if>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 0; padding: 6px 20px 14px; max-height: 620px; overflow-y: auto;">
+
+<sc-if value="{{isTransfer}}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #E5E5EA; font-size: 13px;">
+<label for="ed-from" style="color: #3A3A3C; text-align: right;">From</label>
+<select id="ed-from" value="{{fromValue}}" onChange="{{onFrom}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{accountOptions}}" as="o" hint-placeholder-count="6">
+<option value="{{o.value}}">{{o.label}}</option>
+</sc-for>
+</select>
+<label for="ed-to" style="color: #3A3A3C; text-align: right;">To</label>
+<select id="ed-to" value="{{toValue}}" onChange="{{onTo}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{accountOptions}}" as="o" hint-placeholder-count="6">
+<option value="{{o.value}}">{{o.label}}</option>
+</sc-for>
+</select>
+<sc-if value="{{sameAccount}}" hint-placeholder-val="{{ false }}">
+<span></span>
+<span style="font-size: 12px; color: #B3001B;">From and To must be different accounts.</span>
+</sc-if>
+<sc-if value="{{crossCurrency}}" hint-placeholder-val="{{ true }}">
+<label for="ed-recv" style="color: #3A3A3C; text-align: right;">Amount received</label>
+<span style="display: flex; align-items: center; gap: 8px;">
+<input id="ed-recv" type="text" inputmode="decimal" placeholder="0.00" value="{{toAmount}}" onChange="{{onToAmount}}" style="width: 140px; font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #D2D2D7; text-align: right;">
+<span style="color: #6E6E73;">{{toCur}}</span>
+</span>
+<span></span>
+<span style="font-size: 12px; color: #6E6E73;">{{impliedRate}}</span>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{isNotTransfer}}" hint-placeholder-val="{{ true }}">
+<div style="display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #E5E5EA; font-size: 13px;">
+<label for="ed-acct" style="color: #3A3A3C; text-align: right;">Account</label>
+<select id="ed-acct" value="{{acctValue}}" onChange="{{onAccount}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{accountOptions}}" as="o" hint-placeholder-count="6">
+<option value="{{o.value}}">{{o.label}}</option>
+</sc-for>
+</select>
+<sc-if value="{{isForeign}}" hint-placeholder-val="{{ false }}">
+<label for="ed-charged" style="color: #3A3A3C; text-align: right;">Charged to account</label>
+<span style="display: flex; flex-direction: column; gap: 4px;">
+<span style="display: flex; align-items: center; gap: 8px;">
+<input id="ed-charged" type="text" inputmode="decimal" placeholder="0.00" value="{{charged}}" onChange="{{onCharged}}" style="width: 140px; font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #D2D2D7; text-align: right;">
+<span style="color: #6E6E73;">{{acctCur}}</span>
+</span>
+<span style="font-size: 11px; color: #6E6E73;">{{chargedHint}}</span>
+</span>
+</sc-if>
+<label for="ed-cat" style="color: #3A3A3C; text-align: right;">Category</label>
+<span style="display: flex; flex-direction: column; gap: 4px;">
+<select id="ed-cat" value="{{catValue}}" onChange="{{onCategory}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{categoryOptions}}" as="o" hint-placeholder-count="10">
+<option value="{{o.value}}">{{o.label}}</option>
+</sc-for>
+</select>
+<sc-if value="{{hasSuggestion}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 11px; color: #0A4FA8;">{{suggestion}}</span>
+</sc-if>
+</span>
+</div>
+</sc-if>
+
+<div style="display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #E5E5EA; font-size: 13px;">
+<label for="ed-payee" style="color: #3A3A3C; text-align: right;">Description</label>
+<input id="ed-payee" type="text" placeholder="Merchant or payee" value="{{payee}}" onChange="{{onPayee}}" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7;">
+<label for="ed-date" style="color: #3A3A3C; text-align: right;">Date and time</label>
+<span style="display: flex; gap: 8px;">
+<input id="ed-date" type="date" value="{{date}}" onChange="{{onDate}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7;">
+<input aria-label="Time" type="time" value="{{time}}" onChange="{{onTime}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7;">
+</span>
+<label for="ed-event" style="color: #3A3A3C; text-align: right;">Event</label>
+<span style="display: flex; flex-direction: column; gap: 4px;">
+<select id="ed-event" value="{{eventValue}}" onChange="{{onEvent}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{eventOptions}}" as="o" hint-placeholder-count="3">
+<option value="{{o.value}}">{{o.label}}</option>
+</sc-for>
+</select>
+<sc-if value="{{eventHintShown}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 11px; color: #5B34A8;">{{eventHint}}</span>
+</sc-if>
+</span>
+<label for="ed-note" style="color: #3A3A3C; text-align: right; align-self: start; padding-top: 5px;">Note</label>
+<textarea id="ed-note" rows="2" placeholder="Optional" value="{{note}}" onChange="{{onNote}}" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7; resize: vertical;"></textarea>
+</div>
+
+
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 0 4px; font-size: 13px;">
+<div style="display: flex; align-items: center; gap: 8px;">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; color: #3A3A3C; flex-grow: 1;">Fees, cashback and split lines</h2>
+<button type="button" onClick="{{addFee}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #1D1D1F;">Add fee</button>
+<button type="button" onClick="{{addLine}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #1D1D1F;">Add line</button>
+</div>
+<sc-if value="{{noLines}}" hint-placeholder-val="{{ true }}">
+<span style="font-size: 12px; color: #6E6E73;">None. A fee is charged to the same account and counted under its own category.</span>
+</sc-if>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="1">
+<div style="display: grid; grid-template-columns: 96px minmax(0, 1.3fr) 96px minmax(0, 1fr) 28px; gap: 6px; align-items: center; background: #FFFFFF; border: 1px solid #E5E5EA; border-radius: 8px; padding: 6px;">
+<select aria-label="Line kind" value="{{l.kind}}" onChange="{{l.onKind}}" style="font-size: 12px; padding: 3px 4px; border-radius: 5px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<option value="expense">Expense</option>
+<option value="income">Income</option>
+</select>
+<select aria-label="Line category" value="{{l.cat}}" onChange="{{l.onCat}}" style="font-size: 12px; padding: 3px 4px; border-radius: 5px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{l.catOptions}}" as="o" hint-placeholder-count="6">
+<option value="{{o.value}}">{{o.label}}</option>
+</sc-for>
+</select>
+<input aria-label="Line amount" type="text" inputmode="decimal" placeholder="0.00" value="{{l.amount}}" onChange="{{l.onAmount}}" style="font-size: 12px; padding: 3px 6px; border-radius: 5px; border: 1px solid #D2D2D7; text-align: right;">
+<input aria-label="Line note" type="text" placeholder="Note" value="{{l.note}}" onChange="{{l.onNote}}" style="font-size: 12px; padding: 3px 6px; border-radius: 5px; border: 1px solid #D2D2D7;">
+<button type="button" aria-label="Remove line" onClick="{{l.remove}}" style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 5px; color: #6E6E73; display: flex; align-items: center; justify-content: center;">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l6 6M9 3 3 9"></path></svg>
+</button>
+</div>
+</sc-for>
+<div style="display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; background: #EEF1F6; border-radius: 8px; font-size: 12px;">
+<span style="color: #3A3A3C;">{{effectLabel}}</span>
+<strong style="font-weight: 600;">{{effect}}</strong>
+</div>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 20px; background: #FFFFFF; border-top: 1px solid #E5E5EA;">
+<sc-if value="{{isEdit}}" hint-placeholder-val="{{ false }}">
+<button type="button" style="border: 1px solid #E8B4BA; background: #FFFFFF; color: #B3001B; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px;">Delete…</button>
+<button type="button" style="border: 1px solid #D2D2D7; background: #FFFFFF; color: #1D1D1F; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px;">Duplicate</button>
+</sc-if>
+<span style="flex-grow: 1; font-size: 11px; color: #6E6E73; text-align: right;">⏎ Save · ⎋ Cancel</span>
+<button type="button" style="border: 1px solid #D2D2D7; background: #FFFFFF; color: #1D1D1F; font-size: 13px; padding: 5px 14px; border-radius: 6px; min-height: 30px;">Cancel</button>
+<button type="button" disabled="{{saveDisabled}}" style="{{saveStyle}}">Save</button>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["new","edit"],"default":"new"},"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = this.initial(props.mode ?? 'new');
+  }
+  initial(mode) {
+    if (mode === 'edit') {
+      return {
+        mode: 'edit', type: 'expense', amount: '86.40', acct: 'pko', txnCur: 'PLN', charged: '', chargedTouched: false, defaultsTouched: true, cat: 'groceries', catTouched: true,
+        payee: 'Lidl', date: '2026-10-05', time: '17:55', note: '', event: '', eventTouched: true,
+        refund: false, showOriginal: false, origAmount: '', origCur: 'EUR', from: 'mono', to: 'rev', toAmount: '',
+        lines: [{ id: 1, kind: 'income', cat: 'cashback', amount: '2.00', note: 'Cashback' }], nextId: 2
+      };
+    }
+    return {
+      mode: 'new', type: 'expense', amount: '', acct: 'rev', txnCur: 'EUR', charged: '', chargedTouched: false, defaultsTouched: false, cat: 'groceries', catTouched: false,
+      payee: '', date: '2026-10-21', time: '15:30', note: '', event: '', eventTouched: false,
+      refund: false, showOriginal: false, origAmount: '', origCur: 'EUR', from: 'mono', to: 'rev', toAmount: '',
+      lines: [], nextId: 1
+    };
+  }
+  componentDidUpdate(prev) {
+    if ((prev.mode ?? 'new') !== (this.props.mode ?? 'new')) this.setState(this.initial(this.props.mode ?? 'new'));
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    function set(patch) { self.setState(patch); }
+    function val(fn) { return function (e) { fn(e.target.value); }; }
+    function num(s) { var n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? 0 : n; }
+    function fmt(v, c) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: c, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+    }
+
+    var ACCTS = {
+      mono: { name: 'Monobank Black', cur: 'UAH' },
+      pko: { name: 'PKO Personal', cur: 'PLN' },
+      pkousd: { name: 'PKO USD', cur: 'USD' },
+      pkocc: { name: 'PKO Credit Card', cur: 'PLN' },
+      rev: { name: 'Revolut EUR', cur: 'EUR' },
+      cash: { name: 'Cash PLN', cur: 'PLN' }
+    };
+    var EXP = [
+      ['food', 'Food', null], ['groceries', 'Groceries', 'food'], ['eating', 'Eating out', 'food'],
+      ['housing', 'Housing', null], ['rent', 'Rent', 'housing'],
+      ['transport', 'Transport', null], ['taxi', 'Taxi', 'transport'], ['fuel', 'Fuel', 'transport'],
+      ['health', 'Health', null], ['bills', 'Bills', null], ['mobile', 'Mobile', 'bills'],
+      ['clothing', 'Clothing', null], ['fees', 'Fees', null], ['travel', 'Travel', null]
+    ];
+    var INC = [['salary', 'Salary', null], ['cashback', 'Cashback', null], ['refunds', 'Refunds', null], ['other-income', 'Other income', null]];
+    var RULES = [['biedronka', 'groceries'], ['lidl', 'groceries'], ['bolt', 'taxi'], ['uber', 'taxi'], ['orlen', 'fuel'], ['orange', 'mobile']];
+    var EVENTS = [['', 'None'], ['lyon', 'Lyon trip · 1–19 Oct'], ['relocation', 'Relocation']];
+
+    var isTransfer = st.type === 'transfer';
+    var kindList = st.type === 'income' ? INC : EXP;
+
+    // Category suggestion from rules (R-EDIT-3): applies until the user picks a category.
+    var payeeLower = st.payee.toLowerCase();
+    var rule = null;
+    RULES.forEach(function (r) { if (!rule && payeeLower.indexOf(r[0]) >= 0) rule = r; });
+    var validCats = kindList.map(function (c) { return c[0]; });
+    var cat = st.cat;
+    var hasSuggestion = false, suggestion = '';
+    if (!st.catTouched && rule && st.type === 'expense') {
+      cat = rule[1];
+      hasSuggestion = true;
+      var cname = EXP.filter(function (c) { return c[0] === rule[1]; })[0][1];
+      suggestion = 'Suggested by rule “' + rule[0] + '” → ' + cname;
+    }
+    if (validCats.indexOf(cat) < 0) cat = validCats[0];
+
+    function catOptionsFor(list, selected) {
+      return list.map(function (c) {
+        return { value: c[0], label: c[2] ? '    ' + c[1] : c[1], selected: c[0] === selected };
+      });
+    }
+
+    // Event pre-selection while an event's dates are active (R-EVT-2).
+    var event = st.event;
+    var eventHintShown = false, eventHint = '';
+    if (!st.eventTouched && st.date >= '2026-10-01' && st.date <= '2026-10-19' && !isTransfer) {
+      event = 'lyon';
+      eventHintShown = true;
+      eventHint = 'Pre-selected: “Lyon trip” is active on this date';
+    }
+
+    var acct = ACCTS[isTransfer ? st.from : st.acct];
+    var toAcct = ACCTS[st.to];
+    var crossCurrency = isTransfer && acct.cur !== toAcct.cur;
+    // Transaction currency vs account currency (R-EDIT-4): a foreign amount needs the amount
+    // the account was charged; it is pre-filled at the day's rate and can be corrected.
+    var RATES = { UAH: 1, PLN: 11.3, EUR: 48.5, USD: 41.6, CHF: 51.9, HUF: 0.115, GBP: 55.6, CZK: 1.95 };
+    var txnCur = isTransfer ? acct.cur : st.txnCur;
+    var isForeign = !isTransfer && txnCur !== acct.cur;
+    var estimate = num(st.amount) * RATES[txnCur] / RATES[acct.cur];
+    var charged = st.chargedTouched ? st.charged : (estimate > 0 ? estimate.toFixed(2) : '');
+    var chargedHint = 'Estimated at the NBU rate 1 ' + txnCur + ' = ' + (RATES[txnCur] / RATES[acct.cur]).toFixed(4) + ' ' + acct.cur + '. Change it to match your statement.';
+    var currencyOptions = ['UAH', 'PLN', 'EUR', 'USD', 'CHF', 'CZK', 'GBP', 'HUF'].map(function (c) { return { value: c, label: c }; });
+    var hasDefaultsHint = st.mode === 'new' && !st.defaultsTouched;
+    var defaultsHint = isTransfer
+      ? 'From and To are the accounts of your last transfer'
+      : 'Currency and account from your last transaction';
+    var sameAccount = isTransfer && st.from === st.to;
+    var impliedRate = '';
+    if (crossCurrency && num(st.amount) > 0 && num(st.toAmount) > 0) {
+      var a = num(st.amount), b = num(st.toAmount);
+      impliedRate = a >= b
+        ? 'Implied rate: 1 ' + toAcct.cur + ' = ' + (a / b).toFixed(4) + ' ' + acct.cur
+        : 'Implied rate: 1 ' + acct.cur + ' = ' + (b / a).toFixed(4) + ' ' + toAcct.cur;
+    } else if (crossCurrency) {
+      impliedRate = 'Enter both amounts; the rate is calculated, not stored.';
+    }
+
+    var segBase = 'border: 0; font-size: 12px; font-weight: 500; padding: 4px 14px; border-radius: 5px; min-height: 26px;';
+    var types = [['expense', 'Expense'], ['income', 'Income'], ['transfer', 'Transfer']].map(function (t) {
+      var on = st.type === t[0];
+      return {
+        label: t[1], pressed: on ? 'true' : 'false',
+        style: segBase + (on ? ' background: #FFFFFF; color: #1D1D1F; box-shadow: 0 1px 2px rgba(0,0,0,0.15);' : ' background: transparent; color: #3A3A3C;'),
+        pick: function () { set({ type: t[0], catTouched: false, refund: false, cat: t[0] === 'income' ? 'salary' : 'groceries' }); }
+      };
+    });
+
+    var sign, signStyle;
+    if (isTransfer) { sign = '⇄'; signStyle = 'font-size: 22px; color: #6E6E73;'; }
+    else {
+      var positive = (st.type === 'income') !== st.refund;
+      sign = positive ? '+' : '−';
+      signStyle = 'font-size: 28px; font-weight: 600; color: ' + (positive ? '#1B6B3A' : '#1D1D1F') + ';';
+    }
+
+    var lineCats = EXP.concat(INC);
+    var lines = st.lines.map(function (l) {
+      function upd(patch) {
+        set({ lines: st.lines.map(function (x) { return x.id === l.id ? Object.assign({}, x, patch) : x; }) });
+      }
+      var list = l.kind === 'income' ? INC : EXP;
+      return {
+        isExpense: l.kind === 'expense', isIncome: l.kind === 'income',
+        catOptions: catOptionsFor(list, l.cat),
+        kind: l.kind, cat: l.cat, amount: l.amount, note: l.note,
+        onKind: val(function (v) { upd({ kind: v, cat: v === 'income' ? 'cashback' : 'fees' }); }),
+        onCat: val(function (v) { upd({ cat: v }); }),
+        onAmount: val(function (v) { upd({ amount: v }); }),
+        onNote: val(function (v) { upd({ note: v }); }),
+        remove: function () { set({ lines: st.lines.filter(function (x) { return x.id !== l.id; }) }); }
+      };
+    });
+    function addLine(kind, catKey, note) {
+      return function () {
+        set({ lines: st.lines.concat([{ id: st.nextId, kind: kind, cat: catKey, amount: '', note: note }]), nextId: st.nextId + 1 });
+      };
+    }
+
+    // What the account sees: main amount ± attached records (R-TX-6).
+    var main = num(st.amount);
+    var accountAmount = isForeign ? num(charged) : main;
+    var delta;
+    if (isTransfer) delta = -main;
+    else delta = ((st.type === 'income') !== st.refund) ? accountAmount : -accountAmount;
+    st.lines.forEach(function (l) { delta += l.kind === 'income' ? num(l.amount) : -num(l.amount); });
+    var effect = (delta >= 0 ? '+' : '−') + fmt(Math.abs(delta), acct.cur);
+    var effectLabel = 'Effect on ' + acct.name + (isForeign ? ' in ' + acct.cur : '') + (st.lines.length ? ' (with ' + st.lines.length + (st.lines.length === 1 ? ' line)' : ' lines)') : '');
+
+    var accountOptions = Object.keys(ACCTS).map(function (k) {
+      return { value: k, label: ACCTS[k].name + ' · ' + ACCTS[k].cur, selected: k === st.acct, fromSelected: k === st.from, toSelected: k === st.to };
+    });
+    var eventOptions = EVENTS.map(function (e) { return { value: e[0], label: e[1], selected: e[0] === event }; });
+
+    var invalid = main <= 0 || (isForeign && num(charged) <= 0) || sameAccount || (crossCurrency && num(st.toAmount) <= 0);
+    var saveBase = 'border: 0; font-size: 13px; font-weight: 500; padding: 5px 16px; border-radius: 6px; min-height: 30px;';
+    return {
+      fromValue: st.from, toValue: st.to, acctValue: st.acct, catValue: cat, eventValue: event,
+      title: st.mode === 'edit' ? 'Edit transaction' : 'New transaction',
+      isEdit: st.mode === 'edit',
+      types: types,
+      sign: sign, signStyle: signStyle,
+      amount: st.amount, amountCur: acct.cur, amountLabel: isTransfer ? 'Amount sent' : 'Amount',
+      onAmount: val(function (v) { set({ amount: v, chargedTouched: false }); }),
+      showRefund: !isTransfer, refund: st.refund,
+      refundLabel: st.type === 'income' ? 'Reversal (money went back out)' : 'Refund (money came back)',
+      toggleRefund: function () { set({ refund: !st.refund }); },
+      isTransfer: isTransfer, isNotTransfer: !isTransfer,
+      accountOptions: accountOptions,
+      onAccount: val(function (v) { set({ acct: v, chargedTouched: false, defaultsTouched: true }); }),
+      onFrom: val(function (v) { set({ from: v, defaultsTouched: true }); }),
+      onTo: val(function (v) { set({ to: v, defaultsTouched: true }); }),
+      txnCur: txnCur, currencyOptions: currencyOptions,
+      onCur: val(function (v) { set({ txnCur: v, chargedTouched: false, defaultsTouched: true }); }),
+      isForeign: isForeign, charged: charged, chargedHint: chargedHint, acctCur: acct.cur,
+      onCharged: val(function (v) { set({ charged: v, chargedTouched: true }); }),
+      hasDefaultsHint: hasDefaultsHint, defaultsHint: defaultsHint,
+      sameAccount: sameAccount, crossCurrency: crossCurrency,
+      toAmount: st.toAmount, toCur: toAcct.cur, impliedRate: impliedRate,
+      onToAmount: val(function (v) { set({ toAmount: v }); }),
+      categoryOptions: catOptionsFor(kindList, cat),
+      onCategory: val(function (v) { set({ cat: v, catTouched: true }); }),
+      hasSuggestion: hasSuggestion, suggestion: suggestion,
+      payee: st.payee, onPayee: val(function (v) { set({ payee: v }); }),
+      date: st.date, time: st.time,
+      onDate: val(function (v) { set({ date: v }); }),
+      onTime: val(function (v) { set({ time: v }); }),
+      eventOptions: eventOptions,
+      onEvent: val(function (v) { set({ event: v, eventTouched: true }); }),
+      eventHintShown: eventHintShown, eventHint: eventHint,
+      note: st.note, onNote: val(function (v) { set({ note: v }); }),
+      showOriginal: st.showOriginal,
+      toggleOriginal: function () { set({ showOriginal: !st.showOriginal }); },
+      origAmount: st.origAmount, origCur: st.origCur,
+      onOrigAmount: val(function (v) { set({ origAmount: v }); }),
+      onOrigCur: val(function (v) { set({ origCur: v.toUpperCase() }); }),
+      lines: lines, noLines: st.lines.length === 0,
+      addFee: addLine('expense', 'fees', 'Fee'),
+      addLine: addLine('expense', 'groceries', ''),
+      effect: effect, effectLabel: effectLabel,
+      saveDisabled: invalid,
+      saveStyle: saveBase + (invalid ? ' background: #B9CDEB; color: #FFFFFF;' : ' background: #0A66D9; color: #FFFFFF;')
+    };
+  }
+}
+</script>
+</body>
+</html>

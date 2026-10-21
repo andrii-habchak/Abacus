@@ -443,6 +443,12 @@ public enum SettingKey: String, CaseIterable, Sendable {
   case refundsReduceSpending
   /// "true"/"false"; default true (R-FX-1).
   case ratesAutoRefresh
+  /// Editor defaults (R-EDIT-4/5): last used transaction currency (ISO code) and account,
+  /// and the accounts of the last transfer (UUID strings).
+  case lastTxnCurrency
+  case lastAccountID
+  case lastTransferFromID
+  case lastTransferToID
 }
 
 @Table("appSettings")

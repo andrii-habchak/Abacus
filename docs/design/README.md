@@ -10,8 +10,8 @@ source is copied into this folder (`<n>-<name>.dc.html`).
 |---|-------|-------|-------|
 | 1 | Shell + Dashboard | **approved** 2026-10-21 | Net worth changed to a monthly chart ending today (TA 1.1, `R-HOME-1`) |
 | 2 | Transaction list + filters | **approved** 2026-10-21 | |
-| 3 | Editor (3 types, attached records, event) | in review | |
-| 4 | Accounts / Categories / Budget / Events / Rules | not started | |
+| 3 | Editor (3 types, attached records, event) | **approved** 2026-10-21 | With the currency picker and last-used defaults (TA 1.2) |
+| 4 | Accounts / Categories / Budget / Events / Rules | in review | |
 | 5 | Import wizard | not started | |
 | 6 | Rates + Settings | not started | |
 
@@ -46,3 +46,22 @@ source is copied into this folder (`<n>-<name>.dc.html`).
   "From → To" and the received amount; attached records nested under their row.
 - Footer: count, income, expenses, net in the display currency ("converted at each day's NBU
   rate"). Empty state: "No transactions match these filters."
+
+### 3 · Transaction editor
+- A sheet over the main window: title (New / Edit transaction; edit shows the source, e.g.
+  "Imported from PKO · 5 Oct 2026"); Expense / Income / Transfer segmented control.
+- Big amount with sign (− expense, + income/refund, ⇄ transfer) and a **currency picker**
+  (UAH, PLN, EUR, USD, CHF, CZK, GBP, HUF); transfers use the From account's currency.
+- New transaction: currency and account from the **last transaction**; new transfer: From/To from
+  the **last transfer**; a hint says so until the user changes them.
+- "Refund (money came back)" / "Reversal (money went back out)" checkbox.
+- Expense/Income: Account; "Charged to account" (only when the currency differs; pre-filled at
+  the NBU rate, editable); Category (subcategories indented) with "Suggested by rule “x” → Y"
+  until the user picks one.
+- Transfer: From, To (error when equal), "Amount received" + implied rate when currencies differ.
+- Common: Description, Date + time, Event (pre-selected while an event is active, with a hint),
+  Note.
+- "Fees, cashback and split lines": Add fee / Add line; each line = Expense|Income, category,
+  amount, note, remove. Summary "Effect on <account>" = main ± lines, in the account currency.
+- Footer: Delete… and Duplicate (edit only), ⏎ Save · ⎋ Cancel hint, Cancel, Save (disabled
+  until valid).

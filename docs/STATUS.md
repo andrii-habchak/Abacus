@@ -5,7 +5,7 @@ _Last updated: 2026-10-21 (orchestrator)_
 ## Now
 
 **P0 Foundation done** (package, contracts, schema, preview data, app shell, CI). **D1** in
-progress: groups 1 (Shell + Dashboard) and 2 (Transactions) approved, group 3 (Editor) in review — see
+progress: groups 1–3 (Dashboard, Transactions, Editor) approved, group 4 (Manage screens) in review — see
 `docs/design/README.md`. Wave 2 lanes (A5, A3, A2, A4; A1 filler) can start.
 
 ## Done
@@ -13,7 +13,7 @@ progress: groups 1 (Shell + Dashboard) and 2 (Transactions) approved, group 3 (E
 - Repo `andrii-habchak/Abacus`; agent guide `AGENTS.md`.
 - Research (comparable apps, multi-currency, FX sources, persistence) → TA + D5–D8.
 - Saldo and PKO exports analysed → `docs/import/`. Real files in git-ignored `samples/private/`.
-- TA v1.1 (all questions closed; net worth chart), decisions D1–D20, `PLAN.md`.
+- TA v1.2 (all questions closed; prototype-review changes), decisions D1–D20, `PLAN.md`.
 - P0 Foundation (`docs/status/P0.md`).
 
 ## Next
@@ -25,4 +25,4 @@ progress: groups 1 (Shell + Dashboard) and 2 (Transactions) approved, group 3 (E
 
 | WP | Lane / session | Branch | State |
 |----|----------------|--------|-------|
-| D1 | orchestrator + owner | — | group 3 in review |
+| D1 | orchestrator + owner | — | group 4 in review |

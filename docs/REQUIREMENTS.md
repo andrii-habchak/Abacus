@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.1 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
+_Status: **v1.2 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -36,9 +36,11 @@ accounts, with as little manual entry as possible (bank and Saldo imports).
 - `R-CUR-2` Amounts stored exactly as integer minor units + currency code; `Decimal` for math,
   never floating point. Rounding (banker's) only when converting.
 - `R-CUR-3` Every amount keeps its original currency; conversion only for display and aggregates.
-- `R-CUR-4` **Original (purchase) amount**: an expense/income may also record the amount in the
-  currency the merchant charged (any ISO 4217 code, e.g. HUF, CHF) when it differs from the
-  account currency. Informational only — balances and reports use the account amount.
+- `R-CUR-4` **Transaction currency**: an expense/income is entered in any currency (the four
+  plus other ISO 4217 codes, e.g. HUF, CHF). When it differs from the account currency, the
+  amount charged to the account is also recorded (pre-filled at the day's rate, editable).
+  Balances and reports use the charged amount; the entered amount is kept as the original
+  amount (`originalAmountMinor` / `originalCurrencyCode`).
 
 ### 3.2 Accounts — `R-ACC`
 - `R-ACC-1` CRUD accounts: name, currency (fixed after the first transaction), kind, opening
@@ -149,6 +151,10 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
 - `R-EDIT-1` One form for all three types; keyboard-first (⌘N new, ⏎ save, ⎋ cancel).
 - `R-EDIT-2` "Add fee / add line" adds attached records.
 - `R-EDIT-3` Category is suggested from the description using the categorisation rules (`R-IMP-8`).
+- `R-EDIT-4` **Currency picker** next to the amount (expense/income). A new transaction starts
+  with the **last used currency and account**. If the currency differs from the account's, a
+  "Charged to account" amount is shown (`R-CUR-4`).
+- `R-EDIT-5` A new **transfer** starts with the **From and To accounts of the last transfer**.
 
 ### 4.4 Management screens — `R-MGMT`
 - `R-MGMT-1` Accounts: grouped list with balances, CRUD, archive (`R-ACC-4`).
@@ -294,3 +300,4 @@ No open questions. New ones go in a new "Open" table here and block only the req
 |---------|------|--------|
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
+| 1.2 | 2026-10-21 | Editor review: currency picker replaces "paid in another currency" (`R-CUR-4`, `R-EDIT-4`); last-used currency/account and transfer accounts as defaults (`R-EDIT-4/5`). |
