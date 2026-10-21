@@ -297,7 +297,10 @@ AI categorisation.
 
 | Q22 | PKO rows are dated by the purchase day (`Data waluty`); the booking day is kept for reference (`R-IMP-PKO-4`). |
 
-No open questions.
+### Open
+| # | Question | Proposed default |
+|---|----------|------------------|
+| Q23 | Saldo: ~85 cross-currency transfers have halves whose in-transit amounts are in different currencies (each in its own account's currency), booked within 2 minutes between different accounts. Pair them automatically in a second pass, or leave them for manual review? | Pair automatically (different accounts, ≤ 2 minutes, one candidate each); anything ambiguous stays in review |
 
 ## 10. Change log
 

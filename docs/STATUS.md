@@ -27,7 +27,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | WP | Lane / session | Branch | State |
 |----|----------------|--------|-------|
 | A5 Store | background agent (own worktree) | `wp/A5-store` | running since 2026-10-21 |
-| A3 Saldo parser | background agent (own worktree) | `wp/A3-saldo` | running since 2026-10-21 |
+| A3 Saldo parser | background agent | `wp/A3-saldo` | **merged** 2026-10-21 (real export: 964 transfers paired, all 24 account balances reproduced) |
 | A2 FX | background agent (own worktree) | `wp/A2-fx` | running since 2026-10-21 |
 | A4 PKO parser | background agent | `wp/A4-pko` | **merged** 2026-10-21 (79/79 real rows parse) |
 | A1 Calculators | background agent (own worktree) | `wp/A1-calc` | running since 2026-10-21 |
@@ -40,3 +40,9 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - Contract change on `main` (2026-10-21): `Txn.bookedDay` (migration "v2: txns.bookedDay") and
   `NormalizedRow.bookedDay`. Running lanes (A5, A3, A2, A1) rebase onto `main` before merge; A5
   must include the column in backup/restore.
+- A3 request "refund flag on NormalizedLine" → **not added**; convention instead (D22): an attached
+  record of kind `.income` in an **expense** category is a refund line. A1 (calculators) and A6
+  (pipeline) honour it.
+- A3: switch its local minor-units table to `CurrencyDigits` when next touched (low priority).
+- `project.yml`: app sources are a synced folder — UI lanes add files under `App/macOS/` without
+  regenerating or committing the `.xcodeproj`.

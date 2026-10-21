@@ -25,3 +25,5 @@ Settled decisions, newest last. Each: what, why, date. Re-opening one needs the 
 | D19 | 2026-10-21 | No CloudKit-incompatible FK actions: `ON DELETE` only CASCADE / SET NULL; "can't delete while used" rules live in repositories | SQLiteData SyncEngine supports only those actions |
 | D20 | 2026-10-21 | Phone notifications unavailable: Remote Control is disabled by the owner's organization policy; desktop banners only | Org policy |
 | D21 | 2026-10-21 | PKO rows dated by the purchase day (`Data waluty`); booking day kept in `Txn.bookedDay` (migration v2) | Owner (Q22): spending lands on the day it happened |
+| D22 | 2026-10-21 | A refund line inside a transaction is an attached record of kind `.income` in an expense category (no extra flag) | Only 1 real case; avoids a schema change; calculators treat it like a transaction-level refund (R-SET-3) |
+| D23 | 2026-10-21 | App sources are an xcodegen synced folder | Parallel UI lanes add files without touching the `.xcodeproj` |

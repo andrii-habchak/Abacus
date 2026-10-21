@@ -75,9 +75,16 @@ not reliably (a generic "Money on the way" also appears), so pairing must not de
 Pair an outgoing half (DEBIT MOTW) with an incoming half (CREDIT MOTW) when:
 1. MOTW amount **and** currency are equal,
 2. the two asset accounts differ,
-3. dates are ≤ 3 days apart — choose the closest; ties → earliest.
+3. dates are ≤ 3 days apart.
 
-Sample result: 961 pairs from ~1 100 halves per side (943 same-day). The rest go to *needs
+Among the allowed pairings take the **most pairs**; among those the smallest total time gap;
+ties → earliest. (Plain "closest first" strands chains like X → A → B booked seconds apart,
+where a half's closest candidate is its own account's other half.)
+
+Real export (A3): 964 pairs; 280 halves stay unpaired for review. About 85 of them per side
+are cross-currency transfers whose halves book the in-transit leg in different currencies,
+within 2 minutes, between different accounts — a second pairing pass for those is open
+question Q23. The rest go to *needs
 review*, where the user can pair manually, turn a half into an expense/income (e.g. money sent to
 another person), or skip. The two halves' Saldo IDs both become fingerprints of the one transfer.
 
@@ -99,3 +106,16 @@ another person), or skip. The two halves' Saldo IDs both become fingerprints of 
 ```
 1001 → opening balance · 1002 → expense 440 UAH, original 10 EUR · 1003 → transfer 20 USD + fee
 0.50 · 1004 + 1005 → one transfer 440 UAH → 10 EUR.
+
+## Also seen in the real export (A3)
+
+- A transfer with an expense **refund** leg (1) → attached `.income` record in the expense
+  category (refund line, D22).
+- Two income legs into one account (1) → income with a split line.
+- A transfer from an account to itself (2) → kept with a warning.
+- A split across two different foreign currencies (1) → divided equally, with a warning.
+- Tags on only some legs of a transaction (230; never two different tags) → the tag applies to
+  the transaction.
+- Notes with line breaks (4) → kept.
+- Opening balances are signed as money in (+) / out (−); a liability that starts in debt is
+  negative (none in the real file).

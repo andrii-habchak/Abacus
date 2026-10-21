@@ -66,7 +66,7 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
   Frankfurter v2 `providers=NBU` client + NBU fallback, lazy historical fetch, weekend/holiday
   fallback, manual overrides per date and from-date, converter (date rate vs latest), refresher
   (launch / daily / on demand), failure → last known rates (R-FX-*). Network stubbed in tests.
-- [ ] **A3 Saldo parser** (L) — owns `AbacusImport/Saldo/**`, Saldo fixtures + tests.
+- [x] **A3 Saldo parser** (L) — merged 2026-10-21 — owns `AbacusImport/Saldo/**`, Saldo fixtures + tests.
   Per `docs/import/saldo-format.md`: grouping, leg-pattern table, MOTW transfer pairing, original
   amounts, splits pro rata, opening balances, archived accounts, tags as event candidates,
   unbalanced warnings → `NormalizedRow`s (R-IMP-SALDO-*). `.realData` test: the full export parses,
