@@ -2,22 +2,6 @@ import AbacusDomain
 import Foundation
 import Observation
 
-/// "New transaction" asked for from somewhere in the app (toolbar, ⌘N, a screen). The editor
-/// (WP B4) presents a sheet for it; the presets are optional hints for that editor.
-public struct NewTransactionRequest: Identifiable, Hashable, Sendable {
-  public let id: UUID
-  public var type: TxnType?
-  public var accountID: Account.ID?
-  public var eventID: Event.ID?
-
-  public init(id: UUID = UUID(), type: TxnType? = nil, accountID: Account.ID? = nil, eventID: Event.ID? = nil) {
-    self.id = id
-    self.type = type
-    self.accountID = accountID
-    self.eventID = eventID
-  }
-}
-
 /// State shared by the whole main window and the Settings window: the selected section, the
 /// display currency (R-HOME-4) and the other app settings (R-SET-1, R-SET-3), rate status for
 /// the toolbar (R-FX-4), and the hooks other screens plug into ("New transaction", drill-down to
@@ -38,8 +22,9 @@ public final class AppModel {
   /// Rate status for the toolbar's "NBU rates · <day>" (R-FX-4).
   public private(set) var ratesStatus = RatesStatus()
 
-  /// Set by `requestNewTransaction`; the shell presents the editor sheet while it is non-nil.
-  public var newTransaction: NewTransactionRequest?
+  /// The transaction editor sheet (WP B4) while non-nil: "New transaction" / ⌘N, or a row
+  /// opened in the list.
+  public var editor: TransactionEditorMode?
   /// Transaction-list filters asked for by another screen (dashboard drill-down, an event's
   /// "Show N transactions"). The shell hands them to the list and sets this back to nil.
   public var pendingTransactionFilters: TransactionFilters?
@@ -161,9 +146,14 @@ public final class AppModel {
 
   // MARK: Hooks
 
-  /// Toolbar "New transaction", ⌘N, or any screen (with presets).
-  public func requestNewTransaction(_ request: NewTransactionRequest = NewTransactionRequest()) {
-    newTransaction = request
+  /// Toolbar "New transaction" and ⌘N.
+  public func requestNewTransaction() {
+    editor = .new
+  }
+
+  /// A transaction opened from a list (double-click / Return).
+  public func editTransaction(_ id: Txn.ID) {
+    editor = .edit(id)
   }
 
   /// Opens the transaction list with filters (dashboard drill-down, "Show N transactions").

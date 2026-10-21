@@ -82,9 +82,11 @@ struct AppModelTests {
   @Test("New transaction and drill-down hooks route to the editor and the list")
   func hooks() {
     let app = AppModel(environment: B1Fixture.setup().environment)
-    #expect(app.newTransaction == nil)
-    app.requestNewTransaction(NewTransactionRequest(type: .expense))
-    #expect(app.newTransaction?.type == .expense)
+    #expect(app.editor == nil)
+    app.requestNewTransaction()
+    #expect(app.editor == .new)
+    app.editTransaction(PreviewData.id(404))
+    #expect(app.editor == .edit(PreviewData.id(404)))
 
     let filters = TransactionFilters.drillDown(category: PreviewData.id(202), month: Month(year: 2026, month: 10))
     app.showTransactions(filters)

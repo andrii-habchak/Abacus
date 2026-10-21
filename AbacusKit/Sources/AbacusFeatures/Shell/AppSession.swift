@@ -15,6 +15,8 @@ public final class AppSession {
   public let app: AppModel
   public let dashboard: DashboardModel
   public let transactions: TransactionsViewModel
+  /// What the transaction editor (WP B4) reads and writes; its converter follows the rates.
+  public private(set) var editorDependencies: TransactionEditorDependencies
 
   /// The result of "Load Sample Data", shown in an alert.
   public var sampleDataMessage: String?
@@ -27,11 +29,13 @@ public final class AppSession {
 
   init(
     app: AppModel, dashboard: DashboardModel, transactions: TransactionsViewModel,
-    database: (any DatabaseWriter)?, refresher: RateRefresher?
+    editorDependencies: TransactionEditorDependencies, database: (any DatabaseWriter)?,
+    refresher: RateRefresher?
   ) {
     self.app = app
     self.dashboard = dashboard
     self.transactions = transactions
+    self.editorDependencies = editorDependencies
     self.database = database
     self.refresher = refresher
     app.data.onRestore = { [weak self] in await self?.dataChanged() }
@@ -63,10 +67,17 @@ public final class AppSession {
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), converter: RateTable(),
       calendar: calendar, today: { Day(now(), calendar: calendar) })
+    let editor = TransactionEditorDependencies(
+      transactions: SQLiteTxnRepository(database: database, calendar: calendar),
+      accounts: SQLiteAccountRepository(database: database, calendar: calendar),
+      categories: SQLiteCategoryRepository(database: database),
+      events: SQLiteEventRepository(database: database), rules: SQLiteRuleRepository(database: database),
+      settings: SQLiteSettingsRepository(database: database), converter: RateTable(), calendar: calendar,
+      now: now)
     return AppSession(
       app: AppModel(environment: environment),
       dashboard: DashboardModel(dependencies: .live(database: database, refresher: refresher)),
-      transactions: transactions, database: database, refresher: refresher)
+      transactions: transactions, editorDependencies: editor, database: database, refresher: refresher)
   }
 
   /// The app database prepared by `AppBootstrap` (`defaultDatabase`), or the database file at
@@ -86,7 +97,8 @@ public final class AppSession {
     AppSession(
       app: AppModel(environment: .preview(offline: offline)),
       dashboard: DashboardModel(dependencies: .preview(fetchFailed: offline)),
-      transactions: .preview(displayCurrency: .UAH), database: nil, refresher: nil)
+      transactions: .preview(displayCurrency: .UAH), editorDependencies: .preview(), database: nil,
+      refresher: nil)
   }
 
   // MARK: Lifecycle
@@ -137,6 +149,7 @@ public final class AppSession {
   /// New rates (fetch, lazy history, manual rate): every screen converts with the new table.
   private func ratesChanged(_ snapshot: RateRefresher.Snapshot) async {
     transactions.converter = snapshot.table
+    editorDependencies.converter = snapshot.table
     if dashboard.phase == .loaded { await dashboard.refreshRates() }
     await app.rates.load()
   }
@@ -149,6 +162,13 @@ public final class AppSession {
     transactions.refundsReduceSpending = app.refundsReduceSpending
     await dashboard.load()
     await transactions.load()
+  }
+
+  /// The editor closed: after a save or delete the list and the dashboard re-read the data.
+  public func editorFinished(_ result: TransactionEditorResult) async {
+    guard result != .cancelled else { return }
+    await transactions.reload()
+    await dashboard.load()
   }
 
   // MARK: Sample data

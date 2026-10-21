@@ -259,17 +259,13 @@ public final class RatesModel {
 
   private func rebuildRows() {
     rows = RatesOverview.rows(table, showIn: showIn, on: today()).map { row in
-      let trend: Trend =
-        switch row.change?.direction {
-        case .up?: .up
-        case .down?: .down
-        case .flat?, nil: .flat
-        }
+      let changeText = row.change.map { formats.change($0.percent) } ?? ""
+      // From the shown (rounded) change, so "0.00%" is never coloured.
+      let trend: Trend = changeText.hasPrefix("▲") ? .up : changeText.hasPrefix("▼") ? .down : .flat
       return Row(
         currency: row.currency,
         rateText: "1 \(row.currency.rawValue) = \(formats.rate(row.quote.rate)) \(row.showIn.rawValue)",
-        changeText: row.change.map { formats.change($0.percent) } ?? "",
-        trend: trend, series: row.series, badge: row.badge, isManual: row.quote.source.isManual)
+        changeText: changeText, trend: trend, series: row.series, badge: row.badge, isManual: row.quote.source.isManual)
     }
   }
 

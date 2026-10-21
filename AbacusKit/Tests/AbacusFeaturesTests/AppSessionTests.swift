@@ -114,4 +114,23 @@ struct AppSessionTests {
     #expect(s.app.data.messageIsError == false)
     #expect(s.transactions.reference.accounts.count == PreviewData.accounts.count)
   }
+
+  @Test("A saved transaction shows up in the list and the dashboard after the editor closes")
+  func editorSaveReloads() async throws {
+    let database = try AbacusDatabase.open(at: nil)
+    let s = session(database)
+    await s.start()
+    defer { s.stop() }
+    await s.loadSampleData()
+    let before = s.transactions.rows.count
+    let txn = Txn(
+      type: .expense, occurredAt: B1Fixture.at(10), accountID: PreviewData.pkoPersonal.id, amountMinor: 12_00,
+      categoryID: PreviewData.id(202), payee: "Corner shop")
+    try await SQLiteTxnRepository(database: database).save(txn, lines: [])
+    await s.editorFinished(.cancelled)
+    #expect(s.transactions.rows.count == before)
+    await s.editorFinished(.saved(txn.id))
+    #expect(s.transactions.rows.count == before + 1)
+    #expect(s.transactions.rows.contains { $0.txn.id == txn.id })
+  }
 }

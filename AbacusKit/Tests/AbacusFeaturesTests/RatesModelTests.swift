@@ -23,6 +23,20 @@ struct RatesModelTests {
     #expect(eur.series.count == 6)
   }
 
+  @Test("R-FX-5 a change that rounds to 0.00% is flat, not up or down")
+  func flatChange() async throws {
+    let rates = B1Fixture.rates + [B1Fixture.rate("2026-10-21", .EUR, "48.5001")]
+    let store = InMemoryRateStore(rates: rates)
+    let service = PreviewRatesService(store: store, status: RatesStatus())
+    let m = RatesModel(
+      store: store, service: service, today: { B1Fixture.today }, now: { B1Fixture.at(15) },
+      formats: B1Fixture.formats)
+    await m.load()
+    let eur = try #require(m.rows.first { $0.currency == .EUR })
+    #expect(eur.changeText == "0.00%")
+    #expect(eur.trend == .flat)
+  }
+
   @Test("R-FX-5 Show in switches the base of every row")
   func showIn() async {
     let m = model(B1Fixture.setup())

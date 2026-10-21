@@ -25,8 +25,11 @@ struct RootView: View {
     .onChange(of: app.displayCurrency) { _, currency in
       session.transactions.displayCurrency = currency
     }
-    .sheet(item: $app.newTransaction) { request in
-      NewTransactionSheet(request: request)
+    .sheet(item: $app.editor) { mode in
+      TransactionEditor(mode: mode, dependencies: session.editorDependencies) { result in
+        app.editor = nil
+        Task { await session.editorFinished(result) }
+      }
     }
     .alert(
       "Sample data",
@@ -70,8 +73,11 @@ struct SectionDetail: View {
       }
       .shellToolbar()
     case .transactions:
-      TransactionsView(model: session.transactions, displayCurrency: app.displayCurrency, onSelect: { _ in })
-        .shellToolbar()
+      TransactionsView(
+        model: session.transactions, displayCurrency: app.displayCurrency, onSelect: { _ in },
+        onOpen: { app.editTransaction($0) }
+      )
+      .shellToolbar()
     case .rates:
       RatesView(model: app.rates)
     case .events, .accounts, .categories, .budget, .importFiles, .rules:
