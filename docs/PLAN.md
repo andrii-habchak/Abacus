@@ -98,7 +98,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   category suggestion, shortcuts (R-EDIT-*, R-TX-*, R-EVT-2).
 - [x] **B5 Management** (L) — merged and wired to the live database 2026-10-21 — accounts (archive warning), categories tree, budget editor,
   events, rules (R-MGMT-*).
-- [ ] **B6 Import wizard** (L) — file pick, preview counts, mapping, needs-review resolution,
+- [x] **B6 Import wizard** (L) — merged and wired 2026-10-21 — file pick, preview counts, mapping, needs-review resolution,
   tags→events, commit, history + undo (R-IMP UI).
 
 ### Phase 3 — Integration and acceptance (sequential, orchestrator)

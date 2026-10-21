@@ -102,9 +102,18 @@ struct SectionDetail: View {
       RulesView(model: session.rules)
         .shellToolbar()
     case .importFiles:
-      SectionPlaceholder(section: section)
+      if let wizard = session.importWizard {
+        ImportView(
+          model: wizard,
+          onShowTransactions: { _ in app.section = .transactions },
+          onDataChanged: { Task { await session.dataChanged() } }
+        )
         .shellToolbar()
-        .navigationTitle(section.title)
+      } else {
+        SectionPlaceholder(section: section)
+          .shellToolbar()
+          .navigationTitle(section.title)
+      }
     }
   }
 }

@@ -21,6 +21,8 @@ public final class AppSession {
   public let budget: BudgetEditorModel
   public let events: EventsModel
   public let rules: RulesModel
+  /// Import wizard (WP B6); nil in previews without a database.
+  public let importWizard: ImportWizardModel?
   /// What the transaction editor (WP B4) reads and writes; its converter follows the rates.
   public private(set) var editorDependencies: TransactionEditorDependencies
 
@@ -46,6 +48,7 @@ public final class AppSession {
     budget = BudgetEditorModel(dependencies: manage)
     events = EventsModel(dependencies: manage)
     rules = RulesModel(dependencies: manage)
+    importWizard = database.map { ImportWizardModel(dependencies: .live(database: $0)) }
     self.editorDependencies = editorDependencies
     self.database = database
     self.refresher = refresher

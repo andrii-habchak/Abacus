@@ -325,11 +325,13 @@ struct CommitBuilder {
     if s.settled > 0 { parts.append("\(s.settled) settled") }
     if s.linked > 0 { parts.append("\(s.linked) linked") }
     if s.alreadyImported > 0 { parts.append("\(s.alreadyImported) skipped") }
-    if s.duplicatesSkipped > 0 { parts.append("\(s.duplicatesSkipped) possible duplicates skipped") }
+    if s.duplicatesSkipped > 0 {
+      parts.append(s.duplicatesSkipped == 1 ? "1 possible duplicate skipped" : "\(s.duplicatesSkipped) possible duplicates skipped")
+    }
     if s.reviewedImported + s.reviewedSkipped > 0 { parts.append("\(s.reviewedImported + s.reviewedSkipped) reviewed") }
     var created: [String] = []
-    if s.accountsCreated > 0 { created.append("\(s.accountsCreated) accounts") }
-    if s.categoriesCreated > 0 { created.append("\(s.categoriesCreated) categories") }
+    if s.accountsCreated > 0 { created.append(s.accountsCreated == 1 ? "1 account" : "\(s.accountsCreated) accounts") }
+    if s.categoriesCreated > 0 { created.append(s.categoriesCreated == 1 ? "1 category" : "\(s.categoriesCreated) categories") }
     if !created.isEmpty { parts.append(created.joined(separator: ", ") + " created") }
     return parts.joined(separator: " · ")
   }

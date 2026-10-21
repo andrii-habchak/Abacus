@@ -4,9 +4,10 @@ _Last updated: 2026-10-21 (orchestrator)_
 
 ## Now
 
-**P0 Foundation** and **D1 Prototypes** done (all six screen groups approved, `docs/design/`).
-**Wave 2 running**: lanes A5 Store, A3 Saldo parser, A2 FX, A4 PKO parser — one session and
-branch each (table below). A1 Calculators is the filler for the first lane that finishes.
+**All v1 work packages are merged** (P0, D1, A1–A6, B1–B6). Every sidebar section runs on the
+live database, including Import. The owner's real Saldo history and PKO statement are imported.
+Next: **I1** (end-to-end check by the owner on real data, small open items) and **I2** (release
+build, README with sample-data screenshots, tag v1.0.0).
 
 ## Done
 
@@ -37,7 +38,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | A6 Import pipeline | background agent | `wp/A6-pipeline` | **merged** 2026-10-21 (real Saldo+PKO pass; decisions in `docs/status/A6.md`) |
 | B4 Editor | background agent | `wp/B4-editor` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B4-screens/`; wiring notes in `docs/status/B4.md` |
 | B5 Management | background agent | `wp/B5-manage` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B5-screens/`; wiring notes in `docs/status/B5.md` |
-| B6 Import wizard | background agent (own worktree) | `wp/B6-import` | running since 2026-10-21 |
+| B6 Import wizard | background agent | `wp/B6-import` | **merged and wired** 2026-10-21; screenshots `docs/status/B6-screens/` |
 
 ## Contract-change requests (orchestrator queue)
 
@@ -104,3 +105,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - CI on GitHub has never run: every job stops with "account is locked due to a billing issue"
   (GitHub Actions billing on the owner's account; macOS runners on a private repo use paid
   minutes). Owner: use local builds, ignore GitHub CI (D37) — workflow made manual-only.
+- B6 notes: needs-review rows start undecided with a "Use suggestions (N)" button (the pipeline
+  refuses undecided rows); changing the PKO target account rebuilds the preview; a file with
+  nothing new disables Import. Deferred: `TxnQuery` filter by import batch (so "Show
+  transactions" opens only that batch); editing a learned rule inside the preview.
