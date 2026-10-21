@@ -109,7 +109,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
 - [ ] **I2 Release** — ad-hoc signed DMG from CI, README with screenshots, tag `v1.0.0`.
 
 ### Phase 3b — Small items and release (2026-10-21)
-- [ ] **C1 List filters** — uncategorised and import-batch filters through store, list, dashboard
+- [x] **C1 List filters** (merged 2026-10-22) — uncategorised and import-batch filters through store, list, dashboard
   drill-down and import "Show transactions".
 - [ ] **C2 Settings, data, defaults** — last backup date in the database, data folder Change…,
   default categories on first launch, editor fetches rates for old days.
