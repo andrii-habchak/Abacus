@@ -27,3 +27,6 @@ xcuserdata/
 
 # Real bank/app exports (personal data) - never commit
 samples/private/
+
+# Release DMGs (scripts/build-dmg.sh)
+dist/

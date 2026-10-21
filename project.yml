@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     # Ad-hoc "Sign to Run Locally" — no Apple Developer team required (v1).
     CODE_SIGN_STYLE: Manual
@@ -37,6 +37,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.andrii-habchak.Abacus
         PRODUCT_NAME: Abacus
         GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: Abacus
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.finance
 
