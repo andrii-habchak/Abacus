@@ -62,7 +62,7 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
   net worth assets − liabilities, archived excluded (R-HOME-1, R-ACC-4); refunds by setting
   (R-TX-4, R-SET-3); budget status incl. unallocated, parent covers children, over/near limit
   (R-BUD-*, R-HOME-2); event totals (R-EVT-3); category tree roll-ups (R-CAT-2).
-- [ ] **A2 FX** (M) — owns `AbacusFX/**`, its tests.
+- [x] **A2 FX** (M) — merged 2026-10-21 — owns `AbacusFX/**`, its tests.
   Frankfurter v2 `providers=NBU` client + NBU fallback, lazy historical fetch, weekend/holiday
   fallback, manual overrides per date and from-date, converter (date rate vs latest), refresher
   (launch / daily / on demand), failure → last known rates (R-FX-*). Network stubbed in tests.

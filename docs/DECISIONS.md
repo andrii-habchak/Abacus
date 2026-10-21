@@ -27,3 +27,5 @@ Settled decisions, newest last. Each: what, why, date. Re-opening one needs the 
 | D21 | 2026-10-21 | PKO rows dated by the purchase day (`Data waluty`); booking day kept in `Txn.bookedDay` (migration v2) | Owner (Q22): spending lands on the day it happened |
 | D22 | 2026-10-21 | A refund line inside a transaction is an attached record of kind `.income` in an expense category (no extra flag) | Only 1 real case; avoids a schema change; calculators treat it like a transaction-level refund (R-SET-3) |
 | D23 | 2026-10-21 | App sources are an xcodegen synced folder | Parallel UI lanes add files without touching the `.xcodeproj` |
+| D24 | 2026-10-21 | Rates are kept for UAH/PLN/EUR/USD only in v1; for other purchase currencies (HUF, CHF, …) the "Charged to account" amount is typed, not pre-filled | `FXRate` is typed to the 4 currencies; pre-fill for other codes is backlog |
+| D25 | 2026-10-21 | With auto-refresh off, nothing goes to the network, including history; missing days load on "Refresh rates" | R-NF-1: the user controls network use |

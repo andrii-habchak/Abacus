@@ -254,7 +254,8 @@ Common pipeline for all sources: **parse → normalise → match/dedupe → prev
 ### Backlog (v2+)
 Per-category budget rollover · recurring/scheduled transactions · tags · reconciliation
 ("cleared" flag, statement balance check) · CSV export · more bank
-formats (Monobank, Revolut).
+formats (Monobank, Revolut) · rates and charged-amount pre-fill for purchase currencies beyond
+the four (D24).
 
 Deliberately skipped: bank sync, shared wallets, envelope/zero-based budgeting, investments,
 AI categorisation.
