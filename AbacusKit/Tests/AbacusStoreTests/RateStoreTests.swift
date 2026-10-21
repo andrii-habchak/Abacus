@@ -29,6 +29,44 @@ struct RateStoreTests {
     #expect(try await f.rates.rates(from: Day("2026-03-03")!, to: Day("2026-03-03")!).count == 3)
   }
 
+  @Test("R-FX-1: save upserts by id — the refresher re-saving a cached row updates it in place")
+  func upsertByID() async throws {
+    let f = try F()
+    var cached = Self.rate("2026-03-02", .EUR, .PLN, 4.25)
+    try await f.rates.save([cached, Self.rate("2026-03-02", .USD, .PLN, 3.9)])
+    cached.rateE8 = RateScale.scaled(4.26)
+    cached.fetchedAt = Date(timeIntervalSince1970: 1_000)
+    try await f.rates.save([cached])
+    try await f.rates.save([cached])  // idempotent
+    let all = try await f.rates.rates(from: Day(year: 1900, month: 1, day: 1), to: Day(year: 9999, month: 12, day: 31))
+    #expect(all.count == 2)
+    let saved = try #require(all.first { $0.base == .EUR })
+    #expect(saved.id == cached.id)
+    #expect(saved.rateE8 == RateScale.scaled(4.26))
+    #expect(saved.fetchedAt == Date(timeIntervalSince1970: 1_000))
+    // The same id moved to another day leaves no copy behind.
+    cached.day = "2026-03-03"
+    try await f.rates.save([cached])
+    #expect(try await f.rates.rates(from: Day("2026-03-02")!, to: Day("2026-03-03")!).map(\.day) == ["2026-03-02", "2026-03-03"])
+  }
+
+  @Test("R-FX-1: the whole cache loads in one call")
+  func wholeCache() async throws {
+    let f = try F()
+    var rates: [FXRate] = []
+    var day = Day("2025-01-01")!
+    for _ in 0..<400 {
+      rates.append(Self.rate(day.string, .EUR, .PLN, 4.3))
+      rates.append(Self.rate(day.string, .USD, .UAH, 41))
+      day = day.adding(days: 1, calendar: F.calendar)
+    }
+    try await f.rates.save(rates)
+    let start = ContinuousClock.now
+    let all = try await f.rates.rates(from: Day(year: 1900, month: 1, day: 1), to: Day(year: 9999, month: 12, day: 31))
+    #expect(all.count == 800)
+    #expect(ContinuousClock.now - start < .milliseconds(200))
+  }
+
   @Test("R-FX-1: latest rates are the most recent day per currency pair")
   func latest() async throws {
     let f = try F()

@@ -38,17 +38,19 @@ public struct SQLiteRateStore: RateStore {
     }
   }
 
-  /// Upserts by (day, base, quote, provider): a refetch replaces the cached value.
+  /// Upserts by primary key (the refresher reuses the id of the cached row), and replaces any
+  /// other row with the same (day, base, quote, provider), so a refetch under a new id cannot
+  /// trip the unique index either. One transaction for the whole list.
   public func save(_ rates: [FXRate]) async throws {
     try await database.write { db in
       for rate in rates {
         try FXRate
           .where {
             $0.day.eq(rate.day) && $0.base.eq(rate.base) && $0.quote.eq(rate.quote)
-              && $0.provider.eq(rate.provider)
+              && $0.provider.eq(rate.provider) && $0.id.neq(rate.id)
           }
           .delete().execute(db)
-        try FXRate.insert { rate }.execute(db)
+        try FXRate.upsert { FXRate.Draft(rate) }.execute(db)
       }
     }
   }
