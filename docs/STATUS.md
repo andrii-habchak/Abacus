@@ -26,7 +26,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 
 | WP | Lane / session | Branch | State |
 |----|----------------|--------|-------|
-| A5 Store | lane session (own worktree) | `wp/A5-store` | running since 2026-10-21 |
-| A3 Saldo parser | lane session (own worktree) | `wp/A3-saldo` | running since 2026-10-21 |
-| A2 FX | lane session (own worktree) | `wp/A2-fx` | running since 2026-10-21 |
-| A4 PKO parser | lane session (own worktree) | `wp/A4-pko` | running since 2026-10-21 |
+| A5 Store | background agent (own worktree) | `wp/A5-store` | running since 2026-10-21 |
+| A3 Saldo parser | background agent (own worktree) | `wp/A3-saldo` | running since 2026-10-21 |
+| A2 FX | background agent (own worktree) | `wp/A2-fx` | running since 2026-10-21 |
+| A4 PKO parser | background agent (own worktree) | `wp/A4-pko` | running since 2026-10-21 |
