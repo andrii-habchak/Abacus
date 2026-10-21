@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.3 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
+_Status: **v1.4 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -298,10 +298,9 @@ AI categorisation.
 
 | Q22 | PKO rows are dated by the purchase day (`Data waluty`); the booking day is kept for reference (`R-IMP-PKO-4`). |
 
-### Open
-| # | Question | Proposed default |
-|---|----------|------------------|
-| Q23 | Saldo: ~85 cross-currency transfers have halves whose in-transit amounts are in different currencies (each in its own account's currency), booked within 2 minutes between different accounts. Pair them automatically in a second pass, or leave them for manual review? | Pair automatically (different accounts, ≤ 2 minutes, one candidate each); anything ambiguous stays in review |
+| Q23 | Saldo cross-currency transfer halves with different in-transit currencies are **not** paired automatically; they stay in Needs review (manual pairing there). |
+
+No open questions.
 
 ## 10. Change log
 
@@ -309,5 +308,6 @@ AI categorisation.
 |---------|------|--------|
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
+| 1.4 | 2026-10-21 | Q23: no second Saldo pairing pass; cross-currency halves go to Needs review. |
 | 1.3 | 2026-10-21 | Q22: PKO rows dated by the purchase day, booking day kept (`R-IMP-PKO-2`, new `R-IMP-PKO-4`). |
 | 1.2 | 2026-10-21 | Editor review: currency picker replaces "paid in another currency" (`R-CUR-4`, `R-EDIT-4`); last-used currency/account and transfer accounts as defaults (`R-EDIT-4/5`). |

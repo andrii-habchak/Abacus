@@ -29,3 +29,4 @@ Settled decisions, newest last. Each: what, why, date. Re-opening one needs the 
 | D23 | 2026-10-21 | App sources are an xcodegen synced folder | Parallel UI lanes add files without touching the `.xcodeproj` |
 | D24 | 2026-10-21 | Rates are kept for UAH/PLN/EUR/USD only in v1; for other purchase currencies (HUF, CHF, …) the "Charged to account" amount is typed, not pre-filled | `FXRate` is typed to the 4 currencies; pre-fill for other codes is backlog |
 | D25 | 2026-10-21 | With auto-refresh off, nothing goes to the network, including history; missing days load on "Refresh rates" | R-NF-1: the user controls network use |
+| D26 | 2026-10-21 | No second Saldo pairing pass; cross-currency halves stay in Needs review | Owner (Q23) |

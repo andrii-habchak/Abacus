@@ -83,8 +83,8 @@ where a half's closest candidate is its own account's other half.)
 
 Real export (A3): 964 pairs; 280 halves stay unpaired for review. About 85 of them per side
 are cross-currency transfers whose halves book the in-transit leg in different currencies,
-within 2 minutes, between different accounts — a second pairing pass for those is open
-question Q23. The rest go to *needs
+within 2 minutes, between different accounts — by owner decision (Q23) they are **not**
+paired automatically and stay in Needs review, where the user pairs them by hand. The rest go to *needs
 review*, where the user can pair manually, turn a half into an expense/income (e.g. money sent to
 another person), or skip. The two halves' Saldo IDs both become fingerprints of the one transfer.
 
