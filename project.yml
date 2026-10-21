@@ -25,7 +25,10 @@ targets:
     type: application
     platform: macOS
     sources:
-      - App/macOS
+      # Synced folder: new files under App/macOS need no project regeneration, so parallel
+      # UI lanes never touch the .xcodeproj (D23).
+      - path: App/macOS
+        type: syncedFolder
     dependencies:
       - package: AbacusKit
         product: AbacusFeatures

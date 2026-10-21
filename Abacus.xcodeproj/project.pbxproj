@@ -7,17 +7,26 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CDAC2ADAAF71295C3F443DD5 /* AbacusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C762E2AF8302BFA4B2501017 /* AbacusApp.swift */; };
 		DB1778192968458E521884D4 /* AbacusFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 78AB5B7CB26ECBB502F22AF5 /* AbacusFeatures */; };
-		F062FE97EC52C8C55CD5C8BD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C35C1364292C26E5874BB74 /* RootView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0C35C1364292C26E5874BB74 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		811B4682BF14E58B04ED1697 /* AbacusKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AbacusKit; path = AbacusKit; sourceTree = SOURCE_ROOT; };
 		B3A6076E8F8DFC75F7E34C9D /* Abacus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Abacus.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C762E2AF8302BFA4B2501017 /* AbacusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AbacusApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		7B338A1E84036BBAFFA63FBD /* macOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			name = macOS;
+			path = macOS;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		24741F369D4D97F9B3710920 /* Frameworks */ = {
@@ -31,14 +40,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		2A952E82D13E77364B6C0724 /* Shell */ = {
-			isa = PBXGroup;
-			children = (
-				0C35C1364292C26E5874BB74 /* RootView.swift */,
-			);
-			path = Shell;
-			sourceTree = "<group>";
-		};
 		5C72DC096C077CDF41986B12 = {
 			isa = PBXGroup;
 			children = (
@@ -59,18 +60,9 @@
 		A935B1E1B1D636F1675885C7 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				B6E8291AA4195CE6CE90D985 /* macOS */,
+				7B338A1E84036BBAFFA63FBD /* macOS */,
 			);
 			path = App;
-			sourceTree = "<group>";
-		};
-		B6E8291AA4195CE6CE90D985 /* macOS */ = {
-			isa = PBXGroup;
-			children = (
-				C762E2AF8302BFA4B2501017 /* AbacusApp.swift */,
-				2A952E82D13E77364B6C0724 /* Shell */,
-			);
-			path = macOS;
 			sourceTree = "<group>";
 		};
 		C91A729B2118728A5582CC2A /* Products */ = {
@@ -89,11 +81,15 @@
 			buildConfigurationList = 2BEAE148C6B61E9CECD239DA /* Build configuration list for PBXNativeTarget "Abacus" */;
 			buildPhases = (
 				C7431010F7391CF3A5769F88 /* Sources */,
+				F7C52C1ADEA6E98F701CEB61 /* Resources */,
 				24741F369D4D97F9B3710920 /* Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7B338A1E84036BBAFFA63FBD /* macOS */,
 			);
 			name = Abacus;
 			packageProductDependencies = (
@@ -140,13 +136,21 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		F7C52C1ADEA6E98F701CEB61 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		C7431010F7391CF3A5769F88 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CDAC2ADAAF71295C3F443DD5 /* AbacusApp.swift in Sources */,
-				F062FE97EC52C8C55CD5C8BD /* RootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
