@@ -60,6 +60,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test --filter Aba
 ABACUS_SAMPLES=/Users/andrii_habchak/IdeaProjects/pet-projects/Abacus/samples/private swift test
 # Regenerate the Xcode project after adding/removing app files or changing project.yml
 xcodegen generate --spec project.yml
+# Headless import into the app database (wizard defaults; counts only). From AbacusKit/.
+swift run abacus-import [--db <path>] [--pko-account <name>] [--dry-run] <file>...
 # Build the macOS app (macros from SQLiteData need -skipMacroValidation on the CLI)
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Abacus.xcodeproj \
   -scheme Abacus -destination 'platform=macOS' -derivedDataPath build -skipMacroValidation build

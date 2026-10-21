@@ -79,7 +79,7 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
   filters, search, sort, totals (R-LIST-*); dashboard aggregation queries; import batch commit in
   one DB transaction + undo (R-IMP-6); fingerprint uniqueness; backup export/restore (R-SET-2);
   20k-transaction performance test (R-NF-2).
-- [ ] **A6 Import pipeline** (L) — after A5 merged — owns `AbacusImport/{Pipeline,Dedupe,Rules}/**`.
+- [x] **A6 Import pipeline** (L) — merged 2026-10-21 (incl. headless defaults) — after A5 merged — owns `AbacusImport/{Pipeline,Dedupe,Rules}/**`.
   Format detection, exact + fuzzy dedupe, pending→settled upgrade, needs-review queue, mapping
   memory, categorisation rules learning/applying, preview model, commit via the store
   (R-IMP-1…8, R-IMP-PKO-2).

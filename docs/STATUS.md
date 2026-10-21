@@ -34,7 +34,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | B1 Shell, settings, rates | background agent (own worktree) | `wp/B1-shell` | running since 2026-10-21 (on PreviewData) |
 | B3 Transaction list | background agent | `wp/B3-transactions` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B3-screens/`; wiring notes in `docs/status/B3.md` |
 | B2 Dashboard | background agent | `wp/B2-dashboard` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B2-screens/`; wiring notes in `docs/status/B2.md` |
-| A6 Import pipeline | background agent (own worktree) | `wp/A6-pipeline` | running since 2026-10-21 |
+| A6 Import pipeline | background agent | `wp/A6-pipeline` | **merged** 2026-10-21 (real Saldo+PKO pass; decisions in `docs/status/A6.md`) |
 | B4 Editor | background agent (own worktree) | `wp/B4-editor` | running since 2026-10-21 (on PreviewData) |
 | B5 Management | background agent (own worktree) | `wp/B5-manage` | running since 2026-10-21 (on PreviewData) |
 
@@ -76,3 +76,8 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 3. Orchestrator, after both merge: a small command-line importer that loads the owner's real
    Saldo export and PKO statement from `samples/private/` into
    `~/Library/Application Support/Abacus/abacus.sqlite`, then checks balances.
+- 2026-10-21: `abacus-import` tool (AbacusKit executable) added; the owner's real Saldo export is
+  imported into the app database: 3,888 transactions, 43 accounts (10 archived), 33 categories,
+  280 unpaired halves under "Uncategorised"; all 24 account balances equal the export's.
+- PKO statement not imported yet: Saldo's "PKO private" (last activity 4 Sep) disagrees with the
+  bank's opening balance on 21 Sep — owner decides how to reconcile (Q24).

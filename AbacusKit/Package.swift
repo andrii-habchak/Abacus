@@ -10,6 +10,7 @@ let package = Package(
     .library(name: "AbacusFX", targets: ["AbacusFX"]),
     .library(name: "AbacusImport", targets: ["AbacusImport"]),
     .library(name: "AbacusFeatures", targets: ["AbacusFeatures"]),
+    .executable(name: "abacus-import", targets: ["AbacusImportTool"]),
   ],
   dependencies: [
     .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.9.0")
@@ -34,6 +35,8 @@ let package = Package(
       name: "AbacusFeatures",
       dependencies: ["AbacusDomain", "AbacusStore", "AbacusFX", "AbacusImport"]
     ),
+    // Headless import into the app database with the wizard's defaults (no UI).
+    .executableTarget(name: "AbacusImportTool", dependencies: ["AbacusImport", "AbacusStore"]),
     // Helpers shared by test targets: fixtures, real-sample lookup, test tags.
     .target(
       name: "AbacusTestSupport",
