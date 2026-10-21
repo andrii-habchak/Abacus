@@ -62,10 +62,13 @@ extension Calc {
   /// - income → income under its category; an income reversal → negative income under its
   ///   category (the setting is about spending only);
   /// - transfer → nothing;
-  /// - each attached record → its own kind under its own category.
+  /// - each attached record → its own kind under its own category, except a refund line: an
+  ///   `.income` record in an expense category (D22) is counted like an expense refund above.
+  ///
+  /// `categories` tells refund lines apart; a category it does not know is not an expense one.
   public static func reportEntries(
-    of item: TxnWithLines, currency: Currency, refundsReduceSpending: Bool,
-    calendar: Calendar = .current
+    of item: TxnWithLines, currency: Currency, categories: CategoryTree,
+    refundsReduceSpending: Bool, calendar: Calendar = .current
   ) -> [ReportEntry] {
     let txn = item.txn
     let day = Day(txn.occurredAt, calendar: calendar)
@@ -76,13 +79,14 @@ extension Calc {
     }
     func key(_ id: Category.ID?) -> CategoryKey { id.map(CategoryKey.category) ?? .uncategorized }
 
+    func refund(_ categoryID: Category.ID?, _ minor: Int64) -> ReportEntry {
+      refundsReduceSpending ? entry(.expense, key(categoryID), -minor) : entry(.income, .refunds, minor)
+    }
+
     var entries: [ReportEntry] = []
     switch txn.type {
     case .expense where txn.isRefund:
-      entries.append(
-        refundsReduceSpending
-          ? entry(.expense, key(txn.categoryID), -txn.amountMinor)
-          : entry(.income, .refunds, txn.amountMinor))
+      entries.append(refund(txn.categoryID, txn.amountMinor))
     case .expense:
       entries.append(entry(.expense, key(txn.categoryID), txn.amountMinor))
     case .income:
@@ -91,7 +95,10 @@ extension Calc {
       break
     }
     for line in item.lines {
-      entries.append(entry(line.kind, key(line.categoryID), line.amountMinor))
+      let isRefundLine =
+        line.kind == .income && line.categoryID.flatMap { categories.category($0)?.kind } == .expense
+      entries.append(
+        isRefundLine ? refund(line.categoryID, line.amountMinor) : entry(line.kind, key(line.categoryID), line.amountMinor))
     }
     return entries
   }
@@ -99,7 +106,7 @@ extension Calc {
   /// Report entries of `txns` (optionally only within `days`) converted to `currency`, each at
   /// the rate of its own day (R-FX-3). Unconvertible entries are left out and recorded.
   static func convertedEntries(
-    _ txns: [TxnWithLines], accounts: [Account], currency: Currency,
+    _ txns: [TxnWithLines], accounts: [Account], categories: CategoryTree, currency: Currency,
     converter: some CurrencyConverter, refundsReduceSpending: Bool,
     days: ClosedRange<Day>? = nil, calendar: Calendar, gaps: inout Unconverted
   ) -> [ReportEntry] {
@@ -108,7 +115,7 @@ extension Calc {
     for item in txns {
       if let days, !days.contains(Day(item.txn.occurredAt, calendar: calendar)) { continue }
       let entries = reportEntries(
-        of: item, currency: currencies[item.txn.accountID] ?? currency,
+        of: item, currency: currencies[item.txn.accountID] ?? currency, categories: categories,
         refundsReduceSpending: refundsReduceSpending, calendar: calendar)
       guard !entries.isEmpty else { continue }
       guard let from = currencies[item.txn.accountID] else {
@@ -231,10 +238,11 @@ extension Calc {
     refundsReduceSpending: Bool, calendar: Calendar = .current
   ) -> CategoryBreakdown {
     var gaps = Unconverted()
+    let tree = CategoryTree(categories)
     let entries = convertedEntries(
-      txns, accounts: accounts, currency: currency, converter: converter,
+      txns, accounts: accounts, categories: tree, currency: currency, converter: converter,
       refundsReduceSpending: refundsReduceSpending, days: days, calendar: calendar, gaps: &gaps)
-    return breakdown(entries, kind: kind, currency: currency, tree: CategoryTree(categories), unconverted: gaps)
+    return breakdown(entries, kind: kind, currency: currency, tree: tree, unconverted: gaps)
   }
 }
 
@@ -254,15 +262,16 @@ public struct ListTotals: Hashable, Sendable {
 extension Calc {
   /// Income, expense and net of `txns` (already filtered by the caller) in `currency`, each
   /// amount at its day's rate. Transfers count as neither (R-TX-5); attached records count by
-  /// their kind (R-TX-6); refunds follow the setting (R-TX-4) — the net is the same either way.
+  /// their kind (R-TX-6); refunds and refund lines follow the setting (R-TX-4, D22) — the net
+  /// is the same either way.
   public static func listTotals(
-    txns: [TxnWithLines], accounts: [Account], currency: Currency,
+    txns: [TxnWithLines], accounts: [Account], categories: [Category], currency: Currency,
     converter: some CurrencyConverter, refundsReduceSpending: Bool, calendar: Calendar = .current
   ) -> ListTotals {
     var gaps = Unconverted()
     let entries = convertedEntries(
-      txns, accounts: accounts, currency: currency, converter: converter,
-      refundsReduceSpending: refundsReduceSpending, calendar: calendar, gaps: &gaps)
+      txns, accounts: accounts, categories: CategoryTree(categories), currency: currency,
+      converter: converter, refundsReduceSpending: refundsReduceSpending, calendar: calendar, gaps: &gaps)
     var income: Int64 = 0
     var expense: Int64 = 0
     for entry in entries {

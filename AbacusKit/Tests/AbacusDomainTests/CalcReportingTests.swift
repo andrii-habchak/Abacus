@@ -25,7 +25,7 @@ struct CalcReportingTests {
   @Test("R-TX-4, R-SET-3: setting off — a refund is income \"Refunds\", category spending unchanged")
   func refundAsIncome() {
     let refund = Fx.expense(30_00, pln, on: "2026-10-05", category: groceries, refund: true)
-    let entries = Calc.reportEntries(of: refund, currency: .PLN, refundsReduceSpending: false, calendar: Fx.calendar)
+    let entries = Calc.reportEntries(of: refund, currency: .PLN, categories: CategoryTree(categories), refundsReduceSpending: false, calendar: Fx.calendar)
     #expect(entries.map(\.kind) == [.income])
     #expect(entries.map(\.key) == [.refunds])
     #expect(entries.map(\.amount.minorUnits) == [30_00])
@@ -34,7 +34,7 @@ struct CalcReportingTests {
   @Test("R-TX-4, R-SET-3: setting on — a refund is subtracted from its category")
   func refundReducesSpending() {
     let refund = Fx.expense(30_00, pln, on: "2026-10-05", category: groceries, refund: true)
-    let entries = Calc.reportEntries(of: refund, currency: .PLN, refundsReduceSpending: true, calendar: Fx.calendar)
+    let entries = Calc.reportEntries(of: refund, currency: .PLN, categories: CategoryTree(categories), refundsReduceSpending: true, calendar: Fx.calendar)
     #expect(entries.map(\.kind) == [.expense])
     #expect(entries.map(\.key) == [.category(groceries.id)])
     #expect(entries.map(\.amount.minorUnits) == [-30_00])
@@ -43,15 +43,50 @@ struct CalcReportingTests {
   @Test("R-TX-4: an income reversal reduces its income category")
   func incomeReversal() {
     let reversal = Fx.income(100_00, pln, on: "2026-10-05", category: salary, reversal: true)
-    let entries = Calc.reportEntries(of: reversal, currency: .PLN, refundsReduceSpending: false, calendar: Fx.calendar)
+    let entries = Calc.reportEntries(of: reversal, currency: .PLN, categories: CategoryTree(categories), refundsReduceSpending: false, calendar: Fx.calendar)
     #expect(entries.map(\.kind) == [.income])
     #expect(entries.map(\.amount.minorUnits) == [-100_00])
+  }
+
+  @Test("R-TX-4, R-SET-3 (D22): setting off — an income line in an expense category is income \"Refunds\"")
+  func refundLineAsIncome() {
+    let t = Fx.expense(100_00, pln, on: "2026-10-05", category: groceries, lines: [Fx.line(15_00, .income, category: groceries)])
+    let entries = Calc.reportEntries(of: t, currency: .PLN, categories: CategoryTree(categories), refundsReduceSpending: false, calendar: Fx.calendar)
+    #expect(entries.map(\.kind) == [.expense, .income])
+    #expect(entries.map(\.key) == [.category(groceries.id), .refunds])
+    #expect(entries.map(\.amount.minorUnits) == [100_00, 15_00])
+    #expect(Calc.balance(of: pln, txns: [t], calendar: Fx.calendar).minorUnits == -85_00)
+  }
+
+  @Test("R-TX-4, R-SET-3 (D22): setting on — a refund line is subtracted from its expense category")
+  func refundLineReducesSpending() throws {
+    let t = Fx.expense(100_00, pln, on: "2026-10-05", category: groceries, lines: [Fx.line(15_00, .income, category: groceries)])
+    let entries = Calc.reportEntries(of: t, currency: .PLN, categories: CategoryTree(categories), refundsReduceSpending: true, calendar: Fx.calendar)
+    #expect(entries.map(\.kind) == [.expense, .expense])
+    #expect(entries.map(\.amount.minorUnits) == [100_00, -15_00])
+    let donut = Calc.expensesByCategory(
+      month: Month("2026-10")!, accounts: [pln], categories: categories, txns: [t], currency: .PLN,
+      converter: converter, refundsReduceSpending: true, calendar: Fx.calendar)
+    #expect(try #require(donut.items.first).total.minorUnits == 85_00)
+    let off = Calc.expensesByCategory(
+      month: Month("2026-10")!, accounts: [pln], categories: categories, txns: [t], currency: .PLN,
+      converter: converter, refundsReduceSpending: false, calendar: Fx.calendar)
+    #expect(try #require(off.items.first).total.minorUnits == 100_00)
+  }
+
+  @Test("R-TX-6: an income line in an income category stays income (cashback), not a refund")
+  func cashbackLineStaysIncome() {
+    let t = Fx.expense(100_00, pln, on: "2026-10-05", category: groceries, lines: [Fx.line(1_00, .income, category: cashback)])
+    let entries = Calc.reportEntries(of: t, currency: .PLN, categories: CategoryTree(categories), refundsReduceSpending: true, calendar: Fx.calendar)
+    #expect(entries.last?.kind == .income)
+    #expect(entries.last?.key == .category(cashback.id))
+    #expect(entries.last?.amount.minorUnits == 1_00)
   }
 
   @Test("R-TX-5: a transfer is neither income nor expense; its fee is an expense")
   func transferEntries() {
     let t = Fx.transfer(100_00, from: pln, to: eur, received: 25_00, on: "2026-10-05", lines: [Fx.line(2_00, category: fees)])
-    let entries = Calc.reportEntries(of: t, currency: .PLN, refundsReduceSpending: false, calendar: Fx.calendar)
+    let entries = Calc.reportEntries(of: t, currency: .PLN, categories: CategoryTree(categories), refundsReduceSpending: false, calendar: Fx.calendar)
     #expect(entries.map(\.key) == [.category(fees.id)])
     #expect(entries.map(\.kind) == [.expense])
   }
@@ -60,8 +95,8 @@ struct CalcReportingTests {
   func refundBalanceUnaffected() {
     let txns = [Fx.expense(30_00, pln, on: "2026-10-05", category: groceries, refund: true)]
     #expect(Calc.balance(of: pln, txns: txns, calendar: Fx.calendar).minorUnits == 30_00)
-    let off = Calc.listTotals(txns: txns, accounts: [pln], currency: .PLN, converter: converter, refundsReduceSpending: false, calendar: Fx.calendar)
-    let on = Calc.listTotals(txns: txns, accounts: [pln], currency: .PLN, converter: converter, refundsReduceSpending: true, calendar: Fx.calendar)
+    let off = Calc.listTotals(txns: txns, accounts: [pln], categories: categories, currency: .PLN, converter: converter, refundsReduceSpending: false, calendar: Fx.calendar)
+    let on = Calc.listTotals(txns: txns, accounts: [pln], categories: categories, currency: .PLN, converter: converter, refundsReduceSpending: true, calendar: Fx.calendar)
     #expect(off.net == on.net)
     #expect(off.income.minorUnits == 30_00 && off.expense.minorUnits == 0)
     #expect(on.income.minorUnits == 0 && on.expense.minorUnits == -30_00)
@@ -147,7 +182,7 @@ struct CalcReportingTests {
   func unknownAccount() {
     let ghost = Fx.account(9, .PLN)
     let result = Calc.listTotals(
-      txns: [Fx.expense(5_00, ghost, on: "2026-10-05")], accounts: [pln], currency: .PLN,
+      txns: [Fx.expense(5_00, ghost, on: "2026-10-05")], accounts: [pln], categories: categories, currency: .PLN,
       converter: converter, refundsReduceSpending: false, calendar: Fx.calendar)
     #expect(result.expense.minorUnits == 0)
     #expect(result.unconverted.unknownAccountIDs == [ghost.id])
@@ -159,7 +194,7 @@ struct CalcReportingTests {
   func listTotals() {
     let txns = Array(octoberTxns.prefix(9))
     let result = Calc.listTotals(
-      txns: txns, accounts: [pln, eur], currency: .PLN, converter: converter,
+      txns: txns, accounts: [pln, eur], categories: categories, currency: .PLN, converter: converter,
       refundsReduceSpending: false, calendar: Fx.calendar)
     #expect(result.count == 9)
     #expect(result.expense.minorUnits == 100_00 + 40_00 + 5_00 + 10_00 + 40_00 + 45_00 + 7_00)
@@ -172,7 +207,7 @@ struct CalcReportingTests {
   func listTotalsInEUR() {
     let txns = [Fx.expense(40_00, pln, on: "2026-10-02"), Fx.expense(45_00, pln, on: "2026-10-16"), Fx.expense(3_00, eur, on: "2026-10-16")]
     let result = Calc.listTotals(
-      txns: txns, accounts: [pln, eur], currency: .EUR, converter: converter,
+      txns: txns, accounts: [pln, eur], categories: categories, currency: .EUR, converter: converter,
       refundsReduceSpending: false, calendar: Fx.calendar)
     #expect(result.expense.minorUnits == 10_00 + 10_00 + 3_00)
   }
