@@ -159,21 +159,22 @@ enum MappingResolver {
       add(row.category)
       row.lines.forEach { add($0.category) }
     }
-    return order.map { key in
-      let external = externals[key]!
-      var mapping = CategoryMapping(external: external, target: .create, origin: .new, rowCount: counts[key] ?? 0)
-      let sameKind = context.categories.filter { $0.kind == external.kind }
-      if let remembered = context.remembered(.category, key),
-        let category = context.category(remembered.targetID), category.kind == external.kind
-      {
-        mapping.target = .existing(category.id)
-        mapping.origin = .remembered
-      } else if let category = bestNameMatch(external, in: sameKind) {
-        mapping.target = .existing(category.id)
-        mapping.origin = .sameName
-      }
-      return mapping
+    return order.map { category(externals[$0]!, rowCount: counts[$0] ?? 0, context: context) }
+  }
+
+  static func category(_ external: ExternalCategory, rowCount: Int, context: ImportContext) -> CategoryMapping {
+    var mapping = CategoryMapping(external: external, target: .create, origin: .new, rowCount: rowCount)
+    let sameKind = context.categories.filter { $0.kind == external.kind }
+    if let remembered = context.remembered(.category, external.key),
+      let category = context.category(remembered.targetID), category.kind == external.kind
+    {
+      mapping.target = .existing(category.id)
+      mapping.origin = .remembered
+    } else if let category = bestNameMatch(external, in: sameKind) {
+      mapping.target = .existing(category.id)
+      mapping.origin = .sameName
     }
+    return mapping
   }
 
   private static func bestNameMatch(_ external: ExternalCategory, in categories: [AbacusDomain.Category]) -> AbacusDomain.Category? {

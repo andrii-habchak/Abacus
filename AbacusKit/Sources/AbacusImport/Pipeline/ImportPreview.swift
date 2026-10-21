@@ -59,6 +59,8 @@ public struct ImportPreview: Sendable {
     var reviews: [String: ReviewChoice] = [:]
     var events: [String: Bool] = [:]
     var noRule: Set<String> = []
+    /// Review rows recorded by `acceptDefaults()` into "Uncategorised" with a review note.
+    var defaultHalves: Set<String> = []
   }
 
   init(
@@ -162,6 +164,38 @@ public struct ImportPreview: Sendable {
     recompute()
   }
 
+  /// Name of the category `acceptDefaults()` records unpaired transfer halves in.
+  public static let uncategorisedName = "Uncategorised"
+  /// Note `acceptDefaults()` adds to an unpaired transfer half it records.
+  public static let unpairedHalfNote = "Unpaired transfer half — review"
+
+  /// Resolves every open choice with the wizard's defaults, for imports without the wizard:
+  /// - account and category mappings stay as proposed (new ones are created);
+  /// - possible duplicates without a choice are skipped; pending holds are upgraded (automatic);
+  /// - no Saldo tag becomes an event;
+  /// - an unpaired transfer half is recorded as expense (outgoing) or income (incoming) in an
+  ///   "Uncategorised" category of that kind (created if missing) with the note
+  ///   `unpairedHalfNote`; other review rows (unknown PKO types, transfers with an unknown
+  ///   amount) are recorded by their sign, without a category.
+  /// Choices already made are kept.
+  public mutating func acceptDefaults() {
+    for candidate in eventCandidates { decisions.events[candidate.tag] = false }
+    for row in rows {
+      guard let review = row.review, decisions.reviews[row.id] == nil else { continue }
+      let kind: CategoryKind = row.source.flow == .in ? .income : .expense
+      decisions.reviews[row.id] = .record(kind, categoryID: nil)
+      if case .unpairedTransferHalf = review.reason { decisions.defaultHalves.insert(row.id) }
+    }
+    recompute()
+  }
+
+  /// A copy with `acceptDefaults()` applied.
+  public func acceptingDefaults() -> ImportPreview {
+    var preview = self
+    preview.acceptDefaults()
+    return preview
+  }
+
   /// Ticks or unticks a Saldo tag to become an event (R-IMP-SALDO-4).
   public mutating func setEvent(tag: String, selected: Bool) {
     decisions.events[tag] = selected
@@ -181,6 +215,7 @@ public struct ImportPreview: Sendable {
   }
 
   private mutating func applyReviewChoice(_ choice: ReviewChoice?, forRow id: String) {
+    decisions.defaultHalves.remove(id)
     if case .pair(let old) = decisions.reviews[id], decisions.reviews[old] == .pair(rowID: id) {
       decisions.reviews[old] = nil
     }
@@ -211,6 +246,16 @@ public struct ImportPreview: Sendable {
         mapping.origin = .user
       }
       return mapping
+    }
+    // The "Uncategorised" categories default-recorded halves go to, mapped like file categories.
+    let defaultKinds = Set(decisions.defaultHalves.compactMap { id in
+      index[id].map { parsedRows[$0].flow == .in ? CategoryKind.income : .expense }
+    })
+    for kind in CategoryKind.allCases where defaultKinds.contains(kind) {
+      let external = ExternalCategory(name: Self.uncategorisedName, kind: kind)
+      if !categoryMappings.contains(where: { $0.id == external.key }) {
+        categoryMappings.append(MappingResolver.category(external, rowCount: 0, context: context))
+      }
     }
     eventCandidates = makeEventCandidates()
     var resolver = Resolver(preview: self)
@@ -586,7 +631,12 @@ private struct Resolver {
       if let transit = source.transferHalf?.transit, transit.currencyCode != preview.currency(of: account)?.rawValue {
         shape.original = transit
       }
-      let (category, from, _) = resolveCategory(for: source, kind: kind, account: account, explicit: .some(categoryID))
+      var (category, from, _) = resolveCategory(for: source, kind: kind, account: account, explicit: .some(categoryID))
+      if decisions.defaultHalves.contains(source.id) {
+        category = preview.categoryRef(ExternalCategory(name: ImportPreview.uncategorisedName, kind: kind))
+        from = .user
+        shape.note = [shape.note, ImportPreview.unpairedHalfNote].filter { !$0.isEmpty }.joined(separator: "\n")
+      }
       shape.category = category
       row.type = shape.type
       row.category = category

@@ -94,6 +94,12 @@ public struct ImportPipeline: Sendable {
       accountMappings: accountMappings, categoryMappings: categoryMappings)
   }
 
+  /// Same as `preview(data:fileName:targetAccountID:)`; for headless imports (command-line
+  /// tool) together with `ImportPreview.acceptingDefaults()` and `commit(_:)`.
+  public func preview(data: Data, fileName: String, pkoAccountID: Account.ID?) async throws -> ImportPreview {
+    try await preview(data: data, fileName: fileName, targetAccountID: pkoAccountID)
+  }
+
   /// Maps a source account to an existing account (same currency) or to a new one, and redoes
   /// the store-dependent matching with the new mapping. Other choices are kept.
   public func remapAccount(_ preview: ImportPreview, key: String, to target: AccountMapping.Target) async throws -> ImportPreview {
