@@ -57,7 +57,7 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
   starts only after its group is approved.
 
 ### Phase 1 — Core logic (parallel lanes, after P0)
-- [ ] **A1 Calculators** (M) — owns `AbacusDomain/Calc/**`, its tests.
+- [x] **A1 Calculators** (M) — merged 2026-10-21 — owns `AbacusDomain/Calc/**`, its tests.
   Transaction effects and balances incl. attached records and transfers (R-ACC-3, R-TX-5/6);
   net worth assets − liabilities, archived excluded (R-HOME-1, R-ACC-4); refunds by setting
   (R-TX-4, R-SET-3); budget status incl. unallocated, parent covers children, over/near limit

@@ -30,7 +30,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | A3 Saldo parser | background agent | `wp/A3-saldo` | **merged** 2026-10-21 (real export: 964 transfers paired, all 24 account balances reproduced) |
 | A2 FX | background agent | `wp/A2-fx` | **merged** 2026-10-21 (Frankfurter/NBU + fallback, RateTable converter, RateRefresher) |
 | A4 PKO parser | background agent | `wp/A4-pko` | **merged** 2026-10-21 (79/79 real rows parse) |
-| A1 Calculators | background agent (own worktree) | `wp/A1-calc` | running since 2026-10-21 |
+| A1 Calculators | background agent | `wp/A1-calc` | **merged** 2026-10-21 (balances, net worth + series, reporting, budget, events) |
 | B1 Shell, settings, rates | background agent (own worktree) | `wp/B1-shell` | running since 2026-10-21 (on PreviewData) |
 | B3 Transaction list | background agent (own worktree) | `wp/B3-transactions` | running since 2026-10-21 (on PreviewData) |
 
