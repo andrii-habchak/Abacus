@@ -12,8 +12,8 @@ source is copied into this folder (`<n>-<name>.dc.html`).
 | 2 | Transaction list + filters | **approved** 2026-10-21 | |
 | 3 | Editor (3 types, attached records, event) | **approved** 2026-10-21 | With the currency picker and last-used defaults (TA 1.2) |
 | 4 | Accounts / Categories / Budget / Events / Rules | **approved** 2026-10-21 | |
-| 5 | Import wizard | in review | |
-| 6 | Rates + Settings | not started | |
+| 5 | Import wizard | **approved** 2026-10-21 | |
+| 6 | Rates + Settings | in review | |
 
 ## Approved decisions per screen
 
@@ -83,3 +83,24 @@ source is copied into this folder (`<n>-<name>.dc.html`).
 - Rules: "Try a description" tester highlighting the first matching rule; table with enable
   toggle, "description contains" pattern, account, category, origin (learned from an import /
   manual), hit count; first match wins.
+
+### 5 · Import wizard
+- Toolbar: step indicator (1 Choose file · 2 Review · 3 Done), History, Choose file….
+- Step 1: drop zone for a CSV; format detected automatically (Saldo / PKO BP); nothing saved
+  until confirmed.
+- Step 2: file bar (name, detected format, rows, date range; PKO: "Import into <account>",
+  remembered). Summary cards that also filter: All rows, New, Already imported (skipped
+  automatically), Possible duplicates (skipped unless chosen), Settle pending, Needs review.
+  Tabs:
+  - Transactions: status badge, date, description + detail, account, amount, category picker
+    ("By rule “x”" / "Needs a category" / "Will be saved as a rule"); possible duplicates get
+    Skip (default) / Import anyway / Link to existing; transfers "no category".
+  - Accounts & categories: source → existing or "Create …" (remembered mappings marked);
+    Saldo liabilities → Debt, archived → created archived; PKO counterparties by IBAN, ATM →
+    cash account.
+  - Events from tags (Saldo): tick tags to create events.
+  - Needs review: per item radio — Pair with <candidate> / Record as expense|income
+    (+ category) / Skip; PKO unknown operation types.
+  - Footer: uncategorised count, rules to be saved, "All or nothing", Cancel, Import N.
+- Step 3: summary lines, Undo this import, Show transactions.
+- History panel: batches with counts, "Undo import…", undone ones greyed.

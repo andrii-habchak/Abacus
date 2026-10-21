@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Abacus — Import</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+a{color:#0066CC}a:hover{color:#004C99}
+button,input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 1060px; padding: 24px; display: flex; justify-content: center;">
+<div style="position: relative; width: 100%; max-width: 1232px; min-height: 1010px; background: #FFFFFF; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 16px 48px rgba(0,0,0,0.18); overflow: hidden; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+<nav aria-label="Sections" style="flex: 1 1 220px; box-sizing: border-box; background: #EDEDF0; border-right: 1px solid #D6D6DB; padding: 14px 10px 16px; display: flex; flex-direction: column; gap: 2px;">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding: 2px 8px 18px;">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FEBC2E;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #28C840;"></span>
+</div>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 6px 10px 4px;">Overview</div>
+<sc-for list="{{nav1}}" as="item" hint-placeholder-count="3">
+<button type="button" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 14px 10px 4px;">Manage</div>
+<sc-for list="{{nav2}}" as="item" hint-placeholder-count="6">
+<button type="button" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: #FFFFFF;">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #E0E0E5;">
+<h1 style="margin: 0; font-size: 17px; font-weight: 600;">Import</h1>
+<ol aria-label="Steps" style="display: flex; gap: 6px; list-style: none; margin: 0 0 0 12px; padding: 0; flex-grow: 1; font-size: 12px;">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="3">
+<li style="{{s.style}}" aria-current="{{s.current}}">{{s.label}}</li>
+</sc-for>
+</ol>
+<button type="button" onClick="{{toggleHistory}}" aria-expanded="{{historyAttr}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">History</button>
+<button type="button" onClick="{{restart}}" style="border: 0; background: #0A66D9; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 6px; min-height: 30px;">Choose file…</button>
+</div>
+
+<sc-if value="{{isStep1}}" hint-placeholder-val="{{ true }}">
+<div style="padding: 28px 20px; display: flex; flex-direction: column; gap: 20px; align-items: center;">
+<div style="width: 100%; max-width: 640px; box-sizing: border-box; border: 2px dashed #C7C7CC; border-radius: 14px; padding: 40px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; background: #FAFAFC;">
+<svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="#8E8E93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6v20M12 18l8 8 8-8M7 30v4h26v-4"></path></svg>
+<h2 style="margin: 0; font-size: 17px; font-weight: 600;">Drop a CSV export here</h2>
+<p style="margin: 0; font-size: 13px; color: #3A3A3C; max-width: 460px; line-height: 1.45;">Saldo exports and PKO BP statements ("Zestawienie operacji") are recognised automatically. Nothing is saved until you confirm the preview.</p>
+<button type="button" onClick="{{restart}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 6px 14px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Choose file…</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; font-size: 12px; color: #6E6E73; align-items: center;">
+<span>Prototype: open a sample →</span>
+<button type="button" onClick="{{pickSaldo}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #0A4FA8;">saldo_export.csv</button>
+<button type="button" onClick="{{pickPko}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #0A4FA8;">Zestawienie operacji 21.09–21.10.csv</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isStep2}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; flex-grow: 1;">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #ECECF0; background: #FAFAFC;">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3A3A3C" stroke-width="1.4" stroke-linejoin="round"><path d="M4 1.5h7l3.5 3.5v11.5H4z M11 1.5V5h3.5"></path></svg>
+<span style="font-weight: 600; font-size: 13px;">{{fileName}}</span>
+<span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9px; background: #E6EEF9; color: #0A4FA8;">{{formatLabel}}</span>
+<span style="font-size: 12px; color: #6E6E73;">{{fileMeta}}</span>
+<span style="flex-grow: 1;"></span>
+<sc-if value="{{isPko}}" hint-placeholder-val="{{ false }}">
+<label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #3A3A3C;">Import into
+<select value="pko" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option value="pko">PKO Personal · PLN</option><option value="pkousd">PKO USD · USD</option><option value="pkocc">PKO Credit Card · PLN</option></select>
+<span style="font-size: 11px; color: #6E6E73;">remembered</span>
+</label>
+</sc-if>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 14px 20px;">
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="5">
+<button type="button" onClick="{{c.pick}}" aria-pressed="{{c.pressed}}" style="{{c.style}}">
+<span style="font-size: 22px; font-weight: 600; color: {{c.color}};">{{c.count}}</span>
+<span style="font-size: 12px; font-weight: 500;">{{c.label}}</span>
+<span style="font-size: 11px; color: #6E6E73;">{{c.hint}}</span>
+</button>
+</sc-for>
+</div>
+
+<div role="tablist" aria-label="Preview" style="display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid #E5E5EA;">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+<button type="button" role="tab" aria-selected="{{t.selected}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+</sc-for>
+</div>
+
+<sc-if value="{{tabRows}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column;">
+<div style="display: grid; grid-template-columns: 130px 86px minmax(0, 1.8fr) minmax(0, 1.1fr) 110px minmax(0, 1.5fr); gap: 10px; padding: 8px 20px; font-size: 11px; font-weight: 600; color: #6E6E73; border-bottom: 1px solid #ECECF0;">
+<span>Status</span><span>Date</span><span>Description</span><span>Account</span><span style="text-align: right;">Amount</span><span>Category / action</span>
+</div>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+<div style="display: grid; grid-template-columns: 130px 86px minmax(0, 1.8fr) minmax(0, 1.1fr) 110px minmax(0, 1.5fr); gap: 10px; align-items: center; padding: 8px 20px; font-size: 13px; border-bottom: 1px solid #F3F3F6; min-height: 40px;">
+<span style="{{r.badgeStyle}}">{{r.status}}</span>
+<span style="color: #3A3A3C;">{{r.date}}</span>
+<span style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.payee}}</span><span style="font-size: 11px; color: #6E6E73; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.sub}}</span></span>
+<span style="color: #3A3A3C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.account}}</span>
+<span style="{{r.amountStyle}}">{{r.amount}}</span>
+<span style="display: flex; flex-direction: column; gap: 2px;">
+<sc-if value="{{r.hasCategory}}" hint-placeholder-val="{{ true }}">
+<select aria-label="Category" value="{{r.cat}}" onChange="{{r.onCat}}" style="{{r.catStyle}}">
+<sc-for list="{{r.catOptions}}" as="o" hint-placeholder-count="6"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+</select>
+</sc-if>
+<sc-if value="{{r.hasDupAction}}" hint-placeholder-val="{{ false }}">
+<select aria-label="Duplicate action" value="{{r.dup}}" onChange="{{r.onDup}}" style="font-size: 12px; padding: 3px 4px; border-radius: 5px; border: 1px solid #E0B25C; background: #FFFBF2;">
+<option value="skip">Skip (default)</option><option value="import">Import anyway</option><option value="link">Link to existing</option>
+</select>
+</sc-if>
+<span style="font-size: 11px; color: {{r.noteColor}};">{{r.note}}</span>
+</span>
+</div>
+</sc-for>
+<div style="padding: 10px 20px; font-size: 12px; color: #6E6E73;">{{rowsFooter}}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{tabMapping}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 16px 20px;">
+<sc-for list="{{mappingGroups}}" as="g" hint-placeholder-count="2">
+<div style="flex: 1 1 380px; display: flex; flex-direction: column; border: 1px solid #E5E5EA; border-radius: 10px; overflow: hidden;">
+<div style="display: flex; justify-content: space-between; padding: 10px 12px; background: #FAFAFC; font-size: 12px; font-weight: 600;"><span>{{g.title}}</span><span style="color: #6E6E73; font-weight: 500;">{{g.summary}}</span></div>
+<sc-for list="{{g.rows}}" as="m" hint-placeholder-count="6">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1.2fr); gap: 8px; align-items: center; padding: 7px 12px; border-top: 1px solid #EEEEF2; font-size: 13px;">
+<span style="display: flex; flex-direction: column; min-width: 0;"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{m.source}}</span><span style="font-size: 11px; color: #6E6E73;">{{m.meta}}</span></span>
+<span aria-hidden="true" style="color: #8E8E93;">→</span>
+<span style="display: flex; flex-direction: column; gap: 2px;">
+<select aria-label="{{m.label}}" value="{{m.value}}" style="{{m.selectStyle}}">
+<sc-for list="{{m.options}}" as="o" hint-placeholder-count="4"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+</select>
+<span style="font-size: 11px; color: {{m.noteColor}};">{{m.note}}</span>
+</span>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{tabEvents}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; max-width: 720px;">
+<p style="margin: 0; font-size: 13px; color: #3A3A3C;">Saldo tags are not imported. Tick the ones that were trips or projects to turn them into events; their transactions keep their categories.</p>
+<sc-for list="{{tagRows}}" as="t" hint-placeholder-count="6">
+<label style="display: grid; grid-template-columns: 20px minmax(0, 1fr) 110px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 12px; border: 1px solid #E5E5EA; border-radius: 8px; font-size: 13px;">
+<input type="checkbox" checked="{{t.checked}}" onChange="{{t.toggle}}">
+<span style="font-weight: 500;">{{t.name}}</span>
+<span style="color: #6E6E73;">{{t.count}}</span>
+<span style="color: #6E6E73; font-size: 12px;">{{t.range}}</span>
+</label>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{tabReview}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; max-width: 900px;">
+<p style="margin: 0; font-size: 13px; color: #3A3A3C;">{{reviewIntro}}</p>
+<sc-for list="{{reviewItems}}" as="v" hint-placeholder-count="3">
+<div style="border: 1px solid #F0D9A8; background: #FFFCF4; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+<div style="display: flex; gap: 8px; align-items: baseline;"><strong style="font-weight: 600; flex-grow: 1;">{{v.title}}</strong><span style="color: #6E6E73; font-size: 12px;">{{v.date}}</span></div>
+<span style="color: #3A3A3C;">{{v.detail}}</span>
+<div role="radiogroup" aria-label="{{v.title}}" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center;">
+<sc-for list="{{v.options}}" as="o" hint-placeholder-count="3">
+<label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="{{o.group}}" checked="{{o.checked}}" onChange="{{o.pick}}"><span>{{o.label}}</span></label>
+</sc-for>
+<sc-if value="{{v.showPair}}" hint-placeholder-val="{{ false }}">
+<select aria-label="Pair with" value="c1" style="font-size: 12px; padding: 3px 4px; border-radius: 5px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option value="c1">{{v.candidate}}</option><option value="c2">Other half…</option></select>
+</sc-if>
+<sc-if value="{{v.showCategory}}" hint-placeholder-val="{{ false }}">
+<select aria-label="Category" value="other" style="font-size: 12px; padding: 3px 4px; border-radius: 5px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option value="other">Gifts</option><option value="fees">Fees</option><option value="family">Family care</option></select>
+</sc-if>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<div style="flex-grow: 1;"></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid #E0E0E5; background: #FAFAFC; font-size: 12px;">
+<span style="color: #3A3A3C; flex-grow: 1;">{{footerNote}}</span>
+<button type="button" onClick="{{restart}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 14px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Cancel</button>
+<button type="button" onClick="{{commit}}" disabled="{{commitDisabled}}" style="{{commitStyle}}">{{commitLabel}}</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isStep3}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;">
+<svg aria-hidden="true" width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="#1B8A4A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="22" cy="22" r="19"></circle><path d="m14 22.5 5.5 5.5L31 16.5"></path></svg>
+<h2 style="margin: 0; font-size: 19px; font-weight: 600;">{{doneTitle}}</h2>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #3A3A3C;">
+<sc-for list="{{doneLines}}" as="d" hint-placeholder-count="4"><li>{{d.text}}</li></sc-for>
+</ul>
+<div style="display: flex; gap: 10px; padding-top: 6px;">
+<button type="button" onClick="{{undoLatest}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 6px 14px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Undo this import</button>
+<a href="Transactions.dc.html" style="display: inline-flex; align-items: center; background: #0A66D9; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 6px; min-height: 30px; box-sizing: border-box; text-decoration: none;">Show transactions</a>
+</div>
+</div>
+</sc-if>
+</main>
+
+<sc-if value="{{showHistory}}" hint-placeholder-val="{{ false }}">
+<aside aria-label="Import history" style="position: absolute; top: 55px; right: 0; bottom: 0; width: 380px; max-width: 100%; background: #FFFFFF; border-left: 1px solid #D6D6DB; box-shadow: -12px 0 30px rgba(0,0,0,0.08); padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
+<div style="display: flex; align-items: center;"><h2 style="margin: 0; font-size: 15px; font-weight: 600; flex-grow: 1;">Import history</h2><button type="button" aria-label="Close history" onClick="{{toggleHistory}}" style="width: 28px; height: 28px; border: 0; background: transparent; color: #6E6E73; border-radius: 5px;">✕</button></div>
+<sc-for list="{{history}}" as="h" hint-placeholder-count="3">
+<div style="{{h.style}}">
+<div style="display: flex; gap: 8px; align-items: baseline;"><strong style="font-weight: 600; flex-grow: 1;">{{h.file}}</strong><span style="font-size: 11px; color: #6E6E73;">{{h.when}}</span></div>
+<span style="color: #3A3A3C; font-size: 12px;">{{h.summary}}</span>
+<div style="display: flex; justify-content: flex-end;">
+<sc-if value="{{h.canUndo}}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{h.undo}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #1D1D1F;">Undo import…</button>
+</sc-if>
+<sc-if value="{{h.undone}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 12px; color: #6E6E73;">Undone — its transactions were removed</span>
+</sc-if>
+</div>
+</div>
+</sc-for>
+</aside>
+</sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1060}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      step: 1, source: 'pko', tab: 'rows', filter: 'all', cats: {}, dups: {}, review: {}, tags: { 'Trip 2025': true, 'City break 2025': true },
+      showHistory: false, history: [
+        { id: 'h1', file: 'saldo_export.csv', when: '21 Oct 2026, 18:40', summary: 'Saldo · 4,612 new · 139 reviewed · 31 accounts, 24 categories created', undone: false },
+        { id: 'h2', file: 'Zestawienie operacji 21.08–21.09.csv', when: '21 Sep 2026, 09:12', summary: 'PKO Personal · 74 new · 3 duplicates skipped', undone: false }
+      ]
+    };
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    function set(p) { self.setState(p); }
+    function fmt(v, c) {
+      return (v < 0 ? '−' : '+') + new Intl.NumberFormat('en-US', { style: 'currency', currency: c, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v));
+    }
+
+    var navBase = 'display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; min-height: 30px; color: #1D1D1F;';
+    var I = {
+      home: 'M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H10v-4H6v4H3a.5.5 0 0 1-.5-.5z',
+      list: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01',
+      events: 'M3 3.5h10v10H3zM3 6.5h10M5.5 2v3M10.5 2v3',
+      accounts: 'M2 4.5h12v8H2zM2 7h12M4.5 10h2',
+      categories: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+      budget: 'M8 2a6 6 0 1 0 6 6H8z M9.5 1.5a5 5 0 0 1 5 5h-5z',
+      importI: 'M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12v1.5h11V12',
+      rates: 'M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5',
+      rules: 'M3 4h10M3 8h6M3 12h8'
+    };
+    function navItem(label, icon, on) {
+      return { label: label, icon: icon, current: on ? 'page' : 'false', style: navBase + (on ? ' background: #D4D4DA; font-weight: 500;' : ' background: transparent;') };
+    }
+    var nav1 = [navItem('Dashboard', I.home), navItem('Transactions', I.list), navItem('Events', I.events)];
+    var nav2 = [navItem('Accounts', I.accounts), navItem('Categories', I.categories), navItem('Budget', I.budget), navItem('Import', I.importI, true), navItem('Exchange rates', I.rates), navItem('Rules', I.rules)];
+
+    var stepBase = 'padding: 4px 10px; border-radius: 12px;';
+    var steps = ['1  Choose file', '2  Review', '3  Done'].map(function (l, i) {
+      var n = i + 1;
+      return { label: l, current: n === st.step ? 'step' : 'false', style: stepBase + (n === st.step ? ' background: #0A66D9; color: #FFFFFF; font-weight: 600;' : (n < st.step ? ' background: #E3F4EA; color: #1B6B3A;' : ' background: #EEEEF1; color: #6E6E73;')) };
+    });
+
+    var isPko = st.source === 'pko';
+    var CAT_OPTIONS = [['', 'Choose category…'], ['groceries', 'Food › Groceries'], ['eating', 'Food › Eating out'], ['taxi', 'Transport › Taxi'], ['fuel', 'Transport › Fuel'], ['health', 'Health'], ['mobile', 'Bills › Mobile'], ['clothing', 'Clothing'], ['fees', 'Fees'], ['salary', 'Salary'], ['transfer', '⇄ Transfer']];
+    var STATUS = {
+      'new': ['New', '#E6EEF9', '#0A4FA8'],
+      dup: ['Already imported', '#EEEEF1', '#6E6E73'],
+      maybe: ['Possible duplicate', '#FFF1D6', '#8A4B00'],
+      settle: ['Settles pending', '#E3F4EA', '#1B6B3A'],
+      review: ['Needs review', '#FDE7EA', '#B3001B'],
+      transfer: ['New transfer', '#E6EEF9', '#0A4FA8']
+    };
+    var PKO_ROWS = [
+      { id: 'p1', st: 'new', date: '21.10.2026', payee: 'Bolt', sub: 'Blokada · pending at the bank', acct: 'PKO Personal', amt: -23.40, cur: 'PLN', cat: 'taxi', rule: 'bolt.eu' },
+      { id: 'p2', st: 'new', date: '21.10.2026', payee: 'City Pharmacy', sub: 'Blokada · pending at the bank', acct: 'PKO Personal', amt: -31.20, cur: 'PLN', cat: 'health', rule: 'farmacja' },
+      { id: 'p3', st: 'transfer', date: '20.10.2026', payee: 'ATM withdrawal', sub: 'Wypłata w bankomacie → Cash PLN (remembered)', acct: 'PKO Personal', amt: -500, cur: 'PLN', cat: 'transfer' },
+      { id: 'p4', st: 'settle', date: '19.10.2026', payee: 'Biedronka', sub: 'Settles the pending payment of 18.10', acct: 'PKO Personal', amt: -17.35, cur: 'PLN', cat: 'groceries', rule: 'biedronka' },
+      { id: 'p5', st: 'new', date: '18.10.2026', payee: 'Kawiarnia Relaks', sub: 'Płatność kartą · Warszawa', acct: 'PKO Personal', amt: -18.50, cur: 'PLN', cat: '' },
+      { id: 'p6', st: 'review', date: '15.10.2026', payee: 'Przelew na telefon przychodz. zew.', sub: 'Unknown operation type — check the sign', acct: 'PKO Personal', amt: -200, cur: 'PLN', cat: '' },
+      { id: 'p7', st: 'maybe', date: '12.10.2026', payee: 'Rent October', sub: 'Looks like “Rent October” from Saldo, 12.10, same amount', acct: 'PKO Personal', amt: -4000, cur: 'PLN', cat: 'rent' },
+      { id: 'p8', st: 'new', date: '08.10.2026', payee: 'Orange', sub: 'Płatność web - kod mobilny', acct: 'PKO Personal', amt: -35, cur: 'PLN', cat: 'mobile', rule: 'orange' },
+      { id: 'p9', st: 'transfer', date: '25.09.2026', payee: 'Wymiana w kantorze', sub: 'Sender is PKO USD (own IBAN) → transfer', acct: 'PKO Personal', amt: 7800, cur: 'PLN', cat: 'transfer' },
+      { id: 'p10', st: 'dup', date: '22.09.2026', payee: 'Auchan', sub: 'Imported on 21 Sep 2026', acct: 'PKO Personal', amt: -142.30, cur: 'PLN', cat: 'groceries' }
+    ];
+    var SALDO_ROWS = [
+      { id: 's1', st: 'new', date: '19.10.2026', payee: 'Opening balance', sub: 'Initial balance → opening balance of the new account', acct: 'Bank UAH card', amt: 500.00, cur: 'UAH', cat: '' , noCat: true },
+      { id: 's2', st: 'new', date: '18.10.2026', payee: 'CAFE DU PARC', sub: 'Charged €10.00 · tag “Trip 2025”', acct: 'Bank UAH card', amt: -440.00, cur: 'UAH', cat: 'eating' },
+      { id: 's3', st: 'transfer', date: '15.10.2026', payee: 'To EUR card', sub: 'Two halves paired: −4,400 UAH → +100 EUR', acct: 'Bank UAH card', amt: -4400, cur: 'UAH', cat: 'transfer' },
+      { id: 's4', st: 'new', date: '01.02.2025', payee: 'Wallet top-up', sub: 'Transfer 20.00 USD + fee 0.50 USD', acct: 'Bank USD card', amt: -20.50, cur: 'USD', cat: 'transfer' },
+      { id: 's5', st: 'new', date: '27.06.2024', payee: 'GYM', sub: 'Split: 2 expense lines (30.00 € + 50.00 €)', acct: 'Bank UAH card', amt: -3900.00, cur: 'UAH', cat: 'health' },
+      { id: 's6', st: 'new', date: '26.07.2024', payee: 'Cancellation. FUEL STATION', sub: 'Refund in Transport', acct: 'Bank UAH card', amt: 1300.00, cur: 'UAH', cat: 'taxi' },
+      { id: 's7', st: 'review', date: '02.06.2024', payee: 'To the card', sub: 'Outgoing transfer half — no matching incoming half', acct: 'Bank UAH business', amt: -1200.00, cur: 'UAH', cat: '' },
+      { id: 's8', st: 'new', date: '02.08.2024', payee: 'Online shop', sub: 'Warning: legs differ (2,400.00 vs 2,380.00) — account amount used', acct: 'Bank UAH spare', amt: -2400.00, cur: 'UAH', cat: 'clothing' }
+    ];
+    var ROWS = isPko ? PKO_ROWS : SALDO_ROWS;
+    var counts = { 'new': 0, dup: 0, maybe: 0, settle: 0, review: 0 };
+    var COUNTS = isPko ? { 'new': 52, dup: 21, maybe: 3, settle: 2, review: 1 } : { 'new': 4612, dup: 0, maybe: 0, settle: 0, review: 139 };
+
+    var rows = ROWS.filter(function (r) {
+      if (st.filter === 'all') return true;
+      if (st.filter === 'new') return r.st === 'new' || r.st === 'transfer';
+      return r.st === st.filter;
+    }).map(function (r) {
+      var s = STATUS[r.st];
+      var chosen = st.cats[r.id] !== undefined ? st.cats[r.id] : r.cat;
+      var fromRule = st.cats[r.id] === undefined && r.rule;
+      var needsCat = !r.noCat && r.st !== 'dup' && r.st !== 'maybe' && chosen === '';
+      var note = '', noteColor = '#6E6E73';
+      if (fromRule) note = 'By rule “' + r.rule + '”';
+      else if (st.cats[r.id] !== undefined && st.cats[r.id] !== '' && r.cat === '') { note = 'Will be saved as a rule'; noteColor = '#0A4FA8'; }
+      else if (needsCat) { note = 'Needs a category'; noteColor = '#B3001B'; }
+      if (r.st === 'dup') note = 'Skipped';
+      return {
+        status: s[0], badgeStyle: 'font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9px; width: fit-content; background: ' + s[1] + '; color: ' + s[2] + ';',
+        date: r.date, payee: r.payee, sub: r.sub, account: r.acct,
+        amount: fmt(r.amt, r.cur), amountStyle: 'text-align: right; font-weight: 600; color: ' + (r.amt > 0 ? '#1B6B3A' : '#1D1D1F') + ';' + (r.st === 'dup' ? ' opacity: 0.5;' : ''),
+        hasCategory: !r.noCat && r.st !== 'dup' && r.st !== 'maybe' && r.cat !== 'transfer',
+        cat: chosen,
+        catOptions: CAT_OPTIONS.filter(function (o) { return o[0] !== 'transfer'; }).map(function (o) { return { value: o[0], label: o[1] }; }),
+        catStyle: 'font-size: 12px; padding: 3px 4px; border-radius: 5px; border: 1px solid ' + (needsCat ? '#E8A0A8' : '#D2D2D7') + '; background: #FFFFFF;',
+        onCat: function (e) { var n = Object.assign({}, st.cats); n[r.id] = e.target.value; set({ cats: n }); },
+        hasDupAction: r.st === 'maybe',
+        dup: st.dups[r.id] || 'skip',
+        onDup: function (e) { var n = Object.assign({}, st.dups); n[r.id] = e.target.value; set({ dups: n }); },
+        note: r.cat === 'transfer' ? 'Transfer — no category' : note, noteColor: noteColor
+      };
+    });
+
+    var cardBase = 'display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border-radius: 10px; padding: 10px 12px; min-height: 76px;';
+    var CARDS = [
+      ['all', 'All rows', COUNTS['new'] + COUNTS.dup + COUNTS.maybe + COUNTS.settle + COUNTS.review, 'in this file', '#1D1D1F'],
+      ['new', 'New', COUNTS['new'], 'will be imported', '#0A4FA8'],
+      ['dup', 'Already imported', COUNTS.dup, 'skipped automatically', '#6E6E73'],
+      ['maybe', 'Possible duplicates', COUNTS.maybe, 'skipped unless you choose', '#8A4B00'],
+      ['settle', 'Settle pending', COUNTS.settle, 'update earlier holds', '#1B6B3A'],
+      ['review', 'Needs review', COUNTS.review, 'resolve before import', '#B3001B']
+    ].filter(function (c) { return isPko || (c[0] !== 'maybe' && c[0] !== 'settle' && c[0] !== 'dup'); });
+    var cards = CARDS.map(function (c) {
+      var on = st.filter === c[0];
+      return {
+        label: c[1], count: c[2].toLocaleString('en-US'), hint: c[3], color: c[4], pressed: on ? 'true' : 'false',
+        style: cardBase + (on ? ' border: 1.5px solid #0A66D9; background: #F2F7FE;' : ' border: 1px solid #E5E5EA; background: #FFFFFF;'),
+        pick: function () { set({ filter: c[0], tab: c[0] === 'review' ? 'review' : 'rows' }); }
+      };
+    });
+
+    var tabBase = 'border: 0; background: transparent; font-size: 13px; padding: 9px 12px; min-height: 36px; border-bottom: 2px solid transparent; margin-bottom: -1px;';
+    var TABS = [['rows', 'Transactions'], ['mapping', 'Accounts & categories']];
+    if (!isPko) TABS.push(['events', 'Events from tags']);
+    TABS.push(['review', 'Needs review (' + COUNTS.review + ')']);
+    var tabs = TABS.map(function (t) {
+      var on = st.tab === t[0];
+      return { label: t[1], selected: on ? 'true' : 'false', style: tabBase + (on ? ' color: #0A4FA8; font-weight: 600; border-bottom-color: #0A66D9;' : ' color: #3A3A3C;'), pick: function () { set({ tab: t[0] }); } };
+    });
+
+    function mapRow(source, meta, value, options, note, kind) {
+      var isNew = value.indexOf('new:') === 0;
+      return {
+        source: source, meta: meta, value: value, label: 'Map ' + source,
+        options: options.map(function (o) { return { value: o[0], label: o[1] }; }),
+        selectStyle: 'font-size: 12px; padding: 3px 4px; border-radius: 5px; border: 1px solid #D2D2D7; background: ' + (isNew ? '#F2F7FE' : '#FFFFFF') + ';',
+        note: note, noteColor: note.indexOf('Remembered') === 0 ? '#1B6B3A' : '#6E6E73'
+      };
+    }
+    var mappingGroups = isPko ? [
+      { title: 'Account', summary: 'chosen above', rows: [mapRow('This file', 'PKO BP · PLN', 'pko', [['pko', 'PKO Personal · PLN']], 'Remembered from the last PKO import')] },
+      { title: 'Counterparties', summary: '2 recognised', rows: [
+        mapRow('PL00 … 0002', 'Sender of “Wymiana w kantorze”', 'pkousd', [['pkousd', 'PKO USD · USD (own account)'], ['none', 'Not my account']], 'Matched by IBAN → transfer'),
+        mapRow('ATM withdrawals', 'Wypłata w bankomacie', 'cash', [['cash', 'Cash PLN'], ['new:cash', 'Create “Cash PLN”'], ['expense', 'Record as expense']], 'Remembered')
+      ] }
+    ] : [
+      { title: 'Accounts', summary: '34 in the file · 31 new', rows: [
+        mapRow('Bank UAH card', 'Bank · UAH · 1,500 rows', 'new:mono-black', [['new:mono-black', 'Create “Bank UAH card” (Card)'], ['mono', 'Monobank Black · UAH']], 'Opening balance from Saldo'),
+        mapRow('Bank UAH business', 'Bank · UAH · archived in Saldo', 'new:mono-fop', [['new:mono-fop', 'Create “Bank UAH business” (archived)']], 'Created archived'),
+        mapRow('PKO savings', 'Bank · PLN · 700 rows', 'pko', [['pko', 'PKO Personal · PLN'], ['new:pko', 'Create “PKO savings”']], 'Same name as an existing account? Mapped by you'),
+        mapRow('Loan from a friend', 'Liability · EUR', 'new:debt', [['new:debt', 'Create “Loan from a friend” (Debt)']], 'Liability → Debt account'),
+        mapRow('Broker USD', 'Other asset · USD', 'new:ib', [['new:ib', 'Create “Broker USD” (Investment)']], ''),
+        mapRow('EUR Cash', 'Cash · EUR', 'new:eurcash', [['new:eurcash', 'Create “EUR Cash” (Cash)']], '')
+      ] },
+      { title: 'Categories', summary: '31 in the file · 26 new', rows: [
+        mapRow('Groceries', 'Expense · 650 rows', 'groceries', [['groceries', 'Food › Groceries'], ['new:groceries', 'Create “Groceries”']], 'Remembered'),
+        mapRow('Eating out', 'Expense · 250 rows', 'eating', [['eating', 'Food › Eating out'], ['new:eating', 'Create “Eating out”']], 'Same name'),
+        mapRow('Fees', 'Expense · 220 rows', 'fees', [['fees', 'Fees']], 'Same name'),
+        mapRow('Family care', 'Expense · 120 rows', 'new:family', [['new:family', 'Create “Family care”'], ['health', 'Health']], ''),
+        mapRow('Balance correction', 'Expense + Income', 'new:corr', [['new:corr', 'Create “Balance correction” (both kinds)']], ''),
+        mapRow('Lending', 'Income · 40 rows', 'new:lending', [['new:lending', 'Create “Lending”']], '')
+      ] }
+    ];
+
+    var TAGS = [['Trip 2025', '37 transactions', 'May 2025'], ['City break 2025', '40 transactions', 'Sep 2025'], ['Hiking 2025', '25 transactions', 'Jul 2025'], ['Relocation', '10 transactions', 'Jun 2024 – Aug 2024'], ['Car', '12 transactions', '2025'], ['Wallet', '90 transactions', '2024 – 2025']];
+    var tagRows = TAGS.map(function (t) {
+      return { name: t[0], count: t[1], range: t[2], checked: !!st.tags[t[0]], toggle: function () { var n = Object.assign({}, st.tags); n[t[0]] = !n[t[0]]; set({ tags: n }); } };
+    });
+
+    var REVIEW = isPko ? [
+      { id: 'v1', title: 'Unknown operation type', date: '15.10.2026', detail: '“Przelew na telefon przychodz. zew.”, −200.00 PLN, recipient OTRZYMUJĄCY PRZELEW. The sign says money went out.', opts: [['expense', 'Expense'], ['transfer', 'Transfer to my account'], ['skip', 'Skip']], def: 'expense' }
+    ] : [
+      { id: 'v1', title: 'Outgoing transfer half without a match', date: '02.06.2024', detail: '−1,200.00 UAH from “Bank UAH business” via Money on the way. Saldo hints the other side is “Bank UAH card”.', opts: [['pair', 'Pair with'], ['expense', 'Record as expense'], ['skip', 'Skip']], def: 'pair', candidate: '+1,200.00 UAH Bank UAH card · 02.06.2024 12:04' },
+      { id: 'v2', title: 'Incoming transfer half without a match', date: '14.03.2025', detail: '+300.00 EUR into “Wallet EUR” from Money on the way; no outgoing half within 3 days.', opts: [['pair', 'Pair with'], ['income', 'Record as income'], ['skip', 'Skip']], def: 'income', candidate: '−300.00 EUR PKO EUR · 09.03.2025' },
+      { id: 'v3', title: 'Money sent to another person?', date: '22.11.2024', detail: '−2,000.00 UAH from “Bank UAH card” to “Money on the way” with no counterpart account. Often a gift or a payment to someone.', opts: [['pair', 'Pair with'], ['expense', 'Record as expense'], ['skip', 'Skip']], def: 'expense', candidate: 'No candidates found' }
+    ];
+    var reviewItems = REVIEW.map(function (v) {
+      var choice = st.review[v.id] || v.def;
+      return {
+        title: v.title, date: v.date, detail: v.detail, candidate: v.candidate || '',
+        showPair: choice === 'pair', showCategory: choice === 'expense' || choice === 'income',
+        options: v.opts.map(function (o) {
+          return { label: o[1], group: v.id, checked: choice === o[0], pick: function () { var n = Object.assign({}, st.review); n[v.id] = o[0]; set({ review: n }); } };
+        })
+      };
+    });
+
+    var uncategorised = ROWS.filter(function (r) { return !r.noCat && r.st !== 'dup' && r.st !== 'maybe' && r.cat === '' && (st.cats[r.id] === undefined || st.cats[r.id] === ''); }).length;
+    var newRules = Object.keys(st.cats).filter(function (k) { var r = ROWS.filter(function (x) { return x.id === k; })[0]; return r && r.cat === '' && st.cats[k] !== ''; }).length;
+    var importCount = isPko ? COUNTS['new'] + COUNTS.review : COUNTS['new'] + COUNTS.review;
+    var footerNote = (uncategorised ? uncategorised + ' transaction' + (uncategorised === 1 ? '' : 's') + ' still without a category (they import uncategorised). ' : '') + (newRules ? newRules + ' new rule' + (newRules === 1 ? '' : 's') + ' will be saved from your choices. ' : '') + 'All or nothing: if anything fails, nothing is saved.';
+    var commitBase = 'border: 0; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 6px; min-height: 30px; color: #FFFFFF;';
+
+    var history = st.history.map(function (h) {
+      return {
+        file: h.file, when: h.when, summary: h.summary, canUndo: !h.undone, undone: h.undone,
+        style: 'display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid #E5E5EA; border-radius: 8px;' + (h.undone ? ' opacity: 0.6;' : ''),
+        undo: function () { set({ history: st.history.map(function (x) { return x.id === h.id ? Object.assign({}, x, { undone: true }) : x; }) }); }
+      };
+    });
+
+    var doneLines = isPko
+      ? [{ text: '52 transactions imported into PKO Personal' }, { text: '2 pending payments settled · 21 already imported, skipped' }, { text: '3 possible duplicates skipped · 1 reviewed row imported' }, { text: (newRules || 1) + ' new categorisation rule saved' }]
+      : [{ text: '4,612 transactions imported · 961 transfers paired' }, { text: '31 accounts and 26 categories created, opening balances set' }, { text: '139 reviewed rows resolved · 11 warnings kept on their transactions' }, { text: Object.keys(st.tags).filter(function (k) { return st.tags[k]; }).length + ' events created from tags' }];
+
+    return {
+      nav1: nav1, nav2: nav2, steps: steps,
+      isStep1: st.step === 1, isStep2: st.step === 2, isStep3: st.step === 3,
+      pickSaldo: function () { set({ step: 2, source: 'saldo', tab: 'rows', filter: 'all' }); },
+      pickPko: function () { set({ step: 2, source: 'pko', tab: 'rows', filter: 'all' }); },
+      restart: function () { set({ step: 1, cats: {}, dups: {}, review: {} }); },
+      isPko: isPko,
+      fileName: isPko ? 'Zestawienie operacji za 21.09.2026 - 21.10.2026.csv' : 'saldo_export.csv',
+      formatLabel: isPko ? 'PKO BP statement' : 'Saldo export',
+      fileMeta: isPko ? '80 rows · Windows-1250 · 21.09–21.10.2026' : '10,049 rows · 4,887 transactions · Jun 2024 – Oct 2026',
+      cards: cards, tabs: tabs,
+      tabRows: st.tab === 'rows', tabMapping: st.tab === 'mapping', tabEvents: st.tab === 'events', tabReview: st.tab === 'review',
+      rows: rows,
+      rowsFooter: 'Showing ' + rows.length + ' sample rows of ' + (isPko ? '79' : '4,887') + '.',
+      mappingGroups: mappingGroups, tagRows: tagRows,
+      reviewIntro: isPko ? 'Rows the importer could not place confidently. Each needs a decision before importing.' : 'Transfer halves Saldo booked through “Money on the way” that could not be paired automatically (same transit amount and currency, different accounts, ≤ 3 days apart).',
+      reviewItems: reviewItems,
+      footerNote: footerNote,
+      commitLabel: 'Import ' + importCount.toLocaleString('en-US') + ' transactions',
+      commitDisabled: false,
+      commitStyle: commitBase + ' background: #0A66D9;',
+      commit: function () {
+        var entry = isPko
+          ? { id: 'h' + Date.now(), file: 'Zestawienie operacji 21.09–21.10.csv', when: '21 Oct 2026, 21:05', summary: 'PKO Personal · 52 new · 2 settled · 21 skipped · 3 possible duplicates skipped', undone: false }
+          : { id: 'h' + Date.now(), file: 'saldo_export.csv', when: '21 Oct 2026, 21:05', summary: 'Saldo · 4,612 new · 139 reviewed', undone: false };
+        set({ step: 3, history: [entry].concat(st.history) });
+      },
+      doneTitle: isPko ? 'PKO statement imported' : 'Saldo history imported',
+      doneLines: doneLines,
+      undoLatest: function () { set({ showHistory: true }); },
+      showHistory: st.showHistory, historyAttr: st.showHistory ? 'true' : 'false',
+      toggleHistory: function () { set({ showHistory: !st.showHistory }); },
+      history: history
+    };
+  }
+}
+</script>
+</body>
+</html>
