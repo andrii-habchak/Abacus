@@ -11,4 +11,4 @@ Status: **planning**. See [`docs/STATUS.md`](docs/STATUS.md).
 - [Tech assignment](docs/REQUIREMENTS.md)
 - [Execution plan](docs/PLAN.md)
 - [Decisions](docs/DECISIONS.md)
-- [Agent guide](CLAUDE.md)
+- [Agent guide](AGENTS.md)
