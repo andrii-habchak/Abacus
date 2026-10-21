@@ -31,6 +31,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | A2 FX | background agent (own worktree) | `wp/A2-fx` | running since 2026-10-21 |
 | A4 PKO parser | background agent | `wp/A4-pko` | **merged** 2026-10-21 (79/79 real rows parse) |
 | A1 Calculators | background agent (own worktree) | `wp/A1-calc` | running since 2026-10-21 |
+| B1 Shell, settings, rates | background agent (own worktree) | `wp/B1-shell` | running since 2026-10-21 (on PreviewData) |
 
 ## Contract-change requests (orchestrator queue)
 
