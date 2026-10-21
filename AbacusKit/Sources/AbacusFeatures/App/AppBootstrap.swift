@@ -13,17 +13,45 @@ public enum AppBootstrap {
     databasePath: String? = nil, previewData: Bool = false, defaults: UserDefaults = .standard
   ) {
     prepareDependencies {
-      if $0.context == .preview || previewData {
+      let choice = try! launchDatabase(
+        databasePath: databasePath, previewData: previewData || $0.context == .preview,
+        remembered: DatabaseLocation.remembered(in: defaults),
+        fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+        defaultURL: AbacusDatabase.defaultURL)
+      switch choice {
+      case .previewData:
         $0.defaultDatabase = try! PreviewData.database()
-      } else if let databasePath {
-        let url = URL(filePath: databasePath)
+      case .demoFile(let url):
         try? FileManager.default.createDirectory(
           at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         $0.defaultDatabase = try! AbacusDatabase.open(at: url)
-      } else {
-        $0.defaultDatabase = try! AbacusDatabase.open(at: DatabaseLocation.resolve(defaults: defaults))
+      case .appFile(let url):
+        $0.defaultDatabase = try! AbacusDatabase.open(at: url)
       }
     }
+  }
+
+  /// The one database a launch opens.
+  public enum LaunchDatabase: Equatable, Sendable {
+    /// `-AbacusPreviewData YES` (or a SwiftUI preview): synthetic data in memory.
+    case previewData
+    /// `-AbacusDatabasePath <file>`: a demo database; the app's own file stays closed.
+    case demoFile(URL)
+    /// The app's own database: the remembered data folder's file, else the default location.
+    case appFile(URL)
+  }
+
+  /// Picks the launch database from the launch options, before anything is opened (R-SET-1):
+  /// preview data, else the given file, else the remembered file when it exists, else the
+  /// default. `defaultURL` is only asked for in the last case.
+  public static func launchDatabase(
+    databasePath: String?, previewData: Bool, remembered: URL?, fileExists: (URL) -> Bool,
+    defaultURL: () throws -> URL
+  ) rethrows -> LaunchDatabase {
+    if previewData { return .previewData }
+    if let databasePath, !databasePath.isEmpty { return .demoFile(URL(filePath: databasePath)) }
+    if let remembered, fileExists(remembered) { return .appFile(remembered) }
+    return .appFile(try defaultURL())
   }
 }
 

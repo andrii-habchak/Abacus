@@ -79,7 +79,7 @@ struct LaunchOptions {
       settingsTab: defaults.string(forKey: "AbacusOpenSettings").flatMap(SettingsTab.init(rawValue:)),
       previewData: defaults.bool(forKey: "AbacusPreviewData"),
       offline: defaults.bool(forKey: "AbacusOffline"),
-      databasePath: defaults.string(forKey: "AbacusDatabasePath"),
+      databasePath: defaults.string(forKey: "AbacusDatabasePath").flatMap { $0.isEmpty ? nil : $0 },
       loadSampleData: defaults.bool(forKey: "AbacusLoadSampleData"))
   }
 }
