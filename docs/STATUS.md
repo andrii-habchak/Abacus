@@ -39,6 +39,9 @@ build, README with sample-data screenshots, tag v1.0.0).
 | B4 Editor | background agent | `wp/B4-editor` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B4-screens/`; wiring notes in `docs/status/B4.md` |
 | B5 Management | background agent | `wp/B5-manage` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B5-screens/`; wiring notes in `docs/status/B5.md` |
 | B6 Import wizard | background agent | `wp/B6-import` | **merged and wired** 2026-10-21; screenshots `docs/status/B6-screens/` |
+| C1 List filters | background agent (own worktree) | `wp/C1-filters` | running since 2026-10-21 |
+| C2 Settings, data, defaults | background agent (own worktree) | `wp/C2-settings` | running since 2026-10-21 |
+| R1 Release prep | background agent (own worktree) | `wp/R1-release` | running since 2026-10-21 |
 
 ## Contract-change requests (orchestrator queue)
 

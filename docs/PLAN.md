@@ -108,6 +108,14 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   possible duplicates flagged; undo import restores the previous state; performance (R-NF-2).
 - [ ] **I2 Release** — ad-hoc signed DMG from CI, README with screenshots, tag `v1.0.0`.
 
+### Phase 3b — Small items and release (2026-10-21)
+- [ ] **C1 List filters** — uncategorised and import-batch filters through store, list, dashboard
+  drill-down and import "Show transactions".
+- [ ] **C2 Settings, data, defaults** — last backup date in the database, data folder Change…,
+  default categories on first launch, editor fetches rates for old days.
+- [ ] **R1 Release prep** — app icon, version 1.0.0, `scripts/build-dmg.sh`, README with
+  sample-data screenshots, CHANGELOG. Orchestrator then builds the DMG and tags `v1.0.0`.
+
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
 Developer Program), backlog items from TA §7.
