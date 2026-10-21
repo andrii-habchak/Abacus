@@ -67,8 +67,16 @@ public final class TransactionsViewModel {
 
   // MARK: Loading
 
+  /// First call: `load()`; later calls: `reload()`. The view calls it whenever `query` changes.
+  public func refresh() async {
+    if referenceLoaded { await reload() } else { await load() }
+  }
+
+  @ObservationIgnored private var referenceLoaded = false
+
   /// Loads accounts, categories and events, then the rows.
   public func load() async {
+    referenceLoaded = true
     do {
       let accountList = try await accounts.accounts(includeArchived: true)
       let categoryList = try await categories.categories(kind: nil, includeArchived: true)
