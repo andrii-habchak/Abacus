@@ -36,7 +36,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | B2 Dashboard | background agent | `wp/B2-dashboard` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B2-screens/`; wiring notes in `docs/status/B2.md` |
 | A6 Import pipeline | background agent | `wp/A6-pipeline` | **merged** 2026-10-21 (real Saldo+PKO pass; decisions in `docs/status/A6.md`) |
 | B4 Editor | background agent | `wp/B4-editor` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B4-screens/`; wiring notes in `docs/status/B4.md` |
-| B5 Management | background agent (own worktree) | `wp/B5-manage` | running since 2026-10-21 (on PreviewData) |
+| B5 Management | background agent | `wp/B5-manage` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B5-screens/`; wiring notes in `docs/status/B5.md` |
 | B6 Import wizard | background agent (own worktree) | `wp/B6-import` | running since 2026-10-21 |
 
 ## Contract-change requests (orchestrator queue)
@@ -86,3 +86,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
   now equals the bank's latest booked balance with pending holds counted as spent. 1 currency
   exchange half is under "Uncategorised" for review.
 - Done on `main`: `TxnRepository.transaction(_:)` (default implementation for fakes).
+- B5 requests: one rule-matching implementation for the tester and imports (B5 `RuleMatcher` in
+  Features vs A6 `RuleMatcher` in AbacusImport — consolidate on A6's); optional protocol
+  `balances(asOf:)` / per-category usage counts for 20k-transaction performance; R-CAT-4 default
+  categories on first launch still open.

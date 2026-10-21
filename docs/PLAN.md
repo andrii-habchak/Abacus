@@ -96,7 +96,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   totals (R-LIST-*).
 - [x] **B4 Editor** (M) — merged 2026-10-21 on preview data; wiring pending — 3 types, attached records, refunds, original amount, event pre-select,
   category suggestion, shortcuts (R-EDIT-*, R-TX-*, R-EVT-2).
-- [ ] **B5 Management** (L) — accounts (archive warning), categories tree, budget editor,
+- [x] **B5 Management** (L) — merged 2026-10-21 on preview data; wiring pending — accounts (archive warning), categories tree, budget editor,
   events, rules (R-MGMT-*).
 - [ ] **B6 Import wizard** (L) — file pick, preview counts, mapping, needs-review resolution,
   tags→events, commit, history + undo (R-IMP UI).
