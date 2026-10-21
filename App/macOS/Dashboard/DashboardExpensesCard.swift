@@ -1,0 +1,161 @@
+import AbacusDomain
+import AbacusFeatures
+import Charts
+import SwiftUI
+
+/// Monthly expenses (R-HOME-3): a donut by top-level category and a legend with amounts and
+/// shares; parents expand to their subcategories. Clicking a slice or a legend row picks it,
+/// which drills down to Transactions for that category and month.
+struct DashboardExpensesCard: View {
+  let expenses: DashboardExpenses
+  let monthTitle: String
+  let selected: CategoryKey?
+  let onPick: (DashboardExpenses.Slice) -> Void
+  @State private var angle: Double?
+  @State private var expanded: Set<CategoryKey> = []
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Monthly expenses").dashboardCardTitle()
+        .accessibilityAddTraits(.isHeader)
+      if expenses.isEmpty {
+        Text("No expenses in \(monthTitle).")
+          .foregroundStyle(.secondary)
+      } else {
+        HStack(alignment: .center, spacing: 24) {
+          donut
+          legend.frame(minWidth: 200)
+        }
+      }
+    }
+    .dashboardCard()
+    .onChange(of: angle) { _, value in
+      if let value, let slice = slice(atAngle: value) { onPick(slice) }
+    }
+  }
+
+  // MARK: Donut
+
+  private var donut: some View {
+    Chart(expenses.slices) { slice in
+      SectorMark(
+        angle: .value("Spent", double(slice.amount.decimal)),
+        innerRadius: .ratio(0.64),
+        outerRadius: .ratio(slice.id == selected ? 1 : 0.9),
+        angularInset: expenses.slices.count > 1 ? 1 : 0
+      )
+      .foregroundStyle(DashboardStyle.color(hex: slice.colorHex))
+      .opacity(selected == nil || slice.id == selected ? 1 : 0.6)
+      .accessibilityLabel(slice.name)
+      .accessibilityValue("\(slice.amountText), \(slice.percentText)")
+    }
+    .chartLegend(.hidden)
+    .chartAngleSelection(value: $angle)
+    .chartBackground { proxy in
+      GeometryReader { geometry in
+        if let anchor = proxy.plotFrame {
+          let frame = geometry[anchor]
+          VStack(spacing: 2) {
+            Text("Spent").font(.caption).foregroundStyle(.secondary)
+            Text(expenses.totalText).font(.headline).monospacedDigit()
+          }
+          .position(x: frame.midX, y: frame.midY)
+        }
+      }
+    }
+    .frame(width: 190, height: 190)
+    .accessibilityLabel(expenses.chartLabel)
+  }
+
+  private func slice(atAngle value: Double) -> DashboardExpenses.Slice? {
+    var running = 0.0
+    for slice in expenses.slices {
+      running += double(slice.amount.decimal)
+      if value <= running { return slice }
+    }
+    return expenses.slices.last
+  }
+
+  // MARK: Legend
+
+  private var legend: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      ForEach(expenses.slices) { slice in
+        legendRow(slice, indent: false)
+        if expanded.contains(slice.id) {
+          ForEach(slice.children) { child in legendRow(child, indent: true) }
+        }
+      }
+    }
+  }
+
+  private func legendRow(_ slice: DashboardExpenses.Slice, indent: Bool) -> some View {
+    HStack(spacing: 4) {
+      if indent {
+        Color.clear.frame(width: 22, height: 1)
+      } else if slice.children.isEmpty {
+        Color.clear.frame(width: 18, height: 1)
+      } else {
+        Button {
+          withAnimation(.snappy) {
+            if expanded.contains(slice.id) { expanded.remove(slice.id) } else { expanded.insert(slice.id) }
+          }
+        } label: {
+          Image(systemName: "chevron.right")
+            .font(.caption2.weight(.semibold))
+            .rotationEffect(.degrees(expanded.contains(slice.id) ? 90 : 0))
+            .frame(width: 14, height: 14)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help(expanded.contains(slice.id) ? "Hide subcategories" : "Show subcategories")
+        .accessibilityLabel(expanded.contains(slice.id) ? "Hide subcategories of \(slice.name)" : "Show subcategories of \(slice.name)")
+      }
+      Button {
+        onPick(slice)
+      } label: {
+        HStack(spacing: 8) {
+          Circle()
+            .fill(DashboardStyle.color(hex: slice.colorHex))
+            .frame(width: indent ? 7 : 10, height: indent ? 7 : 10)
+          Text(slice.name)
+            .foregroundStyle(indent ? .secondary : .primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          Text(slice.amountText)
+            .foregroundStyle(.secondary)
+          Text(slice.percentText)
+            .foregroundStyle(.secondary)
+            .frame(width: 40, alignment: .trailing)
+        }
+        .font(indent ? .caption : .callout)
+        .monospacedDigit()
+        .padding(.horizontal, 8)
+        .padding(.vertical, indent ? 4 : 6)
+        .background(
+          slice.id == selected ? Color.accentColor.opacity(0.14) : Color.clear, in: .rect(cornerRadius: 6))
+        .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .disabled(slice.categoryID == nil)
+      .help(slice.categoryID == nil ? "" : "Show \(slice.name) transactions for \(monthTitle)")
+      .accessibilityAddTraits(slice.id == selected ? .isSelected : [])
+    }
+  }
+
+  private func double(_ value: Decimal) -> Double { NSDecimalNumber(decimal: value).doubleValue }
+}
+
+#Preview("Expenses, October") {
+  @Previewable @State var model = DashboardModel(dependencies: .preview())
+  VStack {
+    if let expenses = model.expenses {
+      DashboardExpensesCard(expenses: expenses, monthTitle: model.monthTitle, selected: model.selectedSlice) {
+        model.select($0)
+      }
+    }
+  }
+  .padding()
+  .frame(width: 560)
+  .task { await model.load() }
+}
