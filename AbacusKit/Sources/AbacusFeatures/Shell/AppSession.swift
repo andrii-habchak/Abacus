@@ -96,13 +96,18 @@ public final class AppSession {
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), converter: RateTable(),
       calendar: calendar, today: { Day(now(), calendar: calendar) })
-    let editor = TransactionEditorDependencies(
+    var editor = TransactionEditorDependencies(
       transactions: SQLiteTxnRepository(database: database, calendar: calendar),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), rules: SQLiteRuleRepository(database: database),
       settings: SQLiteSettingsRepository(database: database), converter: RateTable(), calendar: calendar,
       now: now)
+    // An old day picked in the editor loads its rates (R-EDIT-4, R-FX-1).
+    editor.requestRates = { days in
+      await refresher.ensureRates(for: days)
+      return await refresher.table
+    }
     let session = AppSession(
       app: AppModel(environment: environment),
       dashboard: DashboardModel(dependencies: .live(database: database, refresher: refresher)),
