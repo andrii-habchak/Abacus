@@ -1,0 +1,696 @@
+import AbacusDomain
+import Foundation
+
+/// The import preview (R-IMP-1): every row with its status and choices, the mappings, events
+/// from tags, rules to be saved and the counts of the summary cards. Nothing is written until
+/// `ImportPipeline.commit(_:)`.
+///
+/// A value type: the wizard keeps it in its view model and changes it with the mutating
+/// methods below; each change recomputes rows and counts. Changing an account mapping needs
+/// the store again (dedupe depends on it), so it goes through `ImportPipeline.remapAccount`.
+public struct ImportPreview: Sendable {
+  public let batchID: ImportBatch.ID
+  public let source: ImportSource
+  public let fileName: String
+  /// PKO: the account the statement is imported into (R-IMP-PKO-1).
+  public let targetAccountID: Account.ID?
+  /// PKO: true when the target account came from the remembered choice.
+  public let targetRemembered: Bool
+  public let fileWarnings: [ImportWarning]
+  /// Source transactions the parser skipped (unsupported shapes); counted in `counts.skipped`.
+  public let parserSkippedCount: Int
+  /// Earliest and latest day of the file's rows.
+  public let dateRange: ClosedRange<Day>?
+
+  public private(set) var rows: [PreviewRow] = []
+  public private(set) var accountMappings: [AccountMapping] = []
+  public private(set) var categoryMappings: [CategoryMapping] = []
+  public private(set) var eventCandidates: [EventCandidate] = []
+  public private(set) var rulesToSave: [RuleProposal] = []
+  public private(set) var counts = StatusCounts()
+  /// Rows that will be imported without a category (footer).
+  public private(set) var uncategorisedCount = 0
+  /// Review rows without a choice yet; the commit waits for them (R-IMP-5).
+  public private(set) var unresolvedReviewCount = 0
+  /// Problems that block the commit besides unresolved review rows.
+  public private(set) var issues: [String] = []
+  /// New transactions the commit creates ("Import N transactions").
+  public private(set) var transactionsToCreate = 0
+
+  public var canCommit: Bool { unresolvedReviewCount == 0 && issues.isEmpty }
+
+  // Inputs.
+  let parsedRows: [NormalizedRow]
+  let context: ImportContext
+  let calendar: Calendar
+  var analysis: [RowAnalysis]
+  let defaultAccountMappings: [AccountMapping]
+  let defaultCategoryMappings: [CategoryMapping]
+  var decisions = Decisions()
+  // Outputs for the commit.
+  private(set) var plans: [RowPlan] = []
+  private var index: [String: Int] = [:]
+
+  struct Decisions: Sendable {
+    var accountTargets: [String: AccountMapping.Target] = [:]
+    var categoryTargets: [String: CategoryMapping.Target] = [:]
+    var categories: [String: AbacusDomain.Category.ID?] = [:]
+    var duplicates: [String: DuplicateAction] = [:]
+    var reviews: [String: ReviewChoice] = [:]
+    var events: [String: Bool] = [:]
+    var noRule: Set<String> = []
+  }
+
+  init(
+    batchID: ImportBatch.ID, parsed: ParsedImport, fileName: String, targetAccountID: Account.ID?,
+    targetRemembered: Bool, context: ImportContext, calendar: Calendar, analysis: [RowAnalysis],
+    accountMappings: [AccountMapping], categoryMappings: [CategoryMapping]
+  ) {
+    self.batchID = batchID
+    self.source = parsed.source
+    self.fileName = fileName
+    self.targetAccountID = targetAccountID
+    self.targetRemembered = targetRemembered
+    self.fileWarnings = parsed.warnings
+    self.parserSkippedCount = parsed.skippedRowCount
+    self.parsedRows = parsed.rows
+    self.context = context
+    self.calendar = calendar
+    self.analysis = analysis
+    self.defaultAccountMappings = accountMappings
+    self.defaultCategoryMappings = categoryMappings
+    let days = parsed.rows.map { $0.valueDay ?? Day($0.occurredAt, calendar: calendar) }
+    if let first = days.min(), let last = days.max() { dateRange = first...last } else { dateRange = nil }
+    self.index = Dictionary(parsed.rows.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+    recompute()
+  }
+
+  // MARK: - Lookups
+
+  public func row(_ id: String) -> PreviewRow? { index[id].map { rows[$0] } }
+
+  public func rows(with status: RowStatus) -> [PreviewRow] { rows.filter { $0.status == status } }
+
+  /// Existing accounts a source account can be mapped to (same currency).
+  public func accountOptions(for key: String) -> [Account] {
+    guard let mapping = accountMappings.first(where: { $0.id == key }) else { return [] }
+    return context.accounts.filter { $0.currency == mapping.external.currency }
+  }
+
+  /// Existing categories a source category can be mapped to (same kind).
+  public func categoryOptions(for key: String) -> [AbacusDomain.Category] {
+    guard let mapping = categoryMappings.first(where: { $0.id == key }) else { return [] }
+    return context.categories.filter { $0.kind == mapping.external.kind }
+  }
+
+  /// Display name of an account reference (existing or to be created).
+  public func name(of ref: AccountRef) -> String {
+    switch ref {
+    case .existing(let id): return context.account(id)?.name ?? "?"
+    case .new(let key): return accountMappings.first { $0.id == key }?.newName ?? key
+    }
+  }
+
+  /// Display name of a category reference.
+  public func name(of ref: CategoryRef) -> String {
+    switch ref {
+    case .existing(let id): return context.category(id)?.name ?? "?"
+    case .new(let key): return categoryMappings.first { $0.id == key }?.external.name ?? key
+    }
+  }
+
+  // MARK: - Choices
+
+  /// Sets (or clears with nil) the category of an expense/income row. A row that had no
+  /// category from the file or a rule also gets a rule proposal (R-IMP-8).
+  public mutating func setCategory(_ categoryID: AbacusDomain.Category.ID?, forRow id: String) {
+    decisions.categories[id] = .some(categoryID)
+    recompute()
+  }
+
+  /// Back to the category from the file or the rules.
+  public mutating func resetCategory(forRow id: String) {
+    decisions.categories[id] = nil
+    recompute()
+  }
+
+  /// Whether the row's category choice is saved as a rule (default: yes).
+  public mutating func setSavesRule(_ saves: Bool, forRow id: String) {
+    if saves { decisions.noRule.remove(id) } else { decisions.noRule.insert(id) }
+    recompute()
+  }
+
+  public mutating func setDuplicateAction(_ action: DuplicateAction, forRow id: String) {
+    decisions.duplicates[id] = action
+    recompute()
+  }
+
+  /// Chooses how a review row is resolved; nil clears it. Pairing is mutual: the partner gets
+  /// the reverse choice and its previous partner is cleared.
+  public mutating func setReviewChoice(_ choice: ReviewChoice?, forRow id: String) {
+    applyReviewChoice(choice, forRow: id)
+    recompute()
+  }
+
+  /// Applies the suggested choice to every review row that has none.
+  public mutating func acceptSuggestedReviewChoices() {
+    for row in rows {
+      guard let review = row.review, decisions.reviews[row.id] == nil else { continue }
+      if case .pair(let other) = review.suggested, decisions.reviews[other] != nil { continue }
+      applyReviewChoice(review.suggested, forRow: row.id)
+    }
+    recompute()
+  }
+
+  /// Ticks or unticks a Saldo tag to become an event (R-IMP-SALDO-4).
+  public mutating func setEvent(tag: String, selected: Bool) {
+    decisions.events[tag] = selected
+    recompute()
+  }
+
+  /// Maps a source category to an existing category of the same kind or to a new one.
+  public mutating func mapCategory(key: String, to target: CategoryMapping.Target) throws {
+    guard let mapping = defaultCategoryMappings.first(where: { $0.id == key }) else { throw ImportPipelineError.unknownAccount }
+    if case .existing(let id) = target {
+      guard let category = context.category(id), category.kind == mapping.external.kind else {
+        throw ImportPipelineError.currencyMismatch
+      }
+    }
+    decisions.categoryTargets[key] = target
+    recompute()
+  }
+
+  private mutating func applyReviewChoice(_ choice: ReviewChoice?, forRow id: String) {
+    if case .pair(let old) = decisions.reviews[id], decisions.reviews[old] == .pair(rowID: id) {
+      decisions.reviews[old] = nil
+    }
+    decisions.reviews[id] = choice
+    if case .pair(let other) = choice {
+      if case .pair(let previous) = decisions.reviews[other], previous != id {
+        decisions.reviews[previous] = nil
+      }
+      decisions.reviews[other] = .pair(rowID: id)
+    }
+  }
+
+  // MARK: - Resolution
+
+  mutating func recompute() {
+    accountMappings = defaultAccountMappings.map { mapping in
+      var mapping = mapping
+      if let target = decisions.accountTargets[mapping.id] {
+        mapping.target = target
+        mapping.origin = .user
+      }
+      return mapping
+    }
+    categoryMappings = defaultCategoryMappings.map { mapping in
+      var mapping = mapping
+      if let target = decisions.categoryTargets[mapping.id] {
+        mapping.target = target
+        mapping.origin = .user
+      }
+      return mapping
+    }
+    eventCandidates = makeEventCandidates()
+    var resolver = Resolver(preview: self)
+    resolver.run()
+    rows = resolver.rows
+    plans = resolver.plans
+    rulesToSave = resolver.proposals
+    issues = resolver.issues
+
+    counts = StatusCounts()
+    rows.forEach { counts.add($0.status) }
+    counts.skipped += parserSkippedCount
+    uncategorisedCount = rows.filter(\.needsCategory).count
+    unresolvedReviewCount = rows.filter { $0.review != nil && $0.review?.choice == nil }.count
+    transactionsToCreate = rows.filter(\.createsTransaction).count
+  }
+
+  private func makeEventCandidates() -> [EventCandidate] {
+    var order: [String] = []
+    var counts: [String: Int] = [:]
+    var ranges: [String: (Day, Day)] = [:]
+    for row in parsedRows {
+      guard let tag = row.tag?.trimmingCharacters(in: .whitespacesAndNewlines), !tag.isEmpty else { continue }
+      let day = Day(row.occurredAt, calendar: calendar)
+      if counts[tag] == nil { order.append(tag) }
+      counts[tag, default: 0] += 1
+      let range = ranges[tag] ?? (day, day)
+      ranges[tag] = (min(range.0, day), max(range.1, day))
+    }
+    return order.map { tag in
+      let existing = context.events.first { MappingResolver.same($0.name, tag) }
+      return EventCandidate(
+        tag: tag, rowCount: counts[tag] ?? 0, firstDay: ranges[tag]!.0, lastDay: ranges[tag]!.1,
+        existingEventID: existing?.id, isSelected: decisions.events[tag] ?? (existing != nil))
+    }
+  }
+
+  func accountRef(_ account: ExternalAccount) -> AccountRef {
+    if let id = account.resolvedID { return .existing(id) }
+    switch accountMappings.first(where: { $0.id == account.key })?.target {
+    case .existing(let id): return .existing(id)
+    case .create, nil: return .new(key: account.key)
+    }
+  }
+
+  func categoryRef(_ category: ExternalCategory?) -> CategoryRef? {
+    guard let category else { return nil }
+    switch categoryMappings.first(where: { $0.id == category.key })?.target {
+    case .existing(let id): return .existing(id)
+    case .create, nil: return .new(key: category.key)
+    }
+  }
+
+  func currency(of ref: AccountRef) -> Currency? {
+    switch ref {
+    case .existing(let id): return context.account(id)?.currency
+    case .new(let key): return accountMappings.first { $0.id == key }?.external.currency
+    }
+  }
+}
+
+// MARK: - Plans
+
+/// A new transaction, before IDs are assigned.
+struct TxnShape: Hashable, Sendable {
+  var type: TxnType
+  var from: AccountRef
+  var to: AccountRef?
+  var amountMinor: Int64
+  var toAmountMinor: Int64?
+  var isRefund = false
+  var category: CategoryRef?
+  var ruleID: CategoryRule.ID?
+  var lines: [NormalizedLine] = []
+  var occurredAt: Date
+  var payee: String
+  var note: String
+  var original: OriginalAmount?
+  var isPending = false
+  var bookedDay: Day?
+  var tag: String?
+  var fingerprints: [String]
+}
+
+/// What the commit does with a row.
+enum RowPlan: Hashable, Sendable {
+  case nothing
+  /// Sets the opening balance of an account this import creates (R-IMP-SALDO-3).
+  case openingBalance(AccountRef, Int64, Date)
+  case create(TxnShape)
+  /// Upgrades a pending hold (R-IMP-PKO-2).
+  case settle(Txn, NormalizedRow)
+  /// Stores the row's fingerprints on an existing transaction (R-IMP-4 link).
+  case link(Txn, [String])
+  /// Turns an existing expense/income into the transfer (other side already imported).
+  case convert(Txn, TxnShape)
+}
+
+/// Turns parsed rows + analysis + decisions into preview rows and commit plans.
+private struct Resolver {
+  let preview: ImportPreview
+  let matcher: RuleMatcher
+  var rows: [PreviewRow] = []
+  var plans: [RowPlan] = []
+  var proposals: [RuleProposal] = []
+  var issues: [String] = []
+
+  init(preview: ImportPreview) {
+    self.preview = preview
+    self.matcher = RuleMatcher(rules: preview.context.rules, categories: preview.context.categories)
+  }
+
+  var parsed: [NormalizedRow] { preview.parsedRows }
+  var analysis: [RowAnalysis] { preview.analysis }
+  var decisions: ImportPreview.Decisions { preview.decisions }
+
+  func dayText(_ date: Date) -> String { Day(date, calendar: preview.calendar).string }
+
+  mutating func run() {
+    let selectedTags = Set(preview.eventCandidates.filter(\.isSelected).map(\.tag))
+    for i in parsed.indices {
+      var (row, plan) = resolve(i)
+      if let tag = parsed[i].tag?.trimmingCharacters(in: .whitespacesAndNewlines), selectedTags.contains(tag) {
+        row.eventTag = tag
+        if case .create(var shape) = plan {
+          shape.tag = tag
+          plan = .create(shape)
+        }
+      }
+      rows.append(row)
+      plans.append(plan)
+    }
+    learnRules()
+    checkConflicts()
+  }
+
+  // MARK: Rows
+
+  private mutating func resolve(_ i: Int) -> (PreviewRow, RowPlan) {
+    let source = parsed[i]
+    let found = analysis[i]
+    let account = preview.accountRef(source.account)
+    var row = PreviewRow(
+      source: source, status: .new, detail: nil, type: nil, account: account,
+      counterAccount: source.counterAccount.map(preview.accountRef), amountMinor: source.amountMinor,
+      counterAmountMinor: source.counterAmountMinor, isInflow: source.flow == .in, category: nil,
+      categorySource: .notApplicable, rulePattern: nil, duplicate: nil, review: nil, eventTag: nil,
+      createsTransaction: false)
+
+    if source.kind == .openingBalance {
+      row.isInflow = source.amountMinor >= 0
+      row.amountMinor = abs(source.amountMinor)
+      if case .new = account {
+        row.detail = "Opening balance of the new account"
+        return (row, .openingBalance(account, source.amountMinor, source.occurredAt))
+      }
+      row.status = .skipped
+      row.detail = "The account exists; its opening balance is not changed"
+      return (row, .nothing)
+    }
+    if found.exactTxnID != nil {
+      row.status = .alreadyImported
+      row.detail = "Imported earlier"
+      return (row, .nothing)
+    }
+    if let hold = found.settles {
+      row.status = .settlesPending
+      row.type = .expense
+      row.detail = "Settles the pending payment of \(dayText(hold.occurredAt))"
+      return (row, .settle(hold, source))
+    }
+    if let transfer = found.ownTransfer {
+      row.type = .transfer
+      row.counterAccount = .existing(transfer.ownAccountID)
+      row.counterAmountMinor = row.isInflow ? transfer.amountMinor : transfer.toAmountMinor
+      if let same = found.sameTransfer {
+        row.status = .alreadyImported
+        row.detail = "The other account's statement already has this transfer"
+        return (row, .link(same, source.fingerprints))
+      }
+    }
+    if let reason = found.review {
+      return review(i, row, reason)
+    }
+
+    var shape = baseShape(source, found)
+    row.type = shape.type
+    if shape.type != .transfer {
+      let (category, from, rule) = resolveCategory(for: source, kind: shape.type == .income ? .income : .expense, account: account, explicit: nil)
+      shape.category = category
+      shape.ruleID = rule
+      row.category = category
+      row.categorySource = from
+      row.rulePattern = rulePattern(source, from)
+    }
+    row.detail = detail(source, found)
+
+    if let existing = found.duplicate {
+      let action = decisions.duplicates[source.id] ?? .skip
+      row.status = .possibleDuplicate
+      row.duplicate = DuplicateInfo(existing: existing, action: action)
+      row.detail = "Looks like “\(existing.payee)” of \(dayText(existing.occurredAt)), same amount"
+      switch action {
+      case .skip:
+        return (row, .nothing)
+      case .link:
+        return (row, .link(existing, source.fingerprints))
+      case .importAnyway:
+        row.createsTransaction = true
+        return (row, .create(shape))
+      }
+    }
+    if let other = found.completesTransfer {
+      row.detail = "Completes the transfer imported from the other account on \(dayText(other.occurredAt))"
+      return (row, .convert(other, shape))
+    }
+    row.createsTransaction = true
+    return (row, .create(shape))
+  }
+
+  private func baseShape(_ source: NormalizedRow, _ found: RowAnalysis) -> TxnShape {
+    var shape = TxnShape(
+      type: .expense, from: preview.accountRef(source.account), amountMinor: source.amountMinor,
+      isRefund: source.isRefund, lines: source.lines, occurredAt: source.occurredAt, payee: source.payee,
+      note: source.note, original: source.original, isPending: source.isPending,
+      bookedDay: bookedDay(source), fingerprints: source.fingerprints)
+    if let transfer = found.ownTransfer {
+      shape.type = .transfer
+      shape.from = transfer.from
+      shape.to = transfer.to
+      shape.amountMinor = transfer.amountMinor
+      shape.toAmountMinor = transfer.toAmountMinor
+      shape.isRefund = false
+      shape.original = nil
+      return shape
+    }
+    switch source.kind {
+    case .income: shape.type = .income
+    case .transfer, .transferHalf:
+      shape.type = .transfer
+      shape.to = source.counterAccount.map(preview.accountRef)
+      shape.toAmountMinor = source.counterAmountMinor ?? source.amountMinor
+    case .expense, .openingBalance: shape.type = .expense
+    }
+    return shape
+  }
+
+  private func bookedDay(_ source: NormalizedRow) -> Day? {
+    guard let booked = source.bookedDay else { return nil }
+    return booked == (source.valueDay ?? Day(source.occurredAt, calendar: preview.calendar)) ? nil : booked
+  }
+
+  private func detail(_ source: NormalizedRow, _ found: RowAnalysis) -> String? {
+    if found.ownTransfer != nil { return "Own account recognised by its account number → transfer" }
+    if source.isPending { return "Pending at the bank" }
+    if source.kind == .transfer, source.fingerprints.count == 2 { return "Two transfer halves paired" }
+    if preview.source == .pko, source.kind == .transfer { return "ATM withdrawal → cash account" }
+    return nil
+  }
+
+  // MARK: Categories and rules
+
+  /// File category, else an existing rule; an explicit choice (review) or a user pick wins.
+  private func resolveCategory(
+    for source: NormalizedRow, kind: CategoryKind, account: AccountRef, explicit: AbacusDomain.Category.ID??
+  ) -> (CategoryRef?, CategorySource, CategoryRule.ID?) {
+    if let explicit {
+      return (explicit.map(CategoryRef.existing), explicit == nil ? .none : .user, nil)
+    }
+    if let picked = decisions.categories[source.id] {
+      return (picked.map(CategoryRef.existing), picked == nil ? .none : .user, nil)
+    }
+    if let fileCategory = preview.categoryRef(source.category), source.category?.kind == kind {
+      return (fileCategory, .file, nil)
+    }
+    let accountID: Account.ID? = if case .existing(let id) = account { id } else { nil }
+    if let rule = matcher.match(description: source.payee, accountID: accountID, kind: kind) {
+      return (.existing(rule.categoryID), .rule(rule.id, pattern: rule.pattern), rule.id)
+    }
+    return (nil, .none, nil)
+  }
+
+  /// A user pick on a row the file and the rules left without a category becomes a rule.
+  private func rulePattern(_ source: NormalizedRow, _ from: CategorySource) -> String? {
+    guard from == .user, !decisions.noRule.contains(source.id), source.category == nil,
+      case .some(.some) = decisions.categories[source.id]
+    else { return nil }
+    let accountID: Account.ID? = if case .existing(let id) = preview.accountRef(source.account) { id } else { nil }
+    let kind: CategoryKind = source.kind == .income ? .income : .expense
+    if matcher.match(description: source.payee, accountID: accountID, kind: kind) != nil { return nil }
+    let pattern = RulePattern.derive(from: source.payee)
+    return pattern.isEmpty ? nil : pattern
+  }
+
+  /// R-IMP-8: proposals from the user's picks, applied at once to the other rows of this
+  /// import that have no category.
+  private mutating func learnRules() {
+    var learned: [(pattern: String, categoryID: AbacusDomain.Category.ID, kind: CategoryKind)] = []
+    for row in rows {
+      guard let pattern = row.rulePattern, case .existing(let id)? = row.category,
+        let category = preview.context.category(id), !learned.contains(where: { $0.pattern == pattern })
+      else { continue }
+      learned.append((pattern, id, category.kind))
+    }
+    guard !learned.isEmpty else { return }
+    var hits = Dictionary(learned.map { ($0.pattern, 0) }, uniquingKeysWith: { a, _ in a })
+    for i in rows.indices {
+      if let pattern = rows[i].rulePattern { hits[pattern, default: 0] += 1; continue }
+      guard rows[i].categorySource == .none, rows[i].createsTransaction, decisions.categories[rows[i].id] == nil,
+        rows[i].review == nil, case .create(var shape) = plans[i]
+      else { continue }
+      let kind: CategoryKind = rows[i].type == .income ? .income : .expense
+      let text = RulePattern.normalized(rows[i].source.payee)
+      guard let rule = learned.first(where: { $0.kind == kind && text.contains($0.pattern) }) else { continue }
+      rows[i].category = .existing(rule.categoryID)
+      rows[i].categorySource = .learnedRule(pattern: rule.pattern)
+      shape.category = .existing(rule.categoryID)
+      plans[i] = .create(shape)
+      hits[rule.pattern, default: 0] += 1
+    }
+    proposals = learned.map { RuleProposal(pattern: $0.pattern, categoryID: $0.categoryID, rowCount: hits[$0.pattern] ?? 1) }
+  }
+
+  // MARK: Review
+
+  private func suggestion(_ source: NormalizedRow, _ found: RowAnalysis, _ reason: ReviewReason) -> ReviewChoice {
+    let kind: CategoryKind = source.flow == .in ? .income : .expense
+    if case .unpairedTransferHalf = reason {
+      if let first = found.pairRows.first, let other = parsed.first(where: { $0.id == first }),
+        other.transferHalf?.transit == source.transferHalf?.transit
+      {
+        return .pair(rowID: first)
+      }
+      if let existing = found.pairExisting.first { return .pairExisting(existing.id) }
+    }
+    return .record(kind, categoryID: nil)
+  }
+
+  private mutating func review(_ i: Int, _ base: PreviewRow, _ reason: ReviewReason) -> (PreviewRow, RowPlan) {
+    let source = parsed[i]
+    let found = analysis[i]
+    var row = base
+    row.status = .needsReview
+    let choice = decisions.reviews[source.id]
+    row.review = ReviewInfo(
+      reason: reason, pairRows: found.pairRows, pairExisting: found.pairExisting,
+      suggested: suggestion(source, found, reason), choice: choice)
+    switch reason {
+    case .unpairedTransferHalf(let direction):
+      row.detail = direction == .outgoing
+        ? "Outgoing transfer half without a matching incoming half"
+        : "Incoming transfer half without a matching outgoing half"
+    case .unknownOperationType: row.detail = "Unknown operation type — check the sign"
+    case .transferAmountUnknown: row.detail = "Transfer to an own account in another currency; the received amount is unknown"
+    }
+    guard let choice else { return (row, .nothing) }
+
+    let account = preview.accountRef(source.account)
+    let flow = source.flow ?? .out
+    var shape = TxnShape(
+      type: .expense, from: account, amountMinor: source.amountMinor, lines: source.lines,
+      occurredAt: source.occurredAt, payee: source.payee, note: source.note, original: source.original,
+      isPending: source.isPending, bookedDay: bookedDay(source), fingerprints: source.fingerprints)
+
+    switch choice {
+    case .skip:
+      return (row, .nothing)
+
+    case .record(let kind, let categoryID):
+      shape.type = kind == .income ? .income : .expense
+      // Keep the money's direction: income for money out is a reversal, expense for money in a refund.
+      shape.isRefund = (kind == .income) != (flow == .in)
+      if let transit = source.transferHalf?.transit, transit.currencyCode != preview.currency(of: account)?.rawValue {
+        shape.original = transit
+      }
+      let (category, from, _) = resolveCategory(for: source, kind: kind, account: account, explicit: .some(categoryID))
+      shape.category = category
+      row.type = shape.type
+      row.category = category
+      row.categorySource = from
+      row.createsTransaction = true
+      return (row, .create(shape))
+
+    case .transfer(let accountID):
+      guard let other = preview.context.account(accountID), account != .existing(accountID) else {
+        issues.append("“\(source.payee)”: choose another account for the transfer")
+        return (row, .nothing)
+      }
+      let otherAmount = amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account))
+      guard let otherAmount else {
+        issues.append("“\(source.payee)”: the amount in \(other.currency.rawValue) is unknown; record it instead")
+        return (row, .nothing)
+      }
+      shape.type = .transfer
+      shape.original = nil
+      if flow == .out {
+        shape.to = .existing(accountID)
+        shape.toAmountMinor = otherAmount
+      } else {
+        shape.from = .existing(accountID)
+        shape.to = account
+        shape.amountMinor = otherAmount
+        shape.toAmountMinor = source.amountMinor
+        shape.lines = []
+      }
+      row.type = .transfer
+      row.counterAccount = .existing(accountID)
+      row.counterAmountMinor = otherAmount
+      row.createsTransaction = true
+      return (row, .create(shape))
+
+    case .pair(let otherID):
+      guard let j = parsed.firstIndex(where: { $0.id == otherID }), decisions.reviews[otherID] == .pair(rowID: source.id),
+        let mine = source.transferHalf, let theirs = parsed[j].transferHalf, mine.direction != theirs.direction,
+        parsed[j].account.key != source.account.key
+      else {
+        issues.append("“\(source.payee)”: the chosen half cannot be paired with it")
+        return (row, .nothing)
+      }
+      let other = parsed[j]
+      row.type = .transfer
+      row.counterAccount = preview.accountRef(other.account)
+      row.counterAmountMinor = other.amountMinor
+      guard mine.direction == .outgoing else {
+        // The outgoing half carries the transfer.
+        return (row, .nothing)
+      }
+      shape.type = .transfer
+      shape.to = preview.accountRef(other.account)
+      shape.toAmountMinor = other.amountMinor
+      shape.original = nil
+      shape.fingerprints = source.fingerprints + other.fingerprints
+      if shape.payee.isEmpty { shape.payee = other.payee }
+      if !other.note.isEmpty, other.note != shape.note {
+        shape.note = [shape.note, other.note].filter { !$0.isEmpty }.joined(separator: "\n")
+      }
+      shape.tag = source.tag ?? other.tag
+      row.createsTransaction = true
+      return (row, .create(shape))
+
+    case .pairExisting(let txnID):
+      guard flow == .in, let existing = found.pairExisting.first(where: { $0.id == txnID }) else {
+        issues.append("“\(source.payee)”: the chosen transaction cannot be its other half")
+        return (row, .nothing)
+      }
+      shape.type = .transfer
+      shape.from = .existing(existing.accountID)
+      shape.to = account
+      shape.amountMinor = existing.amountMinor
+      shape.toAmountMinor = source.amountMinor
+      row.type = .transfer
+      row.counterAccount = .existing(existing.accountID)
+      row.counterAmountMinor = existing.amountMinor
+      return (row, .convert(existing, shape))
+    }
+  }
+
+  /// The row's amount in `currency`: itself, the in-transit amount or the original amount.
+  private func amount(of source: NormalizedRow, in currency: Currency, accountCurrency: Currency?) -> Int64? {
+    if currency == accountCurrency { return source.amountMinor }
+    if let transit = source.transferHalf?.transit, transit.currencyCode == currency.rawValue { return transit.minorUnits }
+    if let original = source.original, original.currencyCode == currency.rawValue { return original.minorUnits }
+    return nil
+  }
+
+  // MARK: Conflicts
+
+  /// Two rows must not change or link the same existing transaction.
+  private mutating func checkConflicts() {
+    var seen: [Txn.ID: Int] = [:]
+    for plan in plans {
+      let id: Txn.ID? = switch plan {
+      case .settle(let txn, _), .link(let txn, _), .convert(let txn, _): txn.id
+      case .nothing, .openingBalance, .create: nil
+      }
+      if let id { seen[id, default: 0] += 1 }
+    }
+    let conflicts = seen.values.filter { $0 > 1 }.count
+    if conflicts > 0 {
+      issues.append("\(conflicts) existing transaction(s) are chosen for more than one row")
+    }
+  }
+}
