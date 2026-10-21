@@ -58,10 +58,8 @@ public enum DashboardSample {
     while month <= lastMonth {
       let p = plan(for: month)
       let m = month.string
-      if month < lastMonth {  // PreviewData has no September salary/transfer either
-        add(.income, "\(m)-10", "Salary", PreviewData.revolutEUR, 2_000_00, cat: 251)
-        add(.transfer, "\(m)-11", "To PLN account", PreviewData.revolutEUR, 1_100_00, to: PreviewData.pkoPersonal, received: 4_700_00)
-      }
+      add(.income, "\(m)-10", "Salary", PreviewData.revolutEUR, 2_300_00, cat: 251)
+      add(.transfer, "\(m)-11", "To PLN account", PreviewData.revolutEUR, 1_600_00, to: PreviewData.pkoPersonal, received: 6_900_00)
       add(.expense, "\(m)-12", "Rent \(m)", PreviewData.pkoPersonal, 4_000_00, cat: 205)
       for (index, amount) in p.groceries.enumerated() {
         add(.expense, "\(m)-\(String(format: "%02d", 4 + index * 9))", ["Lidl", "Biedronka", "Auchan"][index], PreviewData.pkoPersonal, amount, cat: 202)
