@@ -33,6 +33,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | A1 Calculators | background agent | `wp/A1-calc` | **merged** 2026-10-21 (balances, net worth + series, reporting, budget, events) |
 | B1 Shell, settings, rates | background agent (own worktree) | `wp/B1-shell` | running since 2026-10-21 (on PreviewData) |
 | B3 Transaction list | background agent (own worktree) | `wp/B3-transactions` | running since 2026-10-21 (on PreviewData) |
+| B2 Dashboard | background agent (own worktree) | `wp/B2-dashboard` | running since 2026-10-21 (on PreviewData + Calc) |
 
 ## Contract-change requests (orchestrator queue)
 
