@@ -134,14 +134,31 @@ struct ImportStoreTests {
     let lines = try await f.database.read { db in try AttachedRecord.fetchCount(db) }
     #expect(lines == 0)
     #expect(try await f.imports.batches().first?.isUndone == true)
-    // Undoing twice is harmless; the rows can be imported again.
+    // The account and category the batch created are gone, and so is the mapping to them.
+    #expect(try await !f.accounts.accounts(includeArchived: true).contains { $0.id == F.id(50) })
+    #expect(try await !f.categories.categories(kind: nil, includeArchived: true).contains { $0.id == F.id(60) })
+    #expect(try await f.imports.mappings(source: .saldo).isEmpty)
+    // Undoing twice is harmless; the rows can be imported again, entities included.
     try await f.imports.undo(F.id(500))
-    var again = Self.saldoCommit(batchID: F.id(501))
-    again.newAccounts = []
-    again.newCategories = []
-    try await f.imports.commit(again)
+    try await f.imports.commit(Self.saldoCommit(batchID: F.id(501)))
     #expect(try await f.txns.transactions(matching: TxnQuery()).count == 3)
     await #expect(throws: RepositoryError.notFound) { try await f.imports.undo(F.id(999)) }
+  }
+
+  @Test("R-IMP-6: undo keeps created accounts and categories that are used after the import")
+  func undoKeepsUsedEntities() async throws {
+    let f = try F()
+    try f.seedBasics()
+    try await f.imports.commit(Self.saldoCommit())
+    // The user books a manual expense on the imported account and category.
+    let wallet = try #require(try await f.accounts.accounts(includeArchived: false).first { $0.id == F.id(50) })
+    let pets = try #require(try await f.categories.categories(kind: .expense, includeArchived: false).first { $0.id == F.id(60) })
+    #expect(wallet.importBatchID == F.id(500) && pets.importBatchID == F.id(500))
+    try await f.insert(F.expense(100, "2026-03-05", 3_00, pets, account: wallet, payee: "Toy"))
+    try await f.imports.undo(F.id(500))
+    #expect(try await f.txns.transactions(matching: TxnQuery()).map(\.txn.id) == [F.id(100)])
+    #expect(try await f.accounts.accounts(includeArchived: false).contains { $0.id == F.id(50) })
+    #expect(try await f.categories.categories(kind: .expense, includeArchived: false).contains { $0.id == F.id(60) })
   }
 
   @Test("R-IMP-4: dedupe candidates match account, amount and the date window (either transfer side)")

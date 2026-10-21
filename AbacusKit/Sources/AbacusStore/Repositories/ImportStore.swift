@@ -83,16 +83,21 @@ public struct SQLiteImportStore: ImportStore {
     try await database.write { db in
       let batchID = commit.batch.id
       try ImportBatch.insert { commit.batch }.execute(db)
-      if !commit.newAccounts.isEmpty {
-        try Account.insert { commit.newAccounts }.execute(db)
+      // Created records are tagged with the batch so undo can remove them (R-IMP-6).
+      let accounts = commit.newAccounts.map { var a = $0; a.importBatchID = batchID; return a }
+      if !accounts.isEmpty {
+        try Account.insert { accounts }.execute(db)
       }
       // Parents first, so children's parentID resolves.
-      let categories = commit.newCategories.sorted { ($0.parentID == nil ? 0 : 1) < ($1.parentID == nil ? 0 : 1) }
+      let categories = commit.newCategories
+        .map { var c = $0; c.importBatchID = batchID; return c }
+        .sorted { ($0.parentID == nil ? 0 : 1) < ($1.parentID == nil ? 0 : 1) }
       if !categories.isEmpty {
         try AbacusDomain.Category.insert { categories }.execute(db)
       }
-      if !commit.newEvents.isEmpty {
-        try Event.insert { commit.newEvents }.execute(db)
+      let events = commit.newEvents.map { var e = $0; e.importBatchID = batchID; return e }
+      if !events.isEmpty {
+        try Event.insert { events }.execute(db)
       }
       for chunk in commit.txns.chunked(200) {
         let txns = chunk.map { item in
@@ -150,14 +155,48 @@ public struct SQLiteImportStore: ImportStore {
 
   /// R-IMP-6: deletes the batch's transactions (their attached records and fingerprints go with
   /// them) and the fingerprints it added to existing transactions (links, settled upgrades), then
-  /// marks the batch undone. Accounts, categories and events it created, and the field changes of
-  /// upgraded transactions, stay.
+  /// the accounts, categories and events the batch created that nothing else uses any more, and
+  /// marks the batch undone. Field changes of upgraded transactions stay.
   public func undo(_ batchID: ImportBatch.ID) async throws {
     try await database.write { db in
       guard let batch = try ImportBatch.find(batchID).fetchOne(db) else { throw RepositoryError.notFound }
       guard !batch.isUndone else { return }
       try Txn.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
       try ImportFingerprint.where { $0.batchID.eq(batchID) }.delete().execute(db)
+
+      let events = try Event.where { $0.importBatchID.eq(batchID) }.fetchAll(db)
+      for event in events where try Txn.where({ $0.eventID.eq(event.id) }).fetchCount(db) == 0 {
+        try Event.find(event.id).delete().execute(db)
+      }
+      // Children before parents, so a parent is unused once its created children are gone.
+      let categories = try AbacusDomain.Category.where { $0.importBatchID.eq(batchID) }.fetchAll(db)
+        .sorted { ($0.parentID == nil ? 1 : 0) < ($1.parentID == nil ? 1 : 0) }
+      var removedCategories: [AbacusDomain.Category.ID] = []
+      for category in categories {
+        let id = category.id
+        let used =
+          try Txn.where({ $0.categoryID.eq(id) }).fetchCount(db) > 0
+          || AttachedRecord.where({ $0.categoryID.eq(id) }).fetchCount(db) > 0
+          || BudgetAllocation.where({ $0.categoryID.eq(id) }).fetchCount(db) > 0
+          || AbacusDomain.Category.where({ $0.parentID.eq(id) }).fetchCount(db) > 0
+        if !used {
+          try AbacusDomain.Category.find(id).delete().execute(db)
+          removedCategories.append(id)
+        }
+      }
+      let accounts = try Account.where { $0.importBatchID.eq(batchID) }.fetchAll(db)
+      var removedAccounts: [Account.ID] = []
+      for account in accounts {
+        let id = account.id
+        if try Txn.where({ $0.accountID.eq(id) || $0.toAccountID.eq(id) }).fetchCount(db) == 0 {
+          try Account.find(id).delete().execute(db)
+          removedAccounts.append(id)
+        }
+      }
+      let removed = removedCategories + removedAccounts
+      if !removed.isEmpty {
+        try ImportMapping.where { $0.targetID.in(removed) }.delete().execute(db)
+      }
       try ImportBatch.find(batchID).update { $0.isUndone = true }.execute(db)
     }
   }

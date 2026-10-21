@@ -74,7 +74,7 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
 - [x] **A4 PKO parser** (M) — merged 2026-10-21 — owns `AbacusImport/PKO/**`, PKO fixtures + tests.
   Per `docs/import/pko-format.md`: CP1250, detail keys, types, holds as pending, fingerprints,
   own-IBAN → transfer candidates, ATM → cash, original amount (R-IMP-PKO-*).
-- [ ] **A5 Store** (L) — owns `AbacusStore/**` except `Migrations/`, its tests.
+- [x] **A5 Store** (L) — merged 2026-10-21 — owns `AbacusStore/**` except `Migrations/`, its tests.
   Repositories with archive/delete/reassign rules (R-ACC-4/5, R-CAT-3); list query with all
   filters, search, sort, totals (R-LIST-*); dashboard aggregation queries; import batch commit in
   one DB transaction + undo (R-IMP-6); fingerprint uniqueness; backup export/restore (R-SET-2);

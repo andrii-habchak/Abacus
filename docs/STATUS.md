@@ -26,7 +26,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 
 | WP | Lane / session | Branch | State |
 |----|----------------|--------|-------|
-| A5 Store | background agent (own worktree) | `wp/A5-store` | running since 2026-10-21 |
+| A5 Store | background agent | `wp/A5-store` | **merged** 2026-10-21 (all repositories, list/report queries, import commit/undo, backup; 20k list query 78 ms optimised) |
 | A3 Saldo parser | background agent | `wp/A3-saldo` | **merged** 2026-10-21 (real export: 964 transfers paired, all 24 account balances reproduced) |
 | A2 FX | background agent | `wp/A2-fx` | **merged** 2026-10-21 (Frankfurter/NBU + fallback, RateTable converter, RateRefresher) |
 | A4 PKO parser | background agent | `wp/A4-pko` | **merged** 2026-10-21 (79/79 real rows parse) |
@@ -54,3 +54,8 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - A2 → app wiring (orchestrator, after B1): `RateRefresher.start()` on launch, `runDailySchedule()`
   in a task, `ensureRates(for:)` per screen, `refreshNow()` for Refresh / Try again, auto flag from
   `SettingKey.ratesAutoRefresh`.
+- A5 requests (optional, deferred): fold `StoreError.currencyLocked/.invalidParent` into
+  `RepositoryError`; add `list(matching:)` (totals) and `transaction(_:)` to the `TxnRepository`
+  protocol if view models need them through the protocol (today on `SQLiteTxnRepository`).
+- Done on `main`: migration v3 `importBatchID` on accounts, categories, events; undo removes the
+  batch's created entities when unused (D28).

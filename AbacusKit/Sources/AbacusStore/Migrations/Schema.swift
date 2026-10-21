@@ -21,6 +21,13 @@ extension AbacusDatabase {
     migrator.registerMigration("v2: txns.bookedDay") { db in
       try db.execute(sql: #"ALTER TABLE "txns" ADD COLUMN "bookedDay" TEXT"#)
     }
+    migrator.registerMigration("v3: importBatchID on accounts, categories, events") { db in
+      for table in ["accounts", "categories", "events"] {
+        try db.execute(
+          sql: #"ALTER TABLE "\#(table)" ADD COLUMN "importBatchID" TEXT REFERENCES "importBatches"("id") ON DELETE SET NULL"#
+        )
+      }
+    }
     return migrator
   }
 

@@ -38,12 +38,14 @@ public struct Account: Hashable, Identifiable, Sendable {
   public var icon: String?
   public var position: Int
   public var isArchived: Bool
+  /// The import that created this account; undoing it removes the account if unused (R-IMP-6).
+  public var importBatchID: ImportBatch.ID?
 
   public init(
     id: UUID = UUID(), name: String, currency: Currency, kind: AccountKind,
     openingBalanceMinor: Int64 = 0, openingDate: Date, iban: String? = nil,
     groupName: String? = nil, colorHex: String? = nil, icon: String? = nil,
-    position: Int = 0, isArchived: Bool = false
+    position: Int = 0, isArchived: Bool = false, importBatchID: ImportBatch.ID? = nil
   ) {
     self.id = id
     self.name = name
@@ -57,6 +59,7 @@ public struct Account: Hashable, Identifiable, Sendable {
     self.icon = icon
     self.position = position
     self.isArchived = isArchived
+    self.importBatchID = importBatchID
   }
 }
 
@@ -77,10 +80,13 @@ public struct Category: Hashable, Identifiable, Sendable {
   public var colorHex: String?
   public var position: Int
   public var isArchived: Bool
+  /// The import that created this category; undoing it removes the category if unused.
+  public var importBatchID: ImportBatch.ID?
 
   public init(
     id: UUID = UUID(), name: String, kind: CategoryKind, parentID: Category.ID? = nil,
-    icon: String? = nil, colorHex: String? = nil, position: Int = 0, isArchived: Bool = false
+    icon: String? = nil, colorHex: String? = nil, position: Int = 0, isArchived: Bool = false,
+    importBatchID: ImportBatch.ID? = nil
   ) {
     self.id = id
     self.name = name
@@ -90,6 +96,7 @@ public struct Category: Hashable, Identifiable, Sendable {
     self.colorHex = colorHex
     self.position = position
     self.isArchived = isArchived
+    self.importBatchID = importBatchID
   }
 }
 
@@ -105,10 +112,13 @@ public struct Event: Hashable, Identifiable, Sendable {
   public var budgetMinor: Int64?
   public var budgetCurrency: Currency?
   public var isArchived: Bool
+  /// The import that created this event (Saldo tag); undoing it removes the event.
+  public var importBatchID: ImportBatch.ID?
 
   public init(
     id: UUID = UUID(), name: String, startDay: String? = nil, endDay: String? = nil,
-    budgetMinor: Int64? = nil, budgetCurrency: Currency? = nil, isArchived: Bool = false
+    budgetMinor: Int64? = nil, budgetCurrency: Currency? = nil, isArchived: Bool = false,
+    importBatchID: ImportBatch.ID? = nil
   ) {
     self.id = id
     self.name = name
@@ -117,6 +127,7 @@ public struct Event: Hashable, Identifiable, Sendable {
     self.budgetMinor = budgetMinor
     self.budgetCurrency = budgetCurrency
     self.isArchived = isArchived
+    self.importBatchID = importBatchID
   }
 }
 
