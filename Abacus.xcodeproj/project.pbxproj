@@ -1,0 +1,359 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		CDAC2ADAAF71295C3F443DD5 /* AbacusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C762E2AF8302BFA4B2501017 /* AbacusApp.swift */; };
+		DB1778192968458E521884D4 /* AbacusFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 78AB5B7CB26ECBB502F22AF5 /* AbacusFeatures */; };
+		F062FE97EC52C8C55CD5C8BD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C35C1364292C26E5874BB74 /* RootView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0C35C1364292C26E5874BB74 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		811B4682BF14E58B04ED1697 /* AbacusKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AbacusKit; path = AbacusKit; sourceTree = SOURCE_ROOT; };
+		B3A6076E8F8DFC75F7E34C9D /* Abacus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Abacus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C762E2AF8302BFA4B2501017 /* AbacusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AbacusApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		24741F369D4D97F9B3710920 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DB1778192968458E521884D4 /* AbacusFeatures in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2A952E82D13E77364B6C0724 /* Shell */ = {
+			isa = PBXGroup;
+			children = (
+				0C35C1364292C26E5874BB74 /* RootView.swift */,
+			);
+			path = Shell;
+			sourceTree = "<group>";
+		};
+		5C72DC096C077CDF41986B12 = {
+			isa = PBXGroup;
+			children = (
+				A935B1E1B1D636F1675885C7 /* App */,
+				A7194853BB4E4C4E23CBF7B0 /* Packages */,
+				C91A729B2118728A5582CC2A /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A7194853BB4E4C4E23CBF7B0 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				811B4682BF14E58B04ED1697 /* AbacusKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		A935B1E1B1D636F1675885C7 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				B6E8291AA4195CE6CE90D985 /* macOS */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B6E8291AA4195CE6CE90D985 /* macOS */ = {
+			isa = PBXGroup;
+			children = (
+				C762E2AF8302BFA4B2501017 /* AbacusApp.swift */,
+				2A952E82D13E77364B6C0724 /* Shell */,
+			);
+			path = macOS;
+			sourceTree = "<group>";
+		};
+		C91A729B2118728A5582CC2A /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B3A6076E8F8DFC75F7E34C9D /* Abacus.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AC6B78ABFFBC21D0EB43107D /* Abacus */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2BEAE148C6B61E9CECD239DA /* Build configuration list for PBXNativeTarget "Abacus" */;
+			buildPhases = (
+				C7431010F7391CF3A5769F88 /* Sources */,
+				24741F369D4D97F9B3710920 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Abacus;
+			packageProductDependencies = (
+				78AB5B7CB26ECBB502F22AF5 /* AbacusFeatures */,
+			);
+			productName = Abacus;
+			productReference = B3A6076E8F8DFC75F7E34C9D /* Abacus.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		ED94465C84BF06D2C6ACDCFF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					AC6B78ABFFBC21D0EB43107D = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 77F70E0CBC291859CA8BFDF7 /* Build configuration list for PBXProject "Abacus" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5C72DC096C077CDF41986B12;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2042B6767C4C982722365172 /* XCLocalSwiftPackageReference "AbacusKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C91A729B2118728A5582CC2A /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AC6B78ABFFBC21D0EB43107D /* Abacus */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C7431010F7391CF3A5769F88 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDAC2ADAAF71295C3F443DD5 /* AbacusApp.swift in Sources */,
+				F062FE97EC52C8C55CD5C8BD /* RootView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0CE8A6B635F2B6C88B0C0E77 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Abacus;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.andrii-habchak.Abacus";
+				PRODUCT_NAME = Abacus;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		1649C67F1D52CD296D8486D8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Abacus;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.andrii-habchak.Abacus";
+				PRODUCT_NAME = Abacus;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		8BC4F2816F3F6B8AC57EEE21 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		F619131A635CF50F62F257B4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2BEAE148C6B61E9CECD239DA /* Build configuration list for PBXNativeTarget "Abacus" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1649C67F1D52CD296D8486D8 /* Debug */,
+				0CE8A6B635F2B6C88B0C0E77 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		77F70E0CBC291859CA8BFDF7 /* Build configuration list for PBXProject "Abacus" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F619131A635CF50F62F257B4 /* Debug */,
+				8BC4F2816F3F6B8AC57EEE21 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		2042B6767C4C982722365172 /* XCLocalSwiftPackageReference "AbacusKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = AbacusKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		78AB5B7CB26ECBB502F22AF5 /* AbacusFeatures */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AbacusFeatures;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = ED94465C84BF06D2C6ACDCFF /* Project object */;
+}

@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.0 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
+_Status: **v1.1 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -124,8 +124,10 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
 ## 4. Screens and features
 
 ### 4.1 Home dashboard — `R-HOME`
-- `R-HOME-1` **Net worth**: assets − liabilities of non-archived accounts in the display
-  currency, with a per-account breakdown on expand.
+- `R-HOME-1` **Net worth**: a **monthly chart** — one point per month (net worth at the month's
+  end, converted at that day's rate), the last point is today (latest rate) and is the headline
+  figure; change since the previous month-end; hover shows a month's value. Assets − liabilities
+  of non-archived accounts in the display currency, with a per-account breakdown on expand.
 - `R-HOME-2` **Monthly budget**: total limit, spent, remaining, % used, days left; per-category
   bars; **categories over their limit are highlighted** (and near-limit, ≥ 90 %, shown in amber).
 - `R-HOME-3` **Monthly expenses** donut by category (parents, expandable to subcategories);
@@ -242,7 +244,7 @@ Common pipeline for all sources: **parse → normalise → match/dedupe → prev
 
 ### Backlog (v2+)
 Per-category budget rollover · recurring/scheduled transactions · tags · reconciliation
-("cleared" flag, statement balance check) · CSV export · net-worth history chart · more bank
+("cleared" flag, statement balance check) · CSV export · more bank
 formats (Monobank, Revolut).
 
 Deliberately skipped: bank sync, shared wallets, envelope/zero-based budgeting, investments,
@@ -291,3 +293,4 @@ No open questions. New ones go in a new "Open" table here and block only the req
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0 | 2026-10-21 | Agreed baseline. |
+| 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |

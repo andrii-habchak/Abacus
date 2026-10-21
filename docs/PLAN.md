@@ -17,14 +17,15 @@ Abacus/
 │  │  ├─ AbacusFX/                    rate providers, cache logic, converter, refresher
 │  │  ├─ AbacusImport/                Core/ (contracts), Saldo/, PKO/, Pipeline/, Dedupe/, Rules/
 │  │  └─ AbacusFeatures/<Feature>/    platform-neutral view models + PreviewData (reused by iOS)
-│  └─ Tests/<Module>Tests/ + Tests/Fixtures/   synthetic fixtures only
+│  └─ Tests/<Module>Tests/ (+ AbacusImportTests/Fixtures/{saldo,pko}: synthetic only), Tests/AbacusTestSupport/
 ├─ docs/  (status/<WP>.md = per-package progress notes)
 └─ samples/private/                   real exports, git-ignored, main checkout only
 ```
 
 **Shared files** — changed only by the orchestrator (§4), never by a lane:
 `Package.swift`, `project.yml`, `*.xcodeproj`, `AbacusStore/Migrations/**`, `AbacusDomain/Model/**`,
-`AbacusDomain/Protocols/**`, `AbacusImport/Core/**`, `docs/STATUS.md`, `docs/PLAN.md`,
+`AbacusDomain/Protocols/**`, `AbacusImport/Core/**`, `AbacusFeatures/PreviewData/**`,
+`Tests/AbacusTestSupport/**`, `.github/workflows/**`, `docs/STATUS.md`, `docs/PLAN.md`,
 `docs/DECISIONS.md`, `AGENTS.md`. A lane that needs a change there writes a request in its
 `docs/status/<WP>.md` and pauses that part; the orchestrator lands it on `main`; the lane rebases.
 
@@ -33,7 +34,7 @@ Abacus/
 Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
 
 ### Phase 0 — Foundation (sequential, orchestrator) — gate for everything except D1
-- [ ] **P0 Foundation** (L) — owns everything it creates.
+- [x] **P0 Foundation** (L) — done 2026-10-21 — owns everything it creates.
   - xcodegen project, macOS app target, `AbacusKit` package with the 5 modules and their test
     targets; dependencies GRDB + SQLiteData pinned.
   - **Contracts:** all domain entities (§3 of the TA) with IDs; `Money`/`Currency`; repository

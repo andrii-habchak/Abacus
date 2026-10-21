@@ -1,0 +1,46 @@
+name: Abacus
+options:
+  bundleIdPrefix: io.github.andrii-habchak
+  deploymentTarget:
+    macOS: "26.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Ad-hoc "Sign to Run Locally" — no Apple Developer team required (v1).
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+
+packages:
+  AbacusKit:
+    path: AbacusKit
+
+targets:
+  Abacus:
+    type: application
+    platform: macOS
+    sources:
+      - App/macOS
+    dependencies:
+      - package: AbacusKit
+        product: AbacusFeatures
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.andrii-habchak.Abacus
+        PRODUCT_NAME: Abacus
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Abacus
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.finance
+
+schemes:
+  Abacus:
+    build:
+      targets:
+        Abacus: all
+    run:
+      config: Debug

@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Abacus — Dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+a{color:#0066CC}a:hover{color:#004C99}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 900px; padding: 24px; display: flex; justify-content: center;">
+<div style="width: 100%; max-width: 1232px; background: #FFFFFF; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 16px 48px rgba(0,0,0,0.18); overflow: hidden; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+<nav aria-label="Sections" style="flex: 1 1 220px; box-sizing: border-box; background: #EDEDF0; border-right: 1px solid #D6D6DB; padding: 14px 10px 16px; display: flex; flex-direction: column; gap: 2px;">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding: 2px 8px 18px;">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FEBC2E;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #28C840;"></span>
+</div>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 6px 10px 4px;">Overview</div>
+<sc-for list="{{nav1}}" as="item" hint-placeholder-count="3">
+<button type="button" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 14px 10px 4px;">Manage</div>
+<sc-for list="{{nav2}}" as="item" hint-placeholder-count="5">
+<button type="button" style="{{item.style}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="flex-grow: 1; min-height: 24px;"></div>
+<button type="button" style="display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 6px; font-size: 13px; color: #1D1D1F;">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>
+<span>Settings</span>
+</button>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: #F5F5F7;">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; background: #FFFFFF; border-bottom: 1px solid #E0E0E5;">
+<h1 style="margin: 0; font-size: 17px; font-weight: 600; flex-grow: 1;">Dashboard</h1>
+<span style="font-size: 12px; color: #6E6E73;">NBU rates · 21 Oct 2026</span>
+<div role="group" aria-label="Display currency" style="display: flex; background: #E8E8ED; border-radius: 7px; padding: 2px; gap: 2px;">
+<sc-for list="{{currencies}}" as="c" hint-placeholder-count="4">
+<button type="button" aria-pressed="{{c.pressed}}" onClick="{{c.pick}}" style="{{c.style}}">{{c.code}}</button>
+</sc-for>
+</div>
+<button type="button" style="display: flex; align-items: center; gap: 6px; border: 0; background: #0A66D9; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 6px; min-height: 30px;">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 1.5v9M1.5 6h9"></path></svg>
+<span>New transaction</span>
+</button>
+</div>
+
+<div style="padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+
+<section aria-labelledby="nw-title" style="background: #FFFFFF; border-radius: 10px; border: 1px solid #E3E3E8; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 24px;">
+<div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+<h2 id="nw-title" style="margin: 0; font-size: 13px; font-weight: 600; color: #6E6E73;">Net worth</h2>
+<div style="font-size: 34px; font-weight: 600; letter-spacing: -0.5px;">{{netWorth}}</div>
+<div style="{{nwDeltaStyle}}">{{nwDelta}}</div>
+</div>
+<div style="display: flex; gap: 28px;">
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-size: 12px; color: #6E6E73;">Assets</span>
+<span style="font-size: 15px; font-weight: 500;">{{assets}}</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-size: 12px; color: #6E6E73;">Liabilities</span>
+<span style="font-size: 15px; font-weight: 500; color: #B3261E;">{{liabilities}}</span>
+</div>
+</div>
+<button type="button" onClick="{{toggleAccounts}}" aria-expanded="{{accountsOpenAttr}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 5px 10px; border-radius: 6px; color: #1D1D1F; min-height: 28px;">{{accountsToggleLabel}}</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px;">
+<svg role="img" aria-label="{{nwChartLabel}}" viewBox="0 0 720 172" style="width: 100%; height: auto; display: block;">
+<sc-for list="{{nwGrid}}" as="g" hint-placeholder-count="3">
+<line x1="44" x2="712" y1="{{g.y}}" y2="{{g.y}}" stroke="#EEEEF2" stroke-width="1"></line>
+<text x="0" y="{{g.ty}}" font-size="10" fill="#6E6E73">{{g.label}}</text>
+</sc-for>
+<path d="{{nwArea}}" fill="#0A66D9" fill-opacity="0.08"></path>
+<polyline points="{{nwLine}}" fill="none" stroke="#0A66D9" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+<sc-for list="{{nwPoints}}" as="p" hint-placeholder-count="12">
+<circle cx="{{p.x}}" cy="{{p.y}}" r="{{p.r}}" fill="{{p.fill}}" stroke="#0A66D9" stroke-width="2"></circle>
+<text x="{{p.x}}" y="168" font-size="10" text-anchor="middle" fill="{{p.labelColor}}">{{p.label}}</text>
+<rect x="{{p.hx}}" y="0" width="{{p.hw}}" height="172" fill="transparent" onMouseEnter="{{p.hover}}" onMouseLeave="{{nwLeave}}"></rect>
+</sc-for>
+</svg>
+<div style="font-size: 12px; color: #3A3A3C;">{{nwHoverText}}</div>
+</div>
+<sc-if value="{{accountsOpen}}" hint-placeholder-val="{{ true }}">
+<div role="table" aria-label="Accounts" style="display: flex; flex-direction: column; border-top: 1px solid #EEEEF2;">
+<sc-for list="{{accounts}}" as="a" hint-placeholder-count="7">
+<div role="row" style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 2px; border-bottom: 1px solid #F2F2F5; font-size: 13px;">
+<span role="cell" style="font-weight: 500;">{{a.name}}</span>
+<span role="cell" style="color: #6E6E73;">{{a.kind}}</span>
+<span role="cell" style="{{a.nativeStyle}}">{{a.native}}</span>
+<span role="cell" style="text-align: right; color: #3A3A3C;">{{a.converted}}</span>
+</div>
+</sc-for>
+<div style="font-size: 12px; color: #6E6E73; padding-top: 8px;">Archived accounts are not counted. Liabilities are subtracted.</div>
+</div>
+</sc-if>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+<button type="button" aria-label="Previous month" onClick="{{prevMonth}}" style="width: 30px; height: 30px; border: 1px solid #D2D2D7; background: #FFFFFF; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #1D1D1F;">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 2.5 4 6l3.5 3.5"></path></svg>
+</button>
+<h2 style="margin: 0; font-size: 15px; font-weight: 600; min-width: 140px; text-align: center;">{{monthLabel}}</h2>
+<button type="button" aria-label="Next month" onClick="{{nextMonth}}" disabled="{{nextDisabled}}" style="{{nextStyle}}">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5 8 6 4.5 9.5"></path></svg>
+</button>
+<span style="font-size: 12px; color: #6E6E73;">{{monthNote}}</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px;">
+
+<section aria-labelledby="bud-title" style="background: #FFFFFF; border-radius: 10px; border: 1px solid #E3E3E8; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
+<div style="display: flex; align-items: baseline; gap: 8px;">
+<h2 id="bud-title" style="margin: 0; font-size: 13px; font-weight: 600; color: #6E6E73; flex-grow: 1;">Monthly budget</h2>
+<span style="{{budgetBadgeStyle}}">{{budgetBadge}}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;">
+<span style="font-size: 26px; font-weight: 600;">{{budgetSpent}}</span>
+<span style="font-size: 14px; color: #6E6E73;">of {{budgetTotal}}</span>
+</div>
+<div aria-hidden="true" style="height: 8px; border-radius: 4px; background: #EBEBF0; overflow: hidden;">
+<div style="{{budgetBarStyle}}"></div>
+</div>
+<div style="font-size: 13px; color: #3A3A3C;">{{budgetRemaining}}</div>
+<div style="display: flex; flex-direction: column; gap: 10px; border-top: 1px solid #EEEEF2; padding-top: 12px;">
+<sc-for list="{{budgetRows}}" as="b" hint-placeholder-count="6">
+<div style="display: flex; flex-direction: column; gap: 5px;">
+<div style="display: flex; align-items: baseline; gap: 8px; font-size: 13px;">
+<span style="{{b.nameStyle}}">{{b.name}}</span>
+<span style="color: #6E6E73;">{{b.spent}} / {{b.limit}}</span>
+<span style="{{b.noteStyle}}">{{b.note}}</span>
+</div>
+<div aria-hidden="true" style="height: 6px; border-radius: 3px; background: #EBEBF0; overflow: hidden;">
+<div style="{{b.barStyle}}"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section aria-labelledby="exp-title" style="background: #FFFFFF; border-radius: 10px; border: 1px solid #E3E3E8; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
+<h2 id="exp-title" style="margin: 0; font-size: 13px; font-weight: 600; color: #6E6E73;">Monthly expenses</h2>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 24px;">
+<div style="position: relative; width: 190px; height: 190px; flex-shrink: 0;">
+<svg role="img" aria-label="{{donutLabel}}" width="190" height="190" viewBox="0 0 190 190">
+<circle cx="95" cy="95" r="70" fill="none" stroke="#EBEBF0" stroke-width="26"></circle>
+<sc-for list="{{segments}}" as="s" hint-placeholder-count="8">
+<circle cx="95" cy="95" r="70" fill="none" stroke="{{s.color}}" stroke-width="{{s.width}}" stroke-dasharray="{{s.dash}}" stroke-dashoffset="{{s.offset}}" transform="rotate(-90 95 95)"></circle>
+</sc-for>
+</svg>
+<div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+<span style="font-size: 11px; color: #6E6E73;">Spent</span>
+<span style="font-size: 17px; font-weight: 600;">{{expenseTotal}}</span>
+</div>
+</div>
+<div style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px;">
+<sc-for list="{{segments}}" as="s" hint-placeholder-count="8">
+<button type="button" onClick="{{s.pick}}" aria-pressed="{{s.pressed}}" style="{{s.rowStyle}}">
+<span aria-hidden="true" style="{{s.dotStyle}}"></span>
+<span style="flex-grow: 1; text-align: left;">{{s.name}}</span>
+<span style="color: #3A3A3C;">{{s.amount}}</span>
+<span style="width: 40px; text-align: right; color: #6E6E73;">{{s.pct}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+<sc-if value="{{hasPick}}" hint-placeholder-val="{{ false }}">
+<div style="font-size: 12px; color: #0A4FA8; background: #EAF2FD; border-radius: 6px; padding: 8px 10px;">Opens Transactions filtered to {{pickName}} · {{monthLabel}}</div>
+</sc-if>
+</section>
+
+</div>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { cur: 'UAH', month: 2, accountsOpen: false, pick: null, nwHover: null };
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    var RATES = { UAH: 1, PLN: 11.3, EUR: 48.5, USD: 41.6 };
+    var cur = st.cur;
+    function fmt(v, c) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: c, currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }).format(v);
+    }
+    function conv(v, from) { return v * RATES[from] / RATES[cur]; }
+
+    var navBase = 'display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; min-height: 30px;';
+    var navOn = navBase + ' background: #D4D4DA; color: #1D1D1F; font-weight: 500;';
+    var navOff = navBase + ' background: transparent; color: #1D1D1F;';
+    var I = {
+      home: 'M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H10v-4H6v4H3a.5.5 0 0 1-.5-.5z',
+      list: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01',
+      events: 'M3 3.5h10v10H3zM3 6.5h10M5.5 2v3M10.5 2v3',
+      accounts: 'M2 4.5h12v8H2zM2 7h12M4.5 10h2',
+      categories: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+      budget: 'M8 2a6 6 0 1 0 6 6H8z M9.5 1.5a5 5 0 0 1 5 5h-5z',
+      importI: 'M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12v1.5h11V12',
+      rates: 'M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5',
+      rules: 'M3 4h10M3 8h6M3 12h8'
+    };
+    var nav1 = [
+      { label: 'Dashboard', icon: I.home, style: navOn, current: 'page' },
+      { label: 'Transactions', icon: I.list, style: navOff, current: 'false' },
+      { label: 'Events', icon: I.events, style: navOff, current: 'false' }
+    ];
+    var nav2 = [
+      { label: 'Accounts', icon: I.accounts, style: navOff },
+      { label: 'Categories', icon: I.categories, style: navOff },
+      { label: 'Budget', icon: I.budget, style: navOff },
+      { label: 'Import', icon: I.importI, style: navOff },
+      { label: 'Exchange rates', icon: I.rates, style: navOff },
+      { label: 'Rules', icon: I.rules, style: navOff }
+    ];
+
+    var segBase = 'border: 0; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 5px; min-height: 26px;';
+    var currencies = ['UAH', 'PLN', 'EUR', 'USD'].map(function (code) {
+      var on = code === cur;
+      return {
+        code: code,
+        pressed: on ? 'true' : 'false',
+        style: segBase + (on ? ' background: #FFFFFF; color: #1D1D1F; box-shadow: 0 1px 2px rgba(0,0,0,0.15);' : ' background: transparent; color: #3A3A3C;'),
+        pick: function () { self.setState({ cur: code }); }
+      };
+    });
+
+    var ACCOUNTS = [
+      { name: 'Monobank Black', kind: 'Card', cur: 'UAH', bal: 48250 },
+      { name: 'PKO Personal', kind: 'Bank account', cur: 'PLN', bal: 15400 },
+      { name: 'Revolut EUR', kind: 'Card', cur: 'EUR', bal: 2310 },
+      { name: 'EUR Deposit', kind: 'Savings', cur: 'EUR', bal: 5000 },
+      { name: 'Cash USD', kind: 'Cash', cur: 'USD', bal: 600 },
+      { name: 'PKO Credit Card', kind: 'Credit card', cur: 'PLN', bal: -1240 },
+      { name: 'Loan from friend', kind: 'Debt', cur: 'UAH', bal: -8000 }
+    ];
+    var assets = 0, liab = 0;
+    var accounts = ACCOUNTS.map(function (a) {
+      var c = conv(a.bal, a.cur);
+      if (a.bal >= 0) assets += c; else liab += -c;
+      return {
+        name: a.name, kind: a.kind,
+        native: fmt(a.bal, a.cur),
+        nativeStyle: a.bal < 0 ? 'color: #B3261E;' : 'color: #1D1D1F;',
+        converted: fmt(c, cur)
+      };
+    });
+
+    // Net worth history: month-end values, the last point is today (R-HOME-1).
+    var nowNW = assets - liab;
+    var RATIOS = [0.78, 0.80, 0.79, 0.83, 0.85, 0.84, 0.88, 0.90, 0.93, 0.89, 0.96, 1];
+    var MLABELS = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+    var MFULL = ['November 2025', 'December 2025', 'January 2026', 'February 2026', 'March 2026', 'April 2026', 'May 2026', 'June 2026', 'July 2026', 'August 2026', 'September 2026', 'October 2026'];
+    var vals = RATIOS.map(function (r) { return r * nowNW; });
+    var vmin = Math.min.apply(null, vals), vmax = Math.max.apply(null, vals);
+    var lo = vmin - (vmax - vmin) * 0.15, hi = vmax + (vmax - vmin) * 0.1;
+    var X0 = 60, X1 = 700, Y0 = 12, Y1 = 146;
+    function px(i) { return X0 + i * (X1 - X0) / (vals.length - 1); }
+    function py(v) { return Y1 - (v - lo) / (hi - lo) * (Y1 - Y0); }
+    var compact = new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, currencyDisplay: 'narrowSymbol', notation: 'compact', maximumFractionDigits: 1 });
+    var shown = st.nwHover === null || st.nwHover === undefined ? vals.length - 1 : st.nwHover;
+    var step = (X1 - X0) / (vals.length - 1);
+    var nwPoints = vals.map(function (v, i) {
+      var on = i === shown;
+      return {
+        x: px(i).toFixed(1), y: py(v).toFixed(1),
+        r: on ? 5 : 3,
+        fill: on ? '#0A66D9' : '#FFFFFF',
+        label: MLABELS[i],
+        labelColor: on ? '#1D1D1F' : '#6E6E73',
+        hx: (px(i) - step / 2).toFixed(1), hw: step.toFixed(1),
+        hover: function () { self.setState({ nwHover: i }); }
+      };
+    });
+    var nwLine = vals.map(function (v, i) { return px(i).toFixed(1) + ',' + py(v).toFixed(1); }).join(' ');
+    var nwArea = 'M' + px(0).toFixed(1) + ',' + Y1 + ' L' + nwLine.split(' ').join(' L') + ' L' + px(vals.length - 1).toFixed(1) + ',' + Y1 + ' Z';
+    var nwGrid = [hi - (hi - lo) * 0.1, (hi + lo) / 2, lo + (hi - lo) * 0.1].map(function (v) {
+      return { y: py(v).toFixed(1), ty: (py(v) + 3).toFixed(1), label: compact.format(v) };
+    });
+    var delta = vals[vals.length - 1] - vals[vals.length - 2];
+    var deltaPct = delta / vals[vals.length - 2] * 100;
+    var nwDelta = (delta >= 0 ? '+' : '−') + fmt(Math.abs(delta), cur) + ' (' + (delta >= 0 ? '+' : '−') + Math.abs(deltaPct).toFixed(1) + '%) since end of September';
+    var nwDeltaStyle = 'font-size: 13px; font-weight: 500; color: ' + (delta >= 0 ? '#1B6B3A' : '#B3261E') + ';';
+    var nwHoverText = MFULL[shown] + ': ' + fmt(vals[shown], cur) + (shown === vals.length - 1 ? ' · today' : ' · at month end');
+
+    var CATS = {
+      rent: { name: 'Rent', color: '#0A64D6' },
+      groceries: { name: 'Groceries', color: '#E07B14' },
+      eating: { name: 'Eating out', color: '#1E9E7E' },
+      transport: { name: 'Transport', color: '#7B4FCF' },
+      health: { name: 'Health', color: '#C93B6E' },
+      bills: { name: 'Bills', color: '#5C7B99' },
+      travel: { name: 'Travel', color: '#C9A100' },
+      other: { name: 'Other', color: '#9A9AA0' }
+    };
+    var LIMITS = { rent: 4000, groceries: 1800, eating: 600, transport: 400, health: 500 };
+    var TOTAL = 9000;
+    var MONTHS = [
+      { label: 'August 2026', note: 'Closed month', spent: { rent: 4000, groceries: 1710, eating: 480, transport: 260, health: 300, bills: 510, travel: 2400, other: 220 } },
+      { label: 'September 2026', note: 'Closed month', spent: { rent: 4000, groceries: 1650, eating: 720, transport: 380, health: 90, bills: 505, travel: 0, other: 310 } },
+      { label: 'October 2026', note: '10 days left', spent: { rent: 4000, groceries: 2040, eating: 540, transport: 210, health: 120, bills: 520, travel: 300, other: 140 } }
+    ];
+    var m = MONTHS[st.month];
+
+    var spentTotal = 0;
+    Object.keys(m.spent).forEach(function (k) { spentTotal += m.spent[k]; });
+    var allocated = 0, allocSpent = 0;
+    var rowBase = 'height: 100%; border-radius: 3px;';
+    function status(spent, limit) {
+      var pct = limit > 0 ? spent / limit : 0;
+      if (pct > 1) return { kind: 'over', pct: pct };
+      if (pct >= 0.9) return { kind: 'near', pct: pct };
+      return { kind: 'ok', pct: pct };
+    }
+    function row(name, spent, limit) {
+      var s = status(spent, limit);
+      var barColor = s.kind === 'over' ? '#D70015' : (s.kind === 'near' ? '#F29D0A' : '#0A66D9');
+      var note, noteStyle;
+      if (s.kind === 'over') { note = 'Over by ' + fmt(conv(spent - limit, 'PLN'), cur); noteStyle = 'margin-left: auto; color: #B3001B; font-weight: 600;'; }
+      else if (s.kind === 'near') { note = fmt(conv(limit - spent, 'PLN'), cur) + ' left'; noteStyle = 'margin-left: auto; color: #8A4B00; font-weight: 500;'; }
+      else { note = fmt(conv(limit - spent, 'PLN'), cur) + ' left'; noteStyle = 'margin-left: auto; color: #6E6E73;'; }
+      return {
+        name: name,
+        nameStyle: 'font-weight: 500;' + (s.kind === 'over' ? ' color: #B3001B;' : ''),
+        spent: fmt(conv(spent, 'PLN'), cur),
+        limit: fmt(conv(limit, 'PLN'), cur),
+        note: note, noteStyle: noteStyle,
+        barStyle: rowBase + ' width: ' + Math.min(100, Math.round(s.pct * 100)) + '%; background: ' + barColor + ';'
+      };
+    }
+    var budgetRows = Object.keys(LIMITS).map(function (k) {
+      allocated += LIMITS[k]; allocSpent += m.spent[k];
+      return row(CATS[k].name, m.spent[k], LIMITS[k]);
+    });
+    budgetRows.push(row('Unallocated (other categories)', spentTotal - allocSpent, TOTAL - allocated));
+
+    var tot = status(spentTotal, TOTAL);
+    var badgeBase = 'font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px;';
+    var overCount = budgetRows.filter(function (r) { return r.nameStyle.indexOf('#B3001B') >= 0; }).length;
+    var budgetBadge = overCount === 0 ? 'On track' : (overCount === 1 ? '1 category over' : overCount + ' categories over');
+    var budgetBadgeStyle = badgeBase + (overCount === 0 ? ' background: #E3F4EA; color: #1B6B3A;' : ' background: #FDE7EA; color: #B3001B;');
+    var budgetBarColor = tot.kind === 'over' ? '#D70015' : (tot.kind === 'near' ? '#F29D0A' : '#0A66D9');
+    var remaining = TOTAL - spentTotal;
+    var budgetRemaining = remaining >= 0
+      ? fmt(conv(remaining, 'PLN'), cur) + ' left · ' + Math.round(tot.pct * 100) + '% used'
+      : 'Over budget by ' + fmt(conv(-remaining, 'PLN'), cur) + ' · ' + Math.round(tot.pct * 100) + '% used';
+
+    var C = 2 * Math.PI * 70;
+    var keys = Object.keys(m.spent).filter(function (k) { return m.spent[k] > 0; })
+      .sort(function (a, b) { return m.spent[b] - m.spent[a]; });
+    var acc = 0;
+    var rowBtn = 'display: flex; align-items: center; gap: 8px; width: 100%; border: 0; padding: 6px 8px; border-radius: 6px; font-size: 13px; color: #1D1D1F; min-height: 30px;';
+    var segments = keys.map(function (k) {
+      var v = m.spent[k];
+      var len = v / spentTotal * C;
+      var gap = keys.length > 1 ? 1.5 : 0;
+      var picked = st.pick === k;
+      var seg = {
+        name: CATS[k].name,
+        color: CATS[k].color,
+        width: picked ? 32 : 26,
+        dash: Math.max(0, len - gap).toFixed(2) + ' ' + (C - Math.max(0, len - gap)).toFixed(2),
+        offset: (-acc).toFixed(2),
+        amount: fmt(conv(v, 'PLN'), cur),
+        pct: Math.round(v / spentTotal * 100) + '%',
+        pressed: picked ? 'true' : 'false',
+        rowStyle: rowBtn + (picked ? ' background: #EAF2FD;' : ' background: transparent;'),
+        dotStyle: 'width: 10px; height: 10px; border-radius: 5px; flex-shrink: 0; background: ' + CATS[k].color + ';',
+        pick: function () { self.setState({ pick: picked ? null : k }); }
+      };
+      acc += len;
+      return seg;
+    });
+
+    var navBtn = 'width: 30px; height: 30px; border: 1px solid #D2D2D7; background: #FFFFFF; border-radius: 6px; display: flex; align-items: center; justify-content: center;';
+    var lastMonth = st.month === MONTHS.length - 1;
+    return {
+      nav1: nav1, nav2: nav2, currencies: currencies,
+      netWorth: fmt(assets - liab, cur),
+      nwDelta: nwDelta, nwDeltaStyle: nwDeltaStyle,
+      nwPoints: nwPoints, nwLine: nwLine, nwArea: nwArea, nwGrid: nwGrid,
+      nwHoverText: nwHoverText,
+      nwChartLabel: 'Net worth at the end of each month, November 2025 to October 2026',
+      nwLeave: function () { self.setState({ nwHover: null }); },
+      assets: fmt(assets, cur),
+      liabilities: '−' + fmt(liab, cur),
+      accounts: accounts,
+      accountsOpen: st.accountsOpen,
+      accountsOpenAttr: st.accountsOpen ? 'true' : 'false',
+      accountsToggleLabel: st.accountsOpen ? 'Hide accounts' : 'Show accounts',
+      toggleAccounts: function () { self.setState({ accountsOpen: !st.accountsOpen }); },
+      monthLabel: m.label, monthNote: m.note,
+      prevMonth: function () { if (st.month > 0) self.setState({ month: st.month - 1, pick: null }); },
+      nextMonth: function () { if (!lastMonth) self.setState({ month: st.month + 1, pick: null }); },
+      nextDisabled: lastMonth,
+      nextStyle: navBtn + (lastMonth ? ' color: #B0B0B5;' : ' color: #1D1D1F;'),
+      budgetSpent: fmt(conv(spentTotal, 'PLN'), cur),
+      budgetTotal: fmt(conv(TOTAL, 'PLN'), cur),
+      budgetBadge: budgetBadge, budgetBadgeStyle: budgetBadgeStyle,
+      budgetBarStyle: 'height: 100%; border-radius: 4px; width: ' + Math.min(100, Math.round(tot.pct * 100)) + '%; background: ' + budgetBarColor + ';',
+      budgetRemaining: budgetRemaining,
+      budgetRows: budgetRows,
+      segments: segments,
+      expenseTotal: fmt(conv(spentTotal, 'PLN'), cur),
+      donutLabel: 'Expenses by category, ' + m.label,
+      hasPick: st.pick !== null,
+      pickName: st.pick ? CATS[st.pick].name : ''
+    };
+  }
+}
+</script>
+</body>
+</html>

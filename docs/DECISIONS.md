@@ -21,3 +21,6 @@ Settled decisions, newest last. Each: what, why, date. Re-opening one needs the 
 | D15 | 2026-10-21 | TA v1.0 agreed: Q14–Q21 answered; refunds counted as income unless the setting is on; PKO holds imported as completed and upgraded on settlement | Owner's answers |
 | D16 | 2026-10-21 | Execution: orchestrator owns `main` + shared contract files; each WP runs as its own session in a worktree branch; 3–4 lanes at once; progress in `docs/status/<WP>.md` | Parallel work without merge conflicts; resumable |
 | D17 | 2026-10-21 | Owner granted standing permission to commit and push without asking | Owner's choice |
+| D18 | 2026-10-21 | Entities are SQLiteData `@Table` structs in AbacusDomain (one model for store, calculators, views); transaction type named `Txn`; import fingerprints are the primary key of `importFingerprints` | Single source of truth; sync-safe uniqueness without UNIQUE constraints |
+| D19 | 2026-10-21 | No CloudKit-incompatible FK actions: `ON DELETE` only CASCADE / SET NULL; "can't delete while used" rules live in repositories | SQLiteData SyncEngine supports only those actions |
+| D20 | 2026-10-21 | Phone notifications unavailable: Remote Control is disabled by the owner's organization policy; desktop banners only | Org policy |
