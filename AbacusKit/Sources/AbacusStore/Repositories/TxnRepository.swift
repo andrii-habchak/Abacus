@@ -127,8 +127,8 @@ struct TxnFilter: Sendable {
       let ids = sqlList(categories.sorted())
       parts.append(
         #"""
-        ("txns"."categoryID" IN \#(ids) OR EXISTS (SELECT 1 FROM "attachedRecords" AS "r" \#
-        WHERE "r"."txnID" = "txns"."id" AND "r"."categoryID" IN \#(ids)))
+        ("txns"."categoryID" IN \#(ids) OR "txns"."id" IN (SELECT "r"."txnID" \#
+        FROM "attachedRecords" AS "r" WHERE "r"."categoryID" IN \#(ids)))
         """#)
     }
     let needle = query.search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -158,10 +158,15 @@ struct TxnFilter: Sendable {
       }
       .fetchAll(db)
     guard !txns.isEmpty else { return [] }
-    let lines = try AttachedRecord
-      .where { $0.txnID.in(Txn.where { _ in condition }.select(\.id)) }
-      .order { ($0.txnID, $0.position, $0.id) }
-      .fetchAll(db)
+    // Lines of the fetched transactions, by id in chunks (an index lookup per id).
+    var lines: [AttachedRecord] = []
+    for chunk in txns.map(\.id).chunked(500) {
+      let ids = Array(chunk)
+      lines += try AttachedRecord
+        .where { $0.txnID.in(ids) }
+        .order { ($0.txnID, $0.position, $0.id) }
+        .fetchAll(db)
+    }
     let linesByTxn = Dictionary(grouping: lines, by: \.txnID)
     return txns.map { TxnWithLines(txn: $0, lines: linesByTxn[$0.id] ?? []) }
   }
