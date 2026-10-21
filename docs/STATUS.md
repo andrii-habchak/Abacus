@@ -109,3 +109,5 @@ build, README with sample-data screenshots, tag v1.0.0).
   refuses undecided rows); changing the PKO target account rebuilds the preview; a file with
   nothing new disables Import. Deferred: `TxnQuery` filter by import batch (so "Show
   transactions" opens only that batch); editing a learned rule inside the preview.
+- Contracts on `main` for Phase 3 lanes: `TxnQuery.includeUncategorised`, `TxnQuery.importBatchIDs`,
+  `SettingKey.lastBackupExport`.

@@ -44,11 +44,17 @@ public struct TxnQuery: Hashable, Sendable {
   /// Case-insensitive match on payee and note.
   public var search: String
   public var newestFirst: Bool
+  /// Only expenses/incomes without a category (dashboard "Uncategorised" slice). Combines with
+  /// `categoryIDs` as "uncategorised OR one of these".
+  public var includeUncategorised: Bool
+  /// Only transactions created by these imports ("Show transactions" after an import).
+  public var importBatchIDs: Set<ImportBatch.ID>
 
   public init(
     fromDay: Day? = nil, toDay: Day? = nil, categoryIDs: Set<Category.ID> = [],
     accountIDs: Set<Account.ID> = [], types: Set<TxnType> = [], eventIDs: Set<Event.ID> = [],
-    search: String = "", newestFirst: Bool = true
+    search: String = "", newestFirst: Bool = true, includeUncategorised: Bool = false,
+    importBatchIDs: Set<ImportBatch.ID> = []
   ) {
     self.fromDay = fromDay
     self.toDay = toDay
@@ -58,6 +64,8 @@ public struct TxnQuery: Hashable, Sendable {
     self.eventIDs = eventIDs
     self.search = search
     self.newestFirst = newestFirst
+    self.includeUncategorised = includeUncategorised
+    self.importBatchIDs = importBatchIDs
   }
 
   /// R-LIST-1: the last 30 days, newest first.

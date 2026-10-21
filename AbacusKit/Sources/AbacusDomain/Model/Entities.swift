@@ -464,6 +464,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
   case lastAccountID
   case lastTransferFromID
   case lastTransferToID
+  /// `YYYY-MM-DD` of the last backup export (R-SET-2, Settings › Data).
+  case lastBackupExport
 }
 
 @Table("appSettings")
