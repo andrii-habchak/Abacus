@@ -101,3 +101,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
   dashboard in ~0.6 s, the list in ~0.15 s. Screenshots of real data are not taken (privacy).
 - B1 requests (deferred): `SettingKey.lastBackupExport` (now in UserDefaults); "Change…" data
   folder needs a store-side move/reopen; editor should call `ensureRates(for:)` for old days.
+- CI on GitHub has never run: every job stops with "account is locked due to a billing issue"
+  (GitHub Actions billing on the owner's account; macOS runners on a private repo use paid
+  minutes). Local `swift test` and app builds are the gate until the owner resolves billing or
+  decides on CI (owner decision, Q25).
