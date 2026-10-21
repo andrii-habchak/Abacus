@@ -66,3 +66,13 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - Done on `main`: `Calc.convert` returns 0 for a zero amount without needing a rate (B2 request).
 - B2 request (backlog): `TxnQuery` filter for uncategorised transactions, so the Uncategorised slice
   can drill down.
+
+## Getting real data into the app (owner request, 2026-10-21)
+
+1. B1 (scope added): routes Dashboard and Transactions to the live database, starts the rate
+   refresher, keeps placeholders for other sections, adds "Load sample data" (seeds PreviewData
+   into an empty database).
+2. A6 (scope added): headless import entry point with the wizard's defaults.
+3. Orchestrator, after both merge: a small command-line importer that loads the owner's real
+   Saldo export and PKO statement from `samples/private/` into
+   `~/Library/Application Support/Abacus/abacus.sqlite`, then checks balances.
