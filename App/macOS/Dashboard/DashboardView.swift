@@ -6,16 +6,16 @@ import SwiftUI
 /// chart, then the month selector shared by the budget and the expenses donut.
 ///
 /// The shell passes the display currency (R-HOME-4) and handles a donut drill-down by opening
-/// Transactions filtered to the category and month (`DashboardDrillDown.query`).
+/// Transactions filtered to the category (nil: "Uncategorized") and month (`DashboardDrillDown.query`).
 struct DashboardView: View {
   let displayCurrency: Currency
-  let onDrillDown: (AbacusDomain.Category.ID, Month) -> Void
+  let onDrillDown: (AbacusDomain.Category.ID?, Month) -> Void
   private let initiallyShowsAccounts: Bool
   @State private var model: DashboardModel
 
   init(
     displayCurrency: Currency, dependencies: DashboardDependencies,
-    onDrillDown: @escaping (AbacusDomain.Category.ID, Month) -> Void
+    onDrillDown: @escaping (AbacusDomain.Category.ID?, Month) -> Void
   ) {
     self.init(
       model: DashboardModel(dependencies: dependencies, displayCurrency: displayCurrency),
@@ -25,7 +25,7 @@ struct DashboardView: View {
   /// With a model the shell keeps, so the selected month survives switching sections.
   init(
     model: DashboardModel, displayCurrency: Currency, initiallyShowsAccounts: Bool = false,
-    onDrillDown: @escaping (AbacusDomain.Category.ID, Month) -> Void
+    onDrillDown: @escaping (AbacusDomain.Category.ID?, Month) -> Void
   ) {
     self.displayCurrency = displayCurrency
     self.onDrillDown = onDrillDown

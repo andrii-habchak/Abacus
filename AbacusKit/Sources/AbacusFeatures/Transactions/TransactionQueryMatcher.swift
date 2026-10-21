@@ -4,7 +4,9 @@ import Foundation
 /// `TxnQuery` evaluated in memory, with the store's semantics (R-LIST-1…3, R-LIST-6):
 /// - dates `fromDay`…`toDay` inclusive, as calendar days;
 /// - categories: a parent matches its children; a transaction also matches through one of its
-///   attached records;
+///   attached records; `includeUncategorised` adds expenses and incomes without a category of
+///   their own (never transfers), "uncategorised OR one of these";
+/// - import batches: only transactions created by one of `importBatchIDs`;
 /// - accounts: either side of a transfer;
 /// - search: case-insensitive substring of the description (payee) or note, or of an attached
 ///   record's note;
@@ -39,9 +41,14 @@ public struct TransactionQueryMatcher: Sendable {
         return false
       }
       if !query.eventIDs.isEmpty, !(txn.eventID.map(query.eventIDs.contains) ?? false) { return false }
-      if let categoryIDs {
+      if !query.importBatchIDs.isEmpty, !(txn.importBatchID.map(query.importBatchIDs.contains) ?? false) {
+        return false
+      }
+      if categoryIDs != nil || query.includeUncategorised {
+        let uncategorised = query.includeUncategorised && txn.type != .transfer && txn.categoryID == nil
         let ids = [txn.categoryID] + row.lines.map(\.categoryID)
-        if !ids.contains(where: { $0.map(categoryIDs.contains) ?? false }) { return false }
+        let inCategories = categoryIDs.map { set in ids.contains { $0.map(set.contains) ?? false } } ?? false
+        if !uncategorised && !inCategories { return false }
       }
       if !needle.isEmpty {
         let texts = [txn.payee, txn.note] + row.lines.map(\.note)

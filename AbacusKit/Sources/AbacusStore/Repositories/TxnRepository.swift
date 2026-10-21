@@ -15,7 +15,9 @@ public struct SQLiteTxnRepository: TxnRepository {
   /// R-LIST-1…6: every `TxnQuery` filter, combined with AND:
   /// - dates: `fromDay`/`toDay` inclusive, as calendar days of `calendar`;
   /// - categories: a parent matches its children; a transaction also matches when one of its
-  ///   attached records has a matching category;
+  ///   attached records has a matching category; `includeUncategorised` adds expenses and
+  ///   incomes without a category of their own (transfers never match it);
+  /// - import batches: only transactions created by one of `importBatchIDs`;
   /// - accounts: either side of a transfer;
   /// - search: case-insensitive substring of the payee or note, or of an attached record's note.
   /// Sorted by `occurredAt` (then creation time) as `newestFirst` says.
@@ -52,7 +54,7 @@ public struct SQLiteTxnRepository: TxnRepository {
         AbacusDomain.Category.where { $0.kind.eq(CategoryKind.expense) }.select(\.id).fetchAll(db))
       let totals = try TxnTotals(
         rows, currencies: currencies, categoryIDs: filter.categoryIDs(db),
-        refundsReduceSpending: reduce, expenseCategoryIDs: expenseCategories, calendar: calendar)
+        includeUncategorised: filter.query.includeUncategorised, refundsReduceSpending: reduce, expenseCategoryIDs: expenseCategories, calendar: calendar)
       return (rows, totals)
     }
   }
@@ -97,8 +99,9 @@ struct TxnFilter: Sendable {
   var bounds: DayBounds
 
   /// Selected categories plus the children of selected parents (R-LIST-2), or nil for "any".
+  /// Only "Uncategorised" selected: an empty set (no category matches, see `includeUncategorised`).
   func categoryIDs(_ db: Database) throws -> Set<AbacusDomain.Category.ID>? {
-    guard !query.categoryIDs.isEmpty else { return nil }
+    guard !query.categoryIDs.isEmpty else { return query.includeUncategorised ? [] : nil }
     let selected = Array(query.categoryIDs)
     let children = try AbacusDomain.Category
       .where { $0.parentID.in(selected.map(Optional.some)) }
@@ -125,13 +128,24 @@ struct TxnFilter: Sendable {
     if !query.eventIDs.isEmpty {
       parts.append(#""txns"."eventID" IN \#(sqlList(query.eventIDs.sorted()))"#)
     }
+    if !query.importBatchIDs.isEmpty {
+      parts.append(#""txns"."importBatchID" IN \#(sqlList(query.importBatchIDs.sorted()))"#)
+    }
     if let categories = try categoryIDs(db) {
-      let ids = sqlList(categories.sorted())
-      parts.append(
-        #"""
-        ("txns"."categoryID" IN \#(ids) OR "txns"."id" IN (SELECT "r"."txnID" \#
-        FROM "attachedRecords" AS "r" WHERE "r"."categoryID" IN \#(ids)))
-        """#)
+      var alternatives: [QueryFragment] = []
+      if query.includeUncategorised {
+        let kinds = sqlList([TxnType.expense, TxnType.income])
+        alternatives.append(#"("txns"."type" IN \#(kinds) AND "txns"."categoryID" IS NULL)"#)
+      }
+      if !categories.isEmpty {
+        let ids = sqlList(categories.sorted())
+        alternatives.append(
+          #"""
+          "txns"."categoryID" IN \#(ids) OR "txns"."id" IN (SELECT "r"."txnID" \#
+          FROM "attachedRecords" AS "r" WHERE "r"."categoryID" IN \#(ids))
+          """#)
+      }
+      parts.append("(" + alternatives.joined(separator: " OR ") + ")")
     }
     let needle = query.search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     if !needle.isEmpty {
@@ -179,7 +193,9 @@ struct TxnFilter: Sendable {
 /// R-LIST-5: income and expense of a filtered list, per currency and day (convert each bucket at
 /// its day's rate, R-FX-3). Transfers count as neither (R-TX-5); attached records count by their
 /// own kind (R-TX-6). With a category filter only the matching parts count (the main amount
-/// when its category matches, each attached record whose category matches).
+/// when its category matches, each attached record whose category matches); with
+/// `includeUncategorised` the main amount of an expense or income without a category matches
+/// too (attached records without a category do not).
 /// Refunds (R-TX-4, R-SET-3): an expense refund is income unless refunds reduce spending, then it
 /// subtracts from expense; an income reversal subtracts from income. An income attached record
 /// in an expense category is a refund line (D22) and counts the same way.
@@ -199,7 +215,8 @@ public struct TxnTotals: Hashable, Sendable {
 
   public init(
     _ rows: [TxnWithLines], currencies: [Account.ID: Currency],
-    categoryIDs: Set<AbacusDomain.Category.ID>?, refundsReduceSpending: Bool,
+    categoryIDs: Set<AbacusDomain.Category.ID>?, includeUncategorised: Bool = false,
+    refundsReduceSpending: Bool,
     expenseCategoryIDs: Set<AbacusDomain.Category.ID> = [], calendar: Calendar
   ) {
     struct Key: Hashable {
@@ -211,13 +228,17 @@ public struct TxnTotals: Hashable, Sendable {
       guard let categoryIDs else { return true }
       return id.map(categoryIDs.contains) ?? false
     }
+    func mainMatches(_ id: AbacusDomain.Category.ID?) -> Bool {
+      if id == nil, categoryIDs != nil, includeUncategorised { return true }
+      return matches(id)
+    }
     for row in rows {
       guard let currency = currencies[row.txn.accountID] else { continue }
       let key = Key(currency: currency, day: Day(row.txn.occurredAt, calendar: calendar))
       var income: Int64 = 0
       var expense: Int64 = 0
       let txn = row.txn
-      if matches(txn.categoryID) {
+      if mainMatches(txn.categoryID) {
         switch (txn.type, txn.isRefund) {
         case (.expense, false): expense += txn.amountMinor
         case (.expense, true):

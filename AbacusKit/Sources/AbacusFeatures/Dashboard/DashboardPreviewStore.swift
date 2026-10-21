@@ -123,41 +123,10 @@ public final class DashboardPreviewStore: Sendable {
   public struct Txns: TxnRepository {
     let store: DashboardPreviewStore
 
-    /// Dates, categories (a parent matches its children), accounts (either side of a
-    /// transfer), types, events and search, as the store does (R-LIST-2…6).
+    /// Every `TxnQuery` filter as the store applies it (`TransactionQueryMatcher`, R-LIST-2…6).
     public func transactions(matching query: TxnQuery) async throws -> [TxnWithLines] {
       store.state.withLock { state in
-        var categoryIDs = query.categoryIDs
-        for category in state.categories where category.parentID.map(query.categoryIDs.contains) ?? false {
-          categoryIDs.insert(category.id)
-        }
-        let search = query.search.trimmingCharacters(in: .whitespaces).lowercased()
-        let matches = state.txns.filter { item in
-          let txn = item.txn
-          let day = Day(txn.occurredAt)
-          if let from = query.fromDay, day < from { return false }
-          if let to = query.toDay, day > to { return false }
-          if !query.types.isEmpty, !query.types.contains(txn.type) { return false }
-          if !query.accountIDs.isEmpty,
-            !query.accountIDs.contains(txn.accountID), !(txn.toAccountID.map(query.accountIDs.contains) ?? false)
-          {
-            return false
-          }
-          if !query.eventIDs.isEmpty, !(txn.eventID.map(query.eventIDs.contains) ?? false) { return false }
-          if !categoryIDs.isEmpty {
-            let ids = [txn.categoryID] + item.lines.map(\.categoryID)
-            if !ids.contains(where: { $0.map(categoryIDs.contains) ?? false }) { return false }
-          }
-          if !search.isEmpty {
-            let texts = [txn.payee, txn.note] + item.lines.map(\.note)
-            if !texts.contains(where: { $0.lowercased().contains(search) }) { return false }
-          }
-          return true
-        }
-        return matches.sorted { a, b in
-          let (x, y) = query.newestFirst ? (b.txn, a.txn) : (a.txn, b.txn)
-          return (x.occurredAt, x.createdAt) < (y.occurredAt, y.createdAt)
-        }
+        TransactionQueryMatcher(query: query, categories: state.categories).apply(state.txns)
       }
     }
 

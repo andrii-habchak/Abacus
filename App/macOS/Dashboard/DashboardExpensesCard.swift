@@ -137,8 +137,8 @@ struct DashboardExpensesCard: View {
         .contentShape(.rect)
       }
       .buttonStyle(.plain)
-      .disabled(slice.categoryID == nil)
-      .help(slice.categoryID == nil ? "" : "Show \(slice.name) transactions for \(monthTitle)")
+      .disabled(!slice.drillsDown)
+      .help(!slice.drillsDown ? "" : "Show \(slice.name) transactions for \(monthTitle)")
       .accessibilityAddTraits(slice.id == selected ? .isSelected : [])
     }
   }

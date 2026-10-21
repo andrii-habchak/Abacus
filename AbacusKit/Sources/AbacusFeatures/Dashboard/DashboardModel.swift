@@ -157,11 +157,15 @@ public final class DashboardModel {
   }
 
   /// Picks a donut slice or legend row (R-HOME-3) and returns where to drill down: the
-  /// category and the month, or nil for "Uncategorized" (no category to filter by).
+  /// category (nil for "Uncategorized": expenses without a category) and the month, or nil
+  /// for a slice with nothing to filter by ("Refunds").
   @discardableResult
-  public func select(_ slice: DashboardExpenses.Slice) -> (categoryID: AbacusDomain.Category.ID, month: Month)? {
+  public func select(_ slice: DashboardExpenses.Slice) -> (categoryID: AbacusDomain.Category.ID?, month: Month)? {
     selectedSlice = slice.id
-    return slice.categoryID.map { ($0, month) }
+    switch slice.id {
+    case .category, .uncategorized: return (slice.categoryID, month)
+    case .refunds: return nil
+    }
   }
 
   // MARK: Texts
