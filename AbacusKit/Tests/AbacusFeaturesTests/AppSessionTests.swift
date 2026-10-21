@@ -123,9 +123,12 @@ struct AppSessionTests {
     defer { s.stop() }
     await s.loadSampleData()
     let before = s.transactions.rows.count
+    // Sample data reuses the default "Groceries" category seeded at launch (R-CAT-4).
+    let groceries = try await SQLiteCategoryRepository(database: database).categories(kind: .expense, includeArchived: false)
+      .first { $0.name == "Groceries" }
     let txn = Txn(
       type: .expense, occurredAt: B1Fixture.at(10), accountID: PreviewData.pkoPersonal.id, amountMinor: 12_00,
-      categoryID: PreviewData.id(202), payee: "Corner shop")
+      categoryID: try #require(groceries).id, payee: "Corner shop")
     try await SQLiteTxnRepository(database: database).save(txn, lines: [])
     await s.editorFinished(.cancelled)
     #expect(s.transactions.rows.count == before)

@@ -149,6 +149,8 @@ public final class AppSession {
   public func start() async {
     guard !started else { return }
     started = true
+    // First launch: an empty database gets the editable default categories (R-CAT-4).
+    if let database { _ = try? await DefaultCategories.seedIfEmpty(database) }
     await app.load()
     transactions.displayCurrency = app.displayCurrency
     transactions.refundsReduceSpending = app.refundsReduceSpending
@@ -294,20 +296,13 @@ public final class AppSession {
 
 /// Seeds the synthetic `PreviewData` set (accounts, categories, events, transactions, budget)
 /// for demos. Settings and rates are left alone: real rates come from the rate service.
+/// Categories already in the database (the default set, R-CAT-4) are reused by name.
 public enum SampleData {
   /// Returns false, changing nothing, when the database already has an account.
   public static func loadIfEmpty(into database: any DatabaseWriter) async throws -> Bool {
     try await database.write { db in
       guard try Account.fetchCount(db) == 0 else { return false }
-      try db.seed {
-        for account in PreviewData.accounts { account }
-        for category in PreviewData.categories { category }
-        for event in PreviewData.events { event }
-        for txn in PreviewData.txns { txn }
-        for record in PreviewData.attachedRecords { record }
-        PreviewData.budgetPlan
-        for allocation in PreviewData.budgetAllocations { allocation }
-      }
+      try seed(db)
       return true
     }
   }
