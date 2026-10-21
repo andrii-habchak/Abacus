@@ -243,6 +243,12 @@ public struct RateTable: CurrencyConverter, Sendable, Equatable {
       && after <= day.adding(days: gap, calendar: .fxDays)
   }
 
+  /// Whether any official rate exists on a day in `from..<before`.
+  func hasOfficialDay(from: Day, before: Day) -> Bool {
+    let index = Self.firstIndex(in: officialDays, after: Self.key(from) - 1)
+    return index < officialDays.count && officialDays[index] < Self.key(before)
+  }
+
   // MARK: Internals
 
   /// `1 currency = r UAH`; `.some(nil)` for UAH itself.
