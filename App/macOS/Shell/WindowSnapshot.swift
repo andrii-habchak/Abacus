@@ -4,7 +4,7 @@ import AppKit
 /// Debug builds only: writes every visible window of the app to PNG files and quits, for UI
 /// reviews without screen-recording access. Launch with
 /// `-AbacusSnapshotDir <folder> -AbacusSnapshotName <prefix>` (plus `-AbacusDark YES` for dark
-/// mode).
+/// mode, `-AbacusSnapshotDelay <seconds>`).
 @MainActor
 enum WindowSnapshot {
   static func runIfRequested() async {
@@ -12,7 +12,8 @@ enum WindowSnapshot {
     guard let folder = defaults.string(forKey: "AbacusSnapshotDir") else { return }
     let name = defaults.string(forKey: "AbacusSnapshotName") ?? "window"
     NSApp.activate()
-    try? await Task.sleep(for: .seconds(2))
+    let delay = defaults.double(forKey: "AbacusSnapshotDelay")
+    try? await Task.sleep(for: .seconds(delay > 0 ? delay : 2))
     capture(to: URL(filePath: folder, directoryHint: .isDirectory), prefix: name)
     NSApp.terminate(nil)
   }
@@ -93,7 +94,8 @@ enum WindowSnapshot {
       NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
       let label = (control.label(forSegment: selected) ?? "") as NSString
       let attributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .medium), .foregroundColor: NSColor.labelColor,
+        .font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .medium),
+        .foregroundColor: dark ? NSColor.white : NSColor.black,
       ]
       let size = label.size(withAttributes: attributes)
       label.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: attributes)

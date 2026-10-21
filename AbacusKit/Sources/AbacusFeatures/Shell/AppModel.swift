@@ -40,15 +40,17 @@ public final class AppModel {
 
   /// Set by `requestNewTransaction`; the shell presents the editor sheet while it is non-nil.
   public var newTransaction: NewTransactionRequest?
-  /// A transaction-list filter asked for by another screen (dashboard drill-down). The list
-  /// (WP B3) applies it when it appears and sets it back to nil.
-  public var pendingTransactionsQuery: TxnQuery?
+  /// Transaction-list filters asked for by another screen (dashboard drill-down, an event's
+  /// "Show N transactions"). The shell hands them to the list and sets this back to nil.
+  public var pendingTransactionFilters: TransactionFilters?
 
   /// The last settings write that failed.
   public private(set) var errorMessage: String?
   public private(set) var isLoaded = false
 
   @ObservationIgnored public let environment: AppEnvironment
+  /// Told after "Refunds reduce category spending" changed and was saved (screens recompute).
+  @ObservationIgnored public var onRefundsChange: (@MainActor (Bool) async -> Void)?
   /// The Exchange rates screen.
   public let rates: RatesModel
   /// The Settings window's Data tab.
@@ -100,7 +102,11 @@ public final class AppModel {
   @discardableResult
   public func setRefundsReduceSpending(_ on: Bool) -> Task<Void, Never> {
     refundsReduceSpending = on
-    return persist(.refundsReduceSpending, on ? "true" : "false")
+    let write = persist(.refundsReduceSpending, on ? "true" : "false")
+    return Task { [weak self] in
+      await write.value
+      await self?.onRefundsChange?(on)
+    }
   }
 
   /// Settings › Rates › "Update rates automatically" (R-SET-1, R-FX-1).
@@ -160,9 +166,9 @@ public final class AppModel {
     newTransaction = request
   }
 
-  /// Opens the transaction list with a filter (dashboard drill-down, "Show N transactions").
-  public func showTransactions(_ query: TxnQuery) {
-    pendingTransactionsQuery = query
+  /// Opens the transaction list with filters (dashboard drill-down, "Show N transactions").
+  public func showTransactions(_ filters: TransactionFilters) {
+    pendingTransactionFilters = filters
     section = .transactions
   }
 

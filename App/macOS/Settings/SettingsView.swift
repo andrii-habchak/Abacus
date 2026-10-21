@@ -11,6 +11,7 @@ enum SettingsTab: String, Hashable, CaseIterable {
 /// The Settings window (⌘,), tabs General / Rates / Data (approved prototype group 6, R-SET-1…3).
 struct SettingsView: View {
   @Environment(AppModel.self) private var app
+  @Environment(AppSession.self) private var session
   @State private var tab: SettingsTab = LaunchOptions.current.settingsTab ?? .general
 
   var body: some View {
@@ -28,7 +29,7 @@ struct SettingsView: View {
     .scenePadding()
     .frame(width: 560)
     .task {
-      if !app.isLoaded { await app.load() }
+      await session.start()
     }
   }
 }
@@ -208,6 +209,8 @@ struct Hint: View {
 }
 
 #Preview("Settings") {
+  let session = AppSession.preview()
   SettingsView()
-    .environment(AppModel(environment: .preview()))
+    .environment(session)
+    .environment(session.app)
 }

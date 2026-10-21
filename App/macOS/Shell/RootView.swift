@@ -2,28 +2,52 @@ import AbacusFeatures
 import SwiftUI
 
 /// Main window (approved prototype group 1): sidebar with Overview / Manage and Settings at the
-/// bottom; the detail shows the selected section with the shell toolbar.
+/// bottom; the detail shows the selected section with the shell toolbar. Screen models live in
+/// the `AppSession`, so a screen keeps its state (month, filters) across section switches.
 struct RootView: View {
-  @Environment(AppModel.self) private var app
+  @Environment(AppSession.self) private var session
   @Environment(\.openSettings) private var openSettings
 
   var body: some View {
-    @Bindable var app = app
+    @Bindable var app = session.app
+    @Bindable var session = session
     NavigationSplitView {
       SidebarView(selection: $app.section)
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
     } detail: {
       SectionDetail(section: app.section ?? .dashboard)
     }
+    .onChange(of: app.pendingTransactionFilters) { _, filters in
+      guard let filters else { return }
+      session.transactions.filters = filters
+      app.pendingTransactionFilters = nil
+    }
+    .onChange(of: app.displayCurrency) { _, currency in
+      session.transactions.displayCurrency = currency
+    }
     .sheet(item: $app.newTransaction) { request in
       NewTransactionSheet(request: request)
+    }
+    .alert(
+      "Sample data",
+      isPresented: Binding(
+        get: { session.sampleDataMessage != nil }, set: { if !$0 { session.sampleDataMessage = nil } })
+    ) {
+      Button("OK") { session.sampleDataMessage = nil }
+    } message: {
+      Text(session.sampleDataMessage ?? "")
     }
     .task {
       #if DEBUG
         WindowSnapshot.applyAppearance()
       #endif
-      if !app.isLoaded { await app.load() }
-      if LaunchOptions.current.settingsTab != nil { openSettings() }
+      let launch = LaunchOptions.current
+      await session.start()
+      if launch.loadSampleData {
+        await session.loadSampleData()
+        session.sampleDataMessage = nil
+      }
+      if launch.settingsTab != nil { openSettings() }
       #if DEBUG
         await WindowSnapshot.runIfRequested()
       #endif
@@ -31,16 +55,26 @@ struct RootView: View {
   }
 }
 
-/// Routes a sidebar section to its screen. Other screens replace their placeholder line here.
+/// Routes a sidebar section to its screen. Screens not built yet show a placeholder; their
+/// work package replaces the placeholder case here.
 struct SectionDetail: View {
   let section: AppSection
-  @Environment(AppModel.self) private var app
+  @Environment(AppSession.self) private var session
 
   var body: some View {
+    let app = session.app
     switch section {
+    case .dashboard:
+      DashboardView(model: session.dashboard, displayCurrency: app.displayCurrency) { categoryID, month in
+        app.showTransactions(.drillDown(category: categoryID, month: month))
+      }
+      .shellToolbar()
+    case .transactions:
+      TransactionsView(model: session.transactions, displayCurrency: app.displayCurrency, onSelect: { _ in })
+        .shellToolbar()
     case .rates:
       RatesView(model: app.rates)
-    case .dashboard, .transactions, .events, .accounts, .categories, .budget, .importFiles, .rules:
+    case .events, .accounts, .categories, .budget, .importFiles, .rules:
       SectionPlaceholder(section: section)
         .shellToolbar()
         .navigationTitle(section.title)
@@ -60,15 +94,18 @@ struct SectionPlaceholder: View {
 }
 
 #Preview("Main window") {
+  let session = AppSession.preview()
   RootView()
-    .environment(AppModel(environment: .preview(refreshDelay: .zero)))
+    .environment(session)
+    .environment(session.app)
     .frame(width: 1100, height: 700)
 }
 
 #Preview("Main window · rates") {
-  let app = AppModel(environment: .preview(refreshDelay: .zero))
-  app.section = .rates
+  let session = AppSession.preview()
+  session.app.section = .rates
   return RootView()
-    .environment(app)
+    .environment(session)
+    .environment(session.app)
     .frame(width: 1200, height: 760)
 }

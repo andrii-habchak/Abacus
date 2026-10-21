@@ -2,9 +2,10 @@ import AbacusFeatures
 import SwiftUI
 
 /// Menu commands: File › New Transaction (⌘N); View › the sections (⌘1…⌘9) and Refresh Rates
-/// (⌘R). Settings… (⌘,) comes with the Settings scene.
+/// (⌘R); Help › Load Sample Data. Settings… (⌘,) comes with the Settings scene.
 struct AppCommands: Commands {
-  let app: AppModel
+  let session: AppSession
+  private var app: AppModel { session.app }
 
   var body: some Commands {
     CommandGroup(replacing: .newItem) {
@@ -24,6 +25,14 @@ struct AppCommands: Commands {
       .keyboardShortcut("r")
       .disabled(app.rates.isRefreshing)
       Divider()
+    }
+
+    CommandGroup(after: .help) {
+      Divider()
+      Button("Load Sample Data") {
+        Task { await session.loadSampleData() }
+      }
+      .help("Adds synthetic accounts and transactions to an empty database, for a demo.")
     }
   }
 }

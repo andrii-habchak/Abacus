@@ -86,10 +86,10 @@ struct AppModelTests {
     app.requestNewTransaction(NewTransactionRequest(type: .expense))
     #expect(app.newTransaction?.type == .expense)
 
-    let query = TxnQuery(fromDay: Day("2026-10-01"), toDay: Day("2026-10-31"))
-    app.showTransactions(query)
+    let filters = TransactionFilters.drillDown(category: PreviewData.id(202), month: Month(year: 2026, month: 10))
+    app.showTransactions(filters)
     #expect(app.section == .transactions)
-    #expect(app.pendingTransactionsQuery == query)
+    #expect(app.pendingTransactionFilters == filters)
   }
 
   @Test("Sidebar order: Overview then Manage, nine sections for ⌘1…⌘9")
