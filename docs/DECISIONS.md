@@ -13,3 +13,8 @@ Settled decisions, newest last. Each: what, why, date. Re-opening one needs the 
 | D7 | 2026-10-21 | Money stored as Int64 minor units + currency code; `Decimal` for math, never `Double` | Exactness; all 4 currencies have 2 decimals |
 | D8 | 2026-10-21 | FX: official NBU rates via Frankfurter v2 (`providers=NBU`), fallback NBU API; period aggregates use the rate of each tx date, net worth uses the latest rate | Keyless, covers UAH/PLN/EUR/USD with history; past months stay stable |
 | D9 | 2026-10-21 | Agent guide lives in `AGENTS.md`; `CLAUDE.md` is a committed one-line import of it | Fresh worktrees get the guide automatically |
+| D10 | 2026-10-21 | Owner answers Q1–Q13 recorded in `REQUIREMENTS.md` §9 (last 30 days, subcategories, category-allocated budget, archived accounts out of net worth, date+time, no tags) | Owner's choice |
+| D11 | 2026-10-21 | Short-term spending contexts (trips, relocation) are **Events**: one optional event per transaction, orthogonal to categories | Replaces Saldo tags without breaking category reports |
+| D12 | 2026-10-21 | Imports share one pipeline (parse → normalise → dedupe → preview → commit); exact dedupe via a UNIQUE source fingerprint, fuzzy cross-source dedupe flagged in the preview; undo per import batch | Overlapping exports and Saldo/PKO overlap must never double-count |
+| D13 | 2026-10-21 | Real exports live in git-ignored `samples/private/`; tests use synthetic fixtures only | Personal financial data stays off GitHub |
+| D14 | 2026-10-21 | FX updates both automatic (launch/daily/on demand) and manual overrides per date or from a date | Owner request |

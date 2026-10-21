@@ -24,3 +24,6 @@ xcuserdata/
 # Secrets / local config
 *.env
 .secrets
+
+# Real bank/app exports (personal data) - never commit
+samples/private/
