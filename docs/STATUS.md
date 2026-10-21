@@ -5,7 +5,7 @@ _Last updated: 2026-10-21 (orchestrator)_
 ## Now
 
 **P0 Foundation done** (package, contracts, schema, preview data, app shell, CI). **D1** in
-progress: groups 1–3 (Dashboard, Transactions, Editor) approved, group 4 (Manage screens) in review — see
+progress: groups 1–4 approved, group 5 (Import wizard) in review — see
 `docs/design/README.md`. Wave 2 lanes (A5, A3, A2, A4; A1 filler) can start.
 
 ## Done
@@ -25,4 +25,4 @@ progress: groups 1–3 (Dashboard, Transactions, Editor) approved, group 4 (Mana
 
 | WP | Lane / session | Branch | State |
 |----|----------------|--------|-------|
-| D1 | orchestrator + owner | — | group 4 in review |
+| D1 | orchestrator + owner | — | group 5 in review |

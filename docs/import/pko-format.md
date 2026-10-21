@@ -20,9 +20,9 @@ they are first imported._
 | Data operacji | `2026-01-14` | booking date; **empty** for pending rows |
 | Data waluty | `2026-01-13` | value date (card payment date) |
 | Typ transakcji | `Płatność kartą` | see types |
-| Kwota | `-15.89`, `+120.00` | signed, dot decimal |
+| Kwota | `-17.35`, `+120.00` | signed, dot decimal |
 | Waluta | `PLN` | account currency |
-| Saldo po transakcji | `+1150.37` | running balance; `W rozliczeniu` for pending |
+| Saldo po transakcji | `+1148.91` | running balance; `W rozliczeniu` for pending |
 
 ## Transaction types seen
 
@@ -74,7 +74,7 @@ them as *possible duplicate* and skips them by default.
 
 ```csv
 "Data operacji","Data waluty","Typ transakcji","Kwota","Waluta","Saldo po transakcji","Opis transakcji","","","","",""
-"","2026-01-15","Blokada","-24.90","PLN","W rozliczeniu","Tytuł: P000000000000000000001","Lokalizacja: Adres: TAXI APP Miasto: Warszawa Kraj: POLSKA","","","",""
-"2026-01-14","2026-01-13","Płatność kartą","-15.89","PLN","+1150.37","Tytuł: 000000000000000000000002","Lokalizacja: Adres: GROCERY STORE Miasto: Warszawa Kraj: POLSKA","Data wykonania operacji: 2026-01-13","Oryginalna kwota operacji: 15.89 PLN","Numer karty: 000000******0000",""
+"","2026-01-15","Blokada","-23.40","PLN","W rozliczeniu","Tytuł: P000000000000000000001","Lokalizacja: Adres: TAXI APP Miasto: Warszawa Kraj: POLSKA","","","",""
+"2026-01-14","2026-01-13","Płatność kartą","-17.35","PLN","+1148.91","Tytuł: 000000000000000000000002","Lokalizacja: Adres: GROCERY STORE Miasto: Warszawa Kraj: POLSKA","Data wykonania operacji: 2026-01-13","Oryginalna kwota operacji: 17.35 PLN","Numer karty: 000000******0000",""
 "2026-01-10","2026-01-10","Przelew na konto","+120.00","PLN","+1166.26","Rachunek nadawcy: 00 0000 0000 0000 0000 0000 0000","Nazwa nadawcy: JAN KOWALSKI","Adres nadawcy: UL. PRZYKŁADOWA 1 WARSZAWA","Tytuł: ZWROT","",""
 ```

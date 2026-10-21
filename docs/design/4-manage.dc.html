@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Abacus — Manage</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+a{color:#0066CC}a:hover{color:#004C99}
+button,input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 1000px; padding: 24px; display: flex; justify-content: center;">
+<div style="position: relative; width: 100%; max-width: 1232px; min-height: 950px; background: #FFFFFF; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 16px 48px rgba(0,0,0,0.18); overflow: hidden; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+<nav aria-label="Sections" style="flex: 1 1 220px; box-sizing: border-box; background: #EDEDF0; border-right: 1px solid #D6D6DB; padding: 14px 10px 16px; display: flex; flex-direction: column; gap: 2px;">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding: 2px 8px 18px;">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FEBC2E;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #28C840;"></span>
+</div>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 6px 10px 4px;">Overview</div>
+<sc-for list="{{nav1}}" as="item" hint-placeholder-count="3">
+<button type="button" onClick="{{item.pick}}" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 14px 10px 4px;">Manage</div>
+<sc-for list="{{nav2}}" as="item" hint-placeholder-count="6">
+<button type="button" onClick="{{item.pick}}" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: #FFFFFF;">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #E0E0E5;">
+<h1 style="margin: 0; font-size: 17px; font-weight: 600; flex-grow: 1;">{{sectionTitle}}</h1>
+<sc-for list="{{toolbarButtons}}" as="b" hint-placeholder-count="1">
+<button type="button" onClick="{{b.action}}" style="{{b.style}}">{{b.label}}</button>
+</sc-for>
+</div>
+
+<sc-if value="{{isAccounts}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; flex-grow: 1;">
+<div style="flex: 999 1 420px; min-width: 0; padding: 8px 0 20px;">
+<label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #3A3A3C; padding: 6px 20px;">
+<input type="checkbox" checked="{{showArchived}}" onChange="{{toggleArchived}}">
+<span>Show archived accounts</span>
+</label>
+<sc-for list="{{accountGroups}}" as="g" hint-placeholder-count="4">
+<div style="display: flex; align-items: baseline; padding: 12px 20px 4px;">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; color: #6E6E73; flex-grow: 1;">{{g.name}}</h2>
+</div>
+<sc-for list="{{g.rows}}" as="a" hint-placeholder-count="2">
+<button type="button" onClick="{{a.pick}}" aria-pressed="{{a.selected}}" style="{{a.style}}">
+<span aria-hidden="true" style="{{a.iconStyle}}">{{a.initial}}</span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+<span style="display: flex; gap: 6px; align-items: center;"><span style="font-weight: 500;">{{a.name}}</span><sc-if value="{{a.archived}}" hint-placeholder-val="{{ false }}"><span style="font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: #EBEBF0; color: #6E6E73;">Archived</span></sc-if></span>
+<span style="font-size: 12px; color: #6E6E73;">{{a.kind}} · {{a.cur}}</span>
+</span>
+<span style="{{a.balanceStyle}}">{{a.balance}}</span>
+</button>
+</sc-for>
+</sc-for>
+</div>
+<aside aria-label="Account details" style="flex: 1 1 300px; box-sizing: border-box; border-left: 1px solid #E5E5EA; background: #FAFAFC; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600;">{{acct.name}}</h2>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Name<input type="text" value="{{acct.name}}" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Kind
+<select value="{{acct.kindKey}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<optgroup label="Assets"><option value="cash">Cash</option><option value="bank">Bank account</option><option value="card">Card</option><option value="savings">Savings / deposit</option><option value="investment">Investment</option></optgroup>
+<optgroup label="Liabilities"><option value="creditCard">Credit card</option><option value="loan">Loan</option><option value="debt">Debt (person)</option></optgroup>
+</select></label>
+<div style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Currency<span style="font-size: 13px; color: #1D1D1F; padding: 5px 0;">{{acct.cur}} <span style="color: #6E6E73; font-size: 11px;">· fixed after the first transaction</span></span></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Opening balance<input type="text" value="{{acct.opening}}" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7; text-align: right;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Opening date<input type="date" value="2026-01-01" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7;"></label>
+</div>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Group<input type="text" value="{{acct.group}}" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Bank account number (IBAN)<input type="text" value="{{acct.iban}}" placeholder="Used to recognise transfers in bank imports" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7;"></label>
+<div style="display: flex; justify-content: space-between; padding: 10px 12px; background: #FFFFFF; border: 1px solid #E5E5EA; border-radius: 8px;"><span style="color: #3A3A3C;">Current balance</span><strong style="{{acct.balanceStyle}}">{{acct.balance}}</strong></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px;">
+<button type="button" onClick="{{askArchive}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">{{acct.archiveLabel}}</button>
+<button type="button" disabled="{{acct.hasTx}}" title="{{acct.deleteHint}}" style="{{acct.deleteStyle}}">Delete…</button>
+</div>
+<span style="font-size: 11px; color: #6E6E73;">{{acct.deleteHint}}</span>
+</aside>
+</div>
+</sc-if>
+
+<sc-if value="{{isCategories}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; flex-grow: 1;">
+<div style="flex: 999 1 420px; min-width: 0; padding: 12px 0 20px;">
+<div role="group" aria-label="Kind" style="display: flex; background: #E8E8ED; border-radius: 7px; padding: 2px; gap: 2px; margin: 0 20px 10px; width: fit-content;">
+<sc-for list="{{catKinds}}" as="k" hint-placeholder-count="2">
+<button type="button" aria-pressed="{{k.pressed}}" onClick="{{k.pick}}" style="{{k.style}}">{{k.label}}</button>
+</sc-for>
+</div>
+<sc-for list="{{catRows}}" as="c" hint-placeholder-count="10">
+<button type="button" onClick="{{c.pick}}" aria-pressed="{{c.selected}}" style="{{c.style}}">
+<svg aria-hidden="true" width="10" height="14" viewBox="0 0 10 14" fill="#B0B0B5"><circle cx="3" cy="3" r="1.2"></circle><circle cx="7" cy="3" r="1.2"></circle><circle cx="3" cy="7" r="1.2"></circle><circle cx="7" cy="7" r="1.2"></circle><circle cx="3" cy="11" r="1.2"></circle><circle cx="7" cy="11" r="1.2"></circle></svg>
+<span aria-hidden="true" style="{{c.dotStyle}}"></span>
+<span style="{{c.nameStyle}}">{{c.name}}</span>
+<span style="font-size: 12px; color: #6E6E73;">{{c.usage}}</span>
+</button>
+</sc-for>
+</div>
+<aside aria-label="Category details" style="flex: 1 1 300px; box-sizing: border-box; border-left: 1px solid #E5E5EA; background: #FAFAFC; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600;">{{cat.name}}</h2>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Name<input type="text" value="{{cat.name}}" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Parent
+<select value="{{cat.parent}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{cat.parentOptions}}" as="o" hint-placeholder-count="6"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+</select></label>
+<div style="display: flex; flex-direction: column; gap: 6px; color: #3A3A3C;">Colour
+<div style="display: flex; gap: 6px;">
+<sc-for list="{{swatches}}" as="s" hint-placeholder-count="8"><span aria-hidden="true" style="{{s.style}}"></span></sc-for>
+</div>
+</div>
+<div style="padding: 10px 12px; background: #FFFFFF; border: 1px solid #E5E5EA; border-radius: 8px; color: #3A3A3C;">{{cat.usageLong}}</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+<button type="button" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Archive</button>
+<button type="button" onClick="{{askDeleteCat}}" style="border: 1px solid #E8B4BA; background: #FFFFFF; color: #B3001B; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px;">Delete…</button>
+</div>
+</aside>
+</div>
+</sc-if>
+
+<sc-if value="{{isBudget}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 760px;">
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #3A3A3C;">Total monthly budget
+<span style="display: flex; gap: 6px; align-items: center;">
+<input type="text" inputmode="decimal" value="{{budgetTotal}}" onChange="{{onBudgetTotal}}" style="width: 130px; font-size: 15px; font-weight: 600; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7; text-align: right;">
+<select value="PLN" aria-label="Budget currency" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option>UAH</option><option>PLN</option><option>EUR</option><option>USD</option></select>
+</span></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #3A3A3C;">Applies from
+<select value="2026-11" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option value="2026-10">October 2026</option><option value="2026-11">November 2026</option><option value="2026-12">December 2026</option></select>
+</label>
+<span style="font-size: 12px; color: #6E6E73; flex: 1 1 200px;">Earlier months keep the budget they had. It repeats every month until you change it.</span>
+</div>
+<div style="display: flex; flex-direction: column; border: 1px solid #E5E5EA; border-radius: 10px; overflow: hidden;">
+<div style="display: grid; grid-template-columns: minmax(0, 2fr) 140px minmax(0, 1fr) 36px; gap: 10px; padding: 8px 12px; background: #FAFAFC; font-size: 11px; font-weight: 600; color: #6E6E73;"><span>Category</span><span style="text-align: right;">Monthly limit</span><span>Share</span><span></span></div>
+<sc-for list="{{allocRows}}" as="r" hint-placeholder-count="5">
+<div style="display: grid; grid-template-columns: minmax(0, 2fr) 140px minmax(0, 1fr) 36px; gap: 10px; align-items: center; padding: 8px 12px; border-top: 1px solid #EEEEF2; font-size: 13px;">
+<span style="display: flex; align-items: center; gap: 8px;"><span aria-hidden="true" style="{{r.dotStyle}}"></span>{{r.name}}<span style="font-size: 11px; color: #6E6E73;">{{r.covers}}</span></span>
+<input aria-label="{{r.limitLabel}}" type="text" inputmode="decimal" value="{{r.limit}}" onChange="{{r.onLimit}}" style="font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #D2D2D7; text-align: right;">
+<span aria-hidden="true" style="height: 6px; border-radius: 3px; background: #EBEBF0; overflow: hidden; display: block;"><span style="{{r.barStyle}}"></span></span>
+<button type="button" aria-label="{{r.removeLabel}}" onClick="{{r.remove}}" style="width: 28px; height: 28px; border: 0; background: transparent; color: #6E6E73; border-radius: 5px;">✕</button>
+</div>
+</sc-for>
+<div style="display: grid; grid-template-columns: minmax(0, 2fr) 140px minmax(0, 1fr) 36px; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid #EEEEF2; font-size: 13px; background: #FAFAFC;">
+<span style="color: #3A3A3C;">Unallocated (other categories)</span>
+<span style="{{unallocStyle}}">{{unalloc}}</span>
+<span style="font-size: 12px; color: #6E6E73;">{{unallocNote}}</span>
+<span></span>
+</div>
+</div>
+<div style="display: flex; gap: 8px; align-items: center;">
+<select aria-label="Category to add" value="{{addCat}}" onChange="{{onAddCat}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{addOptions}}" as="o" hint-placeholder-count="5"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+</select>
+<button type="button" onClick="{{addAlloc}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Add category limit</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isEvents}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; flex-grow: 1;">
+<div style="flex: 999 1 420px; min-width: 0; padding: 8px 0 20px;">
+<sc-for list="{{eventRows}}" as="e" hint-placeholder-count="3">
+<button type="button" onClick="{{e.pick}}" aria-pressed="{{e.selected}}" style="{{e.style}}">
+<span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-weight: 500;">{{e.name}}</span><span style="font-size: 12px; color: #6E6E73;">{{e.dates}}</span></span>
+<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;"><span style="font-weight: 600;">{{e.spent}}</span><span style="font-size: 11px; color: #6E6E73;">{{e.budget}}</span></span>
+</button>
+</sc-for>
+</div>
+<aside aria-label="Event details" style="flex: 1 1 320px; box-sizing: border-box; border-left: 1px solid #E5E5EA; background: #FAFAFC; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600;">{{ev.name}}</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Starts<input type="date" value="{{ev.start}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Ends<input type="date" value="{{ev.end}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7;"></label>
+</div>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Budget (optional)<input type="text" value="{{ev.budgetInput}}" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7; text-align: right;"></label>
+<span style="font-size: 11px; color: #6E6E73;">While the event's dates are active, new expenses are tagged with it by default.</span>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; background: #FFFFFF; border: 1px solid #E5E5EA; border-radius: 8px;">
+<div style="display: flex; justify-content: space-between;"><span style="color: #3A3A3C;">Spent</span><strong>{{ev.spent}}</strong></div>
+<sc-for list="{{ev.byCat}}" as="b" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 3px;">
+<div style="display: flex; justify-content: space-between; font-size: 12px;"><span>{{b.name}}</span><span style="color: #3A3A3C;">{{b.amount}}</span></div>
+<span aria-hidden="true" style="height: 6px; border-radius: 3px; background: #EBEBF0; overflow: hidden; display: block;"><span style="{{b.barStyle}}"></span></span>
+</div>
+</sc-for>
+</div>
+<a href="Transactions.dc.html" style="font-size: 13px;">Show {{ev.count}} transactions</a>
+<div style="display: flex; gap: 8px;">
+<button type="button" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Archive</button>
+<button type="button" style="border: 1px solid #E8B4BA; background: #FFFFFF; color: #B3001B; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px;">Delete…</button>
+</div>
+</aside>
+</div>
+</sc-if>
+
+<sc-if value="{{isRules}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 14px;">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #3A3A3C; max-width: 520px;">Try a description
+<input type="text" value="{{probe}}" onChange="{{onProbe}}" placeholder="e.g. BIEDRONKA 1234 WARSZAWA" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7;">
+</label>
+<span style="{{probeResultStyle}}">{{probeResult}}</span>
+<div style="display: flex; flex-direction: column; border: 1px solid #E5E5EA; border-radius: 10px; overflow: hidden;">
+<div style="display: grid; grid-template-columns: 44px minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 60px; gap: 10px; padding: 8px 12px; background: #FAFAFC; font-size: 11px; font-weight: 600; color: #6E6E73;"><span>On</span><span>Description contains</span><span>Account</span><span>Category</span><span>Origin</span><span style="text-align: right;">Used</span></div>
+<sc-for list="{{ruleRows}}" as="r" hint-placeholder-count="6">
+<div style="{{r.style}}">
+<input type="checkbox" aria-label="{{r.toggleLabel}}" checked="{{r.enabled}}" onChange="{{r.toggle}}">
+<span style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;">{{r.pattern}}</span>
+<span style="color: #3A3A3C;">{{r.account}}</span>
+<span>{{r.category}}</span>
+<span style="font-size: 12px; color: #6E6E73;">{{r.origin}}</span>
+<span style="text-align: right; color: #3A3A3C;">{{r.hits}}</span>
+</div>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: #6E6E73;">Rules are checked top to bottom; the first match wins. Choices you make during an import are saved here as rules.</span>
+</div>
+</sc-if>
+</main>
+
+<sc-if value="{{dialogOpen}}" hint-placeholder-val="{{ false }}">
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.18);"></div>
+<div role="alertdialog" aria-labelledby="dlg-title" style="position: absolute; top: 180px; left: 50%; transform: translateX(-50%); width: 420px; max-width: calc(100% - 32px); background: #FFFFFF; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.14), 0 24px 70px rgba(0,0,0,0.3); padding: 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+<h2 id="dlg-title" style="margin: 0; font-size: 15px; font-weight: 600;">{{dialog.title}}</h2>
+<p style="margin: 0; color: #3A3A3C; line-height: 1.45;">{{dialog.body}}</p>
+<sc-if value="{{dialog.hasReassign}}" hint-placeholder-val="{{ false }}">
+<label style="display: flex; flex-direction: column; gap: 4px; color: #3A3A3C;">Move its transactions and budget limit to
+<select value="eating" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;">
+<sc-for list="{{dialog.targets}}" as="o" hint-placeholder-count="5"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+</select></label>
+</sc-if>
+<div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 4px;">
+<sc-if value="{{dialog.hasReassign}}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{closeDialog}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F; margin-right: auto;">Archive instead</button>
+</sc-if>
+<button type="button" onClick="{{closeDialog}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 14px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Cancel</button>
+<button type="button" onClick="{{confirmDialog}}" style="border: 0; background: {{dialog.confirmColor}}; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 5px 14px; border-radius: 6px; min-height: 30px;">{{dialog.confirm}}</button>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"section":{"editor":"enum","options":["accounts","categories","budget","events","rules"],"default":"accounts"},"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      section: props.section ?? 'accounts', showArchived: false, acct: 'pko', archived: { old: true },
+      catKind: 'expense', cat: 'groceries', dialog: null,
+      budgetTotal: '9000', allocs: [['rent', '4000'], ['groceries', '1800'], ['eating', '600'], ['transport', '400'], ['health', '500']], addCat: 'bills',
+      event: 'lyon', probe: 'BIEDRONKA 1234 WARSZAWA', rulesOff: {}
+    };
+  }
+  componentDidUpdate(prev) {
+    if (prev.section !== this.props.section && this.props.section) this.setState({ section: this.props.section, dialog: null });
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    function set(p) { self.setState(p); }
+    function num(s) { var n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? 0 : n; }
+    function fmt(v, c) {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: c, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+    }
+
+    var navBase = 'display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; min-height: 30px; color: #1D1D1F;';
+    var I = {
+      home: 'M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H10v-4H6v4H3a.5.5 0 0 1-.5-.5z',
+      list: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01',
+      events: 'M3 3.5h10v10H3zM3 6.5h10M5.5 2v3M10.5 2v3',
+      accounts: 'M2 4.5h12v8H2zM2 7h12M4.5 10h2',
+      categories: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+      budget: 'M8 2a6 6 0 1 0 6 6H8z M9.5 1.5a5 5 0 0 1 5 5h-5z',
+      importI: 'M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12v1.5h11V12',
+      rates: 'M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5',
+      rules: 'M3 4h10M3 8h6M3 12h8'
+    };
+    function navItem(label, icon, key) {
+      var on = key && st.section === key;
+      return {
+        label: label, icon: icon, current: on ? 'page' : 'false',
+        style: navBase + (on ? ' background: #D4D4DA; font-weight: 500;' : ' background: transparent;'),
+        pick: function () { if (key) set({ section: key, dialog: null }); }
+      };
+    }
+    var nav1 = [navItem('Dashboard', I.home), navItem('Transactions', I.list), navItem('Events', I.events, 'events')];
+    var nav2 = [navItem('Accounts', I.accounts, 'accounts'), navItem('Categories', I.categories, 'categories'), navItem('Budget', I.budget, 'budget'), navItem('Import', I.importI), navItem('Exchange rates', I.rates), navItem('Rules', I.rules, 'rules')];
+
+    var btn = 'border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;';
+    var primary = 'border: 0; background: #0A66D9; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 6px; min-height: 30px;';
+    var TITLES = { accounts: 'Accounts', categories: 'Categories', budget: 'Monthly budget', events: 'Events', rules: 'Categorisation rules' };
+    var TOOLBAR = {
+      accounts: [{ label: 'New account', style: primary }],
+      categories: [{ label: 'New subcategory', style: btn }, { label: 'New category', style: primary }],
+      budget: [{ label: 'Save budget', style: primary }],
+      events: [{ label: 'New event', style: primary }],
+      rules: [{ label: 'New rule', style: primary }]
+    };
+
+    // ---- Accounts (R-ACC, R-MGMT-1)
+    var KIND = { cash: 'Cash', bank: 'Bank account', card: 'Card', savings: 'Savings / deposit', investment: 'Investment', creditCard: 'Credit card', loan: 'Loan', debt: 'Debt (person)' };
+    var ACCTS = [
+      { id: 'mono', name: 'Monobank Black', kind: 'card', cur: 'UAH', bal: 48250, group: 'Monobank', tx: 1738 },
+      { id: 'pko', name: 'PKO Personal', kind: 'bank', cur: 'PLN', bal: 15400, group: 'PKO', iban: 'PL00 0000 0000 0000 0000 0000 0001', tx: 781 },
+      { id: 'pkousd', name: 'PKO USD', kind: 'bank', cur: 'USD', bal: 1000, group: 'PKO', iban: 'PL00 0000 0000 0000 0000 0000 0002', tx: 91 },
+      { id: 'pkocc', name: 'PKO Credit Card', kind: 'creditCard', cur: 'PLN', bal: -1240, group: 'PKO', tx: 40 },
+      { id: 'rev', name: 'Revolut EUR', kind: 'card', cur: 'EUR', bal: 2310, group: 'Revolut', tx: 106 },
+      { id: 'cash', name: 'Cash PLN', kind: 'cash', cur: 'PLN', bal: 500, group: 'Other', tx: 23 },
+      { id: 'dep', name: 'EUR Deposit', kind: 'savings', cur: 'EUR', bal: 5000, group: 'Other', tx: 0 },
+      { id: 'loan', name: 'Loan from friend', kind: 'debt', cur: 'UAH', bal: -8000, group: 'Other', tx: 5 },
+      { id: 'old', name: 'Old card', kind: 'card', cur: 'UAH', bal: 0, group: 'Monobank', tx: 12 }
+    ];
+    var groupsOrder = ['Monobank', 'PKO', 'Revolut', 'Other'];
+    var rowBase = 'display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #F3F3F6; padding: 9px 20px; font-size: 13px; color: #1D1D1F; min-height: 50px;';
+    var accountGroups = groupsOrder.map(function (g) {
+      var rows = ACCTS.filter(function (a) { return a.group === g && (st.showArchived || !st.archived[a.id]); }).map(function (a) {
+        var sel = st.acct === a.id;
+        var liability = ['creditCard', 'loan', 'debt'].indexOf(a.kind) >= 0;
+        return {
+          name: a.name, kind: KIND[a.kind], cur: a.cur, archived: !!st.archived[a.id],
+          initial: a.cur.charAt(0) === 'U' && a.cur === 'UAH' ? '₴' : (a.cur === 'PLN' ? 'zł' : (a.cur === 'EUR' ? '€' : '$')),
+          iconStyle: 'width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #FFFFFF; background: ' + (liability ? '#B3261E' : '#0A66D9') + ';' + (st.archived[a.id] ? ' opacity: 0.45;' : ''),
+          balance: fmt(a.bal, a.cur),
+          balanceStyle: 'font-weight: 600; color: ' + (a.bal < 0 ? '#B3261E' : '#1D1D1F') + ';',
+          selected: sel ? 'true' : 'false',
+          style: rowBase + (sel ? ' background: #DCE9FB;' : ' background: transparent;'),
+          pick: function () { set({ acct: a.id }); }
+        };
+      });
+      return { name: g, rows: rows };
+    }).filter(function (g) { return g.rows.length > 0; });
+    var A = ACCTS.filter(function (a) { return a.id === st.acct; })[0];
+    var acct = {
+      name: A.name, kindKey: A.kind, cur: A.cur, group: A.group, iban: A.iban || '',
+      opening: '0.00', balance: fmt(A.bal, A.cur),
+      balanceStyle: 'color: ' + (A.bal < 0 ? '#B3261E' : '#1D1D1F') + ';',
+      archiveLabel: st.archived[A.id] ? 'Unarchive' : 'Archive…',
+      hasTx: A.tx > 0,
+      deleteHint: A.tx > 0 ? 'Has ' + A.tx + ' transactions — archive it instead.' : 'No transactions yet; it can be deleted.',
+      deleteStyle: 'border: 1px solid ' + (A.tx > 0 ? '#E5E5EA' : '#E8B4BA') + '; background: #FFFFFF; color: ' + (A.tx > 0 ? '#B0B0B5' : '#B3001B') + '; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px;'
+    };
+
+    // ---- Categories (R-CAT, R-MGMT-2)
+    var CATS = [
+      ['food', 'Food', null, '#E07B14', 0, 'expense'], ['groceries', 'Groceries', 'food', '#E07B14', 124, 'expense'], ['eating', 'Eating out', 'food', '#1E9E7E', 58, 'expense'],
+      ['housing', 'Housing', null, '#0A64D6', 0, 'expense'], ['rent', 'Rent', 'housing', '#0A64D6', 12, 'expense'],
+      ['transport', 'Transport', null, '#7B4FCF', 6, 'expense'], ['taxi', 'Taxi', 'transport', '#7B4FCF', 31, 'expense'], ['fuel', 'Fuel', 'transport', '#7B4FCF', 9, 'expense'],
+      ['health', 'Health', null, '#C93B6E', 22, 'expense'], ['bills', 'Bills', null, '#5C7B99', 4, 'expense'], ['mobile', 'Mobile', 'bills', '#5C7B99', 12, 'expense'],
+      ['clothing', 'Clothing', null, '#A35A2A', 9, 'expense'], ['fees', 'Fees', null, '#8E8E93', 41, 'expense'],
+      ['salary', 'Salary', null, '#1B8A4A', 27, 'income'], ['cashback', 'Cashback', null, '#1B8A4A', 14, 'income'], ['refunds', 'Refunds', null, '#1B8A4A', 3, 'income']
+    ];
+    var segBase = 'border: 0; font-size: 12px; font-weight: 500; padding: 4px 14px; border-radius: 5px; min-height: 26px;';
+    var catKinds = [['expense', 'Expense'], ['income', 'Income']].map(function (k) {
+      var on = st.catKind === k[0];
+      return { label: k[1], pressed: on ? 'true' : 'false', style: segBase + (on ? ' background: #FFFFFF; color: #1D1D1F; box-shadow: 0 1px 2px rgba(0,0,0,0.15);' : ' background: transparent; color: #3A3A3C;'), pick: function () { set({ catKind: k[0], cat: k[0] === 'income' ? 'salary' : 'groceries' }); } };
+    });
+    var catRowBase = 'display: grid; grid-template-columns: 14px 12px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #F3F3F6; padding: 8px 20px; font-size: 13px; color: #1D1D1F; min-height: 38px;';
+    var catRows = CATS.filter(function (c) { return c[5] === st.catKind; }).map(function (c) {
+      var sel = st.cat === c[0];
+      return {
+        name: c[1], usage: c[4] ? c[4] + ' transactions' : '',
+        nameStyle: c[2] ? 'padding-left: 18px;' : 'font-weight: 600;',
+        dotStyle: 'width: 10px; height: 10px; border-radius: 5px; background: ' + c[3] + ';',
+        selected: sel ? 'true' : 'false',
+        style: catRowBase + (sel ? ' background: #DCE9FB;' : ' background: transparent;'),
+        pick: function () { set({ cat: c[0] }); }
+      };
+    });
+    var C = CATS.filter(function (c) { return c[0] === st.cat; })[0];
+    var parentOptions = [{ value: '', label: 'None (top level)' }].concat(CATS.filter(function (c) { return !c[2] && c[5] === C[5] && c[0] !== C[0]; }).map(function (c) { return { value: c[0], label: c[1] }; }));
+    var inBudget = st.allocs.some(function (a) { return a[0] === C[0]; });
+    var cat = {
+      name: C[1], parent: C[2] || '', parentOptions: parentOptions,
+      usageLong: 'Used by ' + C[4] + ' transactions' + (inBudget ? ' and the monthly budget.' : '.') + (C[2] ? '' : ' Parent totals include its subcategories.')
+    };
+    var swatches = ['#E07B14', '#1E9E7E', '#0A64D6', '#7B4FCF', '#C93B6E', '#5C7B99', '#A35A2A', '#8E8E93'].map(function (hex) {
+      return { style: 'width: 22px; height: 22px; border-radius: 11px; background: ' + hex + ';' + (hex === C[3] ? ' box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px ' + hex + ';' : '') };
+    });
+
+    // ---- Budget (R-BUD, R-MGMT-3)
+    var CATCOLOR = {}; var CATNAME = {};
+    CATS.forEach(function (c) { CATCOLOR[c[0]] = c[3]; CATNAME[c[0]] = c[1]; });
+    var total = num(st.budgetTotal);
+    var allocated = 0;
+    var allocRows = st.allocs.map(function (a, i) {
+      var limit = num(a[1]); allocated += limit;
+      var kids = CATS.filter(function (c) { return c[2] === a[0]; }).map(function (c) { return c[1]; });
+      return {
+        name: CATNAME[a[0]], covers: kids.length ? 'incl. ' + kids.join(', ') : '',
+        dotStyle: 'width: 10px; height: 10px; border-radius: 5px; background: ' + CATCOLOR[a[0]] + ';',
+        limit: a[1], limitLabel: 'Monthly limit for ' + CATNAME[a[0]], removeLabel: 'Remove ' + CATNAME[a[0]],
+        barStyle: 'display: block; height: 100%; border-radius: 3px; background: ' + CATCOLOR[a[0]] + '; width: ' + (total > 0 ? Math.min(100, Math.round(limit / total * 100)) : 0) + '%;',
+        onLimit: function (e) { var n = st.allocs.slice(); n[i] = [a[0], e.target.value]; set({ allocs: n }); },
+        remove: function () { set({ allocs: st.allocs.filter(function (_, j) { return j !== i; }) }); }
+      };
+    });
+    var unallocated = total - allocated;
+    var used = st.allocs.map(function (a) { return a[0]; });
+    var addOptions = CATS.filter(function (c) { return c[5] === 'expense' && used.indexOf(c[0]) < 0; }).map(function (c) { return { value: c[0], label: (c[2] ? '    ' : '') + c[1] }; });
+    var addCat = used.indexOf(st.addCat) < 0 ? st.addCat : (addOptions[0] ? addOptions[0].value : '');
+
+    // ---- Events (R-EVT, R-MGMT-4)
+    var EVENTS = [
+      { id: 'lyon', name: 'Lyon trip', start: '2026-10-01', end: '2026-10-19', budget: 1500, spent: 1186.40, count: 14, byCat: [['Eating out', 512.10, '#1E9E7E'], ['Transport', 389.30, '#7B4FCF'], ['Travel', 285.00, '#C9A100']] },
+      { id: 'relocation', name: 'Relocation', start: '2025-08-01', end: '2025-10-31', budget: null, spent: 6420.00, count: 37, byCat: [['Home', 3900, '#0A64D6'], ['Fees', 1420, '#8E8E93'], ['Transport', 1100, '#7B4FCF']] },
+      { id: 'car', name: 'Car', start: '', end: '', budget: null, spent: 2310.00, count: 9, byCat: [['Fuel', 1460, '#7B4FCF'], ['Services', 850, '#5C7B99']] }
+    ];
+    var evRowBase = 'display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #F3F3F6; padding: 10px 20px; font-size: 13px; color: #1D1D1F; min-height: 52px;';
+    function dates(e) { return e.start ? e.start.slice(8) + '.' + e.start.slice(5, 7) + ' – ' + e.end.slice(8) + '.' + e.end.slice(5, 7) + '.' + e.end.slice(0, 4) : 'No dates (ongoing)'; }
+    var eventRows = EVENTS.map(function (e) {
+      var sel = st.event === e.id;
+      return {
+        name: e.name, dates: dates(e), spent: fmt(e.spent, 'EUR'),
+        budget: e.budget ? 'of ' + fmt(e.budget, 'EUR') + ' budget' : 'no budget',
+        selected: sel ? 'true' : 'false',
+        style: evRowBase + (sel ? ' background: #DCE9FB;' : ' background: transparent;'),
+        pick: function () { set({ event: e.id }); }
+      };
+    });
+    var E = EVENTS.filter(function (e) { return e.id === st.event; })[0];
+    var maxCat = Math.max.apply(null, E.byCat.map(function (b) { return b[1]; }));
+    var ev = {
+      name: E.name, start: E.start, end: E.end, budgetInput: E.budget ? E.budget.toFixed(2) + ' EUR' : '',
+      spent: fmt(E.spent, 'EUR') + (E.budget ? ' of ' + fmt(E.budget, 'EUR') : ''), count: E.count,
+      byCat: E.byCat.map(function (b) { return { name: b[0], amount: fmt(b[1], 'EUR'), barStyle: 'display: block; height: 100%; border-radius: 3px; background: ' + b[2] + '; width: ' + Math.round(b[1] / maxCat * 100) + '%;' }; })
+    };
+
+    // ---- Rules (R-IMP-8, R-MGMT-6)
+    var RULES = [
+      ['r1', 'biedronka', 'Any account', 'Food › Groceries', 'Learned from PKO import', 41],
+      ['r2', 'lidl', 'Any account', 'Food › Groceries', 'Learned from PKO import', 18],
+      ['r3', 'bolt.eu', 'Any account', 'Transport › Taxi', 'Learned from PKO import', 26],
+      ['r4', 'orlen', 'PKO Credit Card', 'Transport › Fuel', 'Manual', 9],
+      ['r5', 'orange', 'Any account', 'Bills › Mobile', 'Learned from Saldo import', 12],
+      ['r6', 'farmacja', 'Any account', 'Health', 'Learned from PKO import', 7]
+    ];
+    var probe = st.probe.toLowerCase();
+    var hit = null;
+    RULES.forEach(function (r) { if (!hit && !st.rulesOff[r[0]] && probe && probe.indexOf(r[1]) >= 0) hit = r; });
+    var ruleBase = 'display: grid; grid-template-columns: 44px minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) 60px; gap: 10px; align-items: center; padding: 8px 12px; border-top: 1px solid #EEEEF2; font-size: 13px;';
+    var ruleRows = RULES.map(function (r) {
+      var off = !!st.rulesOff[r[0]];
+      return {
+        pattern: r[1], account: r[2], category: r[3], origin: r[4], hits: r[5],
+        enabled: !off, toggleLabel: 'Enable rule ' + r[1],
+        style: ruleBase + (hit && hit[0] === r[0] ? ' background: #EAF2FD;' : '') + (off ? ' color: #8E8E93;' : ''),
+        toggle: function () { var n = Object.assign({}, st.rulesOff); n[r[0]] = !off; set({ rulesOff: n }); }
+      };
+    });
+
+    // ---- Dialogs
+    var dialog = { title: '', body: '', confirm: 'OK', confirmColor: '#0A66D9', hasReassign: false, targets: [] };
+    if (st.dialog === 'archive') {
+      dialog = A.bal !== 0
+        ? { title: 'Archive “' + A.name + '”?', body: 'Its balance is ' + fmt(A.bal, A.cur) + ', not zero. Archived accounts are hidden from pickers and the dashboard and are not counted in net worth. Its history stays.', confirm: 'Archive anyway', confirmColor: '#B3001B', hasReassign: false, targets: [] }
+        : { title: 'Archive “' + A.name + '”?', body: 'It will be hidden from pickers and the dashboard. Its history stays.', confirm: 'Archive', confirmColor: '#0A66D9', hasReassign: false, targets: [] };
+    }
+    if (st.dialog === 'deleteCat') {
+      dialog = {
+        title: 'Delete “' + C[1] + '”?', confirm: 'Move and delete', confirmColor: '#B3001B', hasReassign: C[4] > 0,
+        body: C[4] > 0 ? C[1] + ' is used by ' + C[4] + ' transactions' + (inBudget ? ' and the monthly budget' : '') + '. Choose where they go, or archive the category to keep it on old transactions.' : 'It is not used anywhere.',
+        targets: CATS.filter(function (c) { return c[5] === C[5] && c[0] !== C[0]; }).map(function (c) { return { value: c[0], label: (c[2] ? '    ' : '') + c[1] }; })
+      };
+    }
+
+    return {
+      nav1: nav1, nav2: nav2,
+      sectionTitle: TITLES[st.section],
+      toolbarButtons: TOOLBAR[st.section].map(function (b) { return { label: b.label, style: b.style, action: function () {} }; }),
+      isAccounts: st.section === 'accounts', isCategories: st.section === 'categories', isBudget: st.section === 'budget', isEvents: st.section === 'events', isRules: st.section === 'rules',
+      showArchived: st.showArchived, toggleArchived: function () { set({ showArchived: !st.showArchived }); },
+      accountGroups: accountGroups, acct: acct,
+      askArchive: function () {
+        if (st.archived[A.id]) { var n = Object.assign({}, st.archived); delete n[A.id]; set({ archived: n }); }
+        else set({ dialog: 'archive' });
+      },
+      catKinds: catKinds, catRows: catRows, cat: cat, swatches: swatches,
+      askDeleteCat: function () { set({ dialog: 'deleteCat' }); },
+      budgetTotal: st.budgetTotal, onBudgetTotal: function (e) { set({ budgetTotal: e.target.value }); },
+      allocRows: allocRows,
+      unalloc: fmt(unallocated, 'PLN'),
+      unallocStyle: 'text-align: right; font-weight: 600; color: ' + (unallocated < 0 ? '#B3001B' : '#1D1D1F') + ';',
+      unallocNote: unallocated < 0 ? 'Limits exceed the total by ' + fmt(-unallocated, 'PLN') : 'Spending in categories without a limit',
+      addOptions: addOptions, addCat: addCat,
+      onAddCat: function (e) { set({ addCat: e.target.value }); },
+      addAlloc: function () { if (addCat) set({ allocs: st.allocs.concat([[addCat, '0']]) }); },
+      eventRows: eventRows, ev: ev,
+      probe: st.probe, onProbe: function (e) { set({ probe: e.target.value }); },
+      probeResult: hit ? 'Matches “' + hit[1] + '” → ' + hit[3] : (probe ? 'No rule matches; the category stays empty for you to pick.' : ''),
+      probeResultStyle: 'font-size: 13px; font-weight: 500; color: ' + (hit ? '#0A4FA8' : '#6E6E73') + ';',
+      ruleRows: ruleRows,
+      dialogOpen: st.dialog !== null, dialog: dialog,
+      closeDialog: function () { set({ dialog: null }); },
+      confirmDialog: function () {
+        if (st.dialog === 'archive') { var n = Object.assign({}, st.archived); n[A.id] = true; set({ archived: n, dialog: null, showArchived: true }); }
+        else set({ dialog: null });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

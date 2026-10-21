@@ -11,8 +11,8 @@ source is copied into this folder (`<n>-<name>.dc.html`).
 | 1 | Shell + Dashboard | **approved** 2026-10-21 | Net worth changed to a monthly chart ending today (TA 1.1, `R-HOME-1`) |
 | 2 | Transaction list + filters | **approved** 2026-10-21 | |
 | 3 | Editor (3 types, attached records, event) | **approved** 2026-10-21 | With the currency picker and last-used defaults (TA 1.2) |
-| 4 | Accounts / Categories / Budget / Events / Rules | in review | |
-| 5 | Import wizard | not started | |
+| 4 | Accounts / Categories / Budget / Events / Rules | **approved** 2026-10-21 | |
+| 5 | Import wizard | in review | |
 | 6 | Rates + Settings | not started | |
 
 ## Approved decisions per screen
@@ -42,7 +42,7 @@ source is copied into this folder (`<n>-<name>.dc.html`).
 - List: column header (Description, Category, Account, Amount); rows grouped by day with the
   day's net in the display currency; row = category tile, description + badges (Pending, Refund,
   event), note · time, "Parent › Child" category, account, amount in the account currency
-  (income/refund green) with "Charged €8.90" for foreign purchases; transfers show
+  (income/refund green) with "Charged €10.00" for foreign purchases; transfers show
   "From → To" and the received amount; attached records nested under their row.
 - Footer: count, income, expenses, net in the display currency ("converted at each day's NBU
   rate"). Empty state: "No transactions match these filters."
@@ -65,3 +65,21 @@ source is copied into this folder (`<n>-<name>.dc.html`).
   amount, note, remove. Summary "Effect on <account>" = main ± lines, in the account currency.
 - Footer: Delete… and Duplicate (edit only), ⏎ Save · ⎋ Cancel hint, Cancel, Save (disabled
   until valid).
+
+### 4 · Accounts, Categories, Budget, Events, Rules
+- Accounts: grouped list (group name), liabilities red, "Show archived accounts"; inspector with
+  name, kind (Assets / Liabilities groups), currency (fixed after the first transaction),
+  opening balance + date, group, IBAN, current balance; Archive… (non-zero balance → "Its
+  balance is X, not zero… Archive anyway?"), Unarchive; Delete disabled with "Has N
+  transactions — archive it instead".
+- Categories: Expense / Income tabs; tree (parents bold, children indented), drag handle, usage
+  count; inspector with name, parent, colour swatches, usage; Archive; Delete… → reassign
+  dialog (same-kind target for transactions and budget limit) with "Archive instead".
+- Budget: total + currency, "Applies from <month>" (earlier months unchanged); per-category
+  limits with share bars, "incl. <children>" for parents; Unallocated row (red with "Limits
+  exceed the total by X"); add/remove category limits; Save budget.
+- Events: list (dates or "No dates (ongoing)", spent vs budget); inspector with dates, optional
+  budget, auto-tag note, spent by category, "Show N transactions", Archive, Delete….
+- Rules: "Try a description" tester highlighting the first matching rule; table with enable
+  toggle, "description contains" pattern, account, category, origin (learned from an import /
+  manual), hit count; first match wins.

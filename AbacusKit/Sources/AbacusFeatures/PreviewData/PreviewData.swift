@@ -104,19 +104,19 @@ public enum PreviewData {
   }
 
   public static let txns: [Txn] = [
-    expense(401, "2026-10-21", "15:07", "Bolt", cat: 207, pkoPersonal, 24_90, pending: true, source: .pko),
-    expense(402, "2026-10-21", "12:41", "Twoja Farmacja", cat: 209, pkoPersonal, 26_65, pending: true, source: .pko),
+    expense(401, "2026-10-21", "15:07", "Bolt", cat: 207, pkoPersonal, 23_40, pending: true, source: .pko),
+    expense(402, "2026-10-21", "12:41", "City Pharmacy", cat: 209, pkoPersonal, 31_20, pending: true, source: .pko),
     Txn(
       id: id(403), type: .transfer, occurredAt: at("2026-10-20", "18:02"), accountID: pkoPersonal.id,
       amountMinor: 500_00, toAccountID: cashPLN.id, toAmountMinor: 500_00, payee: "ATM withdrawal",
       source: .pko),
-    expense(404, "2026-10-19", "09:15", "Biedronka", cat: 202, pkoPersonal, 15_89, source: .pko),
+    expense(404, "2026-10-19", "09:15", "Biedronka", cat: 202, pkoPersonal, 17_35, source: .pko),
     expense(
-      405, "2026-10-18", "13:20", "Café Bretelles", cat: 203, monobank, 395_52, event: lyonTrip,
-      note: "Lunch with the team", original: (8_90, "EUR")),
+      405, "2026-10-18", "13:20", "Café du Parc", cat: 203, monobank, 440_00, event: lyonTrip,
+      note: "Lunch with the team", original: (10_00, "EUR")),
     Txn(
       id: id(406), type: .transfer, occurredAt: at("2026-10-15", "10:00"), accountID: monobank.id,
-      amountMinor: 4_420_00, toAccountID: revolutEUR.id, toAmountMinor: 100_00, payee: "To EUR card"),
+      amountMinor: 4_400_00, toAccountID: revolutEUR.id, toAmountMinor: 100_00, payee: "To EUR card"),
     expense(407, "2026-10-12", "08:00", "Rent October", cat: 205, pkoPersonal, 4_000_00, note: "Standing order"),
     Txn(
       id: id(408), type: .income, occurredAt: at("2026-10-10", "11:30"), accountID: revolutEUR.id,
@@ -129,7 +129,7 @@ public enum PreviewData {
     expense(414, "2026-09-28", "20:30", "Pizzeria Napoli", cat: 203, monobank, 640_00),
     Txn(
       id: id(415), type: .transfer, occurredAt: at("2026-09-25", "14:05"), accountID: pkoUSD.id,
-      amountMinor: 2_000_00, toAccountID: pkoPersonal.id, toAmountMinor: 7_660_00, payee: "Currency exchange"),
+      amountMinor: 2_000_00, toAccountID: pkoPersonal.id, toAmountMinor: 7_800_00, payee: "Currency exchange"),
     expense(416, "2026-09-23", "18:22", "Auchan", cat: 202, pkoPersonal, 142_30),
   ]
 
