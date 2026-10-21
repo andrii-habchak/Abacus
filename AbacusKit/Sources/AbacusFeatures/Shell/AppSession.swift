@@ -15,6 +15,12 @@ public final class AppSession {
   public let app: AppModel
   public let dashboard: DashboardModel
   public let transactions: TransactionsViewModel
+  /// Manage screens (WP B5).
+  public let accounts: AccountsModel
+  public let categories: CategoriesModel
+  public let budget: BudgetEditorModel
+  public let events: EventsModel
+  public let rules: RulesModel
   /// What the transaction editor (WP B4) reads and writes; its converter follows the rates.
   public private(set) var editorDependencies: TransactionEditorDependencies
 
@@ -29,12 +35,17 @@ public final class AppSession {
 
   init(
     app: AppModel, dashboard: DashboardModel, transactions: TransactionsViewModel,
-    editorDependencies: TransactionEditorDependencies, database: (any DatabaseWriter)?,
-    refresher: RateRefresher?
+    editorDependencies: TransactionEditorDependencies, manage: ManageDependencies,
+    database: (any DatabaseWriter)?, refresher: RateRefresher?
   ) {
     self.app = app
     self.dashboard = dashboard
     self.transactions = transactions
+    accounts = AccountsModel(dependencies: manage)
+    categories = CategoriesModel(dependencies: manage)
+    budget = BudgetEditorModel(dependencies: manage)
+    events = EventsModel(dependencies: manage)
+    rules = RulesModel(dependencies: manage)
     self.editorDependencies = editorDependencies
     self.database = database
     self.refresher = refresher
@@ -77,7 +88,8 @@ public final class AppSession {
     return AppSession(
       app: AppModel(environment: environment),
       dashboard: DashboardModel(dependencies: .live(database: database, refresher: refresher)),
-      transactions: transactions, editorDependencies: editor, database: database, refresher: refresher)
+      transactions: transactions, editorDependencies: editor,
+      manage: .live(database: database, refresher: refresher), database: database, refresher: refresher)
   }
 
   /// The app database prepared by `AppBootstrap` (`defaultDatabase`), or the database file at
@@ -97,8 +109,8 @@ public final class AppSession {
     AppSession(
       app: AppModel(environment: .preview(offline: offline)),
       dashboard: DashboardModel(dependencies: .preview(fetchFailed: offline)),
-      transactions: .preview(displayCurrency: .UAH), editorDependencies: .preview(), database: nil,
-      refresher: nil)
+      transactions: .preview(displayCurrency: .UAH), editorDependencies: .preview(), manage: .preview(),
+      database: nil, refresher: nil)
   }
 
   // MARK: Lifecycle
@@ -151,6 +163,7 @@ public final class AppSession {
     transactions.converter = snapshot.table
     editorDependencies.converter = snapshot.table
     if dashboard.phase == .loaded { await dashboard.refreshRates() }
+    if events.phase == .loaded { await events.refreshRates() }
     await app.rates.load()
   }
 
@@ -162,6 +175,39 @@ public final class AppSession {
     transactions.refundsReduceSpending = app.refundsReduceSpending
     await dashboard.load()
     await transactions.load()
+    await reloadManageScreens(all: true)
+  }
+
+  /// Re-reads the manage screens after data changed elsewhere (balances, usage, event totals).
+  /// Screens not opened yet load when they appear, unless `all`.
+  public func reloadManageScreens(all: Bool = false) async {
+    if all || accounts.phase == .loaded { await accounts.load() }
+    if all || categories.phase == .loaded { await categories.load() }
+    if all || budget.phase == .loaded { await budget.load() }
+    if all || events.phase == .loaded { await events.load() }
+    if all || rules.phase == .loaded { await rules.load() }
+  }
+
+  /// Switching to a section re-reads it if it was shown before, so edits made on other screens
+  /// (an account renamed, a category moved) appear without a relaunch.
+  public func sectionAppeared(_ section: AppSection) async {
+    switch section {
+    case .dashboard: if dashboard.phase == .loaded { await dashboard.load() }
+    case .transactions: await transactions.load()
+    case .accounts: if accounts.phase == .loaded { await accounts.load() }
+    case .categories: if categories.phase == .loaded { await categories.load() }
+    case .budget: if budget.phase == .loaded { await budget.load() }
+    case .events: if events.phase == .loaded { await events.load() }
+    case .rules: if rules.phase == .loaded { await rules.load() }
+    case .rates: await app.rates.load()
+    case .importFiles: break
+    }
+  }
+
+  /// An event's "Show N transactions": the list filtered to that event (R-EVT-3).
+  public func showTransactions(ofEvent id: Event.ID) {
+    guard let event = events.events.first(where: { $0.id == id }) else { return }
+    app.showTransactions(.event(event))
   }
 
   /// The editor closed: after a save or delete the list and the dashboard re-read the data.
@@ -169,6 +215,7 @@ public final class AppSession {
     guard result != .cancelled else { return }
     await transactions.reload()
     await dashboard.load()
+    await reloadManageScreens()
   }
 
   // MARK: Sample data

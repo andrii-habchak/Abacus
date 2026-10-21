@@ -133,4 +133,18 @@ struct AppSessionTests {
     #expect(s.transactions.rows.count == before + 1)
     #expect(s.transactions.rows.contains { $0.txn.id == txn.id })
   }
+
+  @Test("R-EVT-3 an event's Show transactions opens the list filtered to that event")
+  func eventDrillDown() async throws {
+    let database = try AbacusDatabase.open(at: nil)
+    let s = session(database)
+    await s.start()
+    defer { s.stop() }
+    await s.loadSampleData()
+    #expect(s.events.phase == .loaded)
+    #expect(s.accounts.phase == .loaded)
+    s.showTransactions(ofEvent: PreviewData.lyonTrip.id)
+    #expect(s.app.section == .transactions)
+    #expect(s.app.pendingTransactionFilters == .event(PreviewData.lyonTrip))
+  }
 }

@@ -22,6 +22,10 @@ struct RootView: View {
       session.transactions.filters = filters
       app.pendingTransactionFilters = nil
     }
+    .onChange(of: app.section) { _, section in
+      guard let section else { return }
+      Task { await session.sectionAppeared(section) }
+    }
     .onChange(of: app.displayCurrency) { _, currency in
       session.transactions.displayCurrency = currency
     }
@@ -80,7 +84,24 @@ struct SectionDetail: View {
       .shellToolbar()
     case .rates:
       RatesView(model: app.rates)
-    case .events, .accounts, .categories, .budget, .importFiles, .rules:
+    case .accounts:
+      AccountsView(model: session.accounts, displayCurrency: app.displayCurrency)
+        .shellToolbar()
+    case .categories:
+      CategoriesView(model: session.categories)
+        .shellToolbar()
+    case .budget:
+      BudgetView(model: session.budget)
+        .shellToolbar()
+    case .events:
+      EventsView(model: session.events, displayCurrency: app.displayCurrency) { id in
+        session.showTransactions(ofEvent: id)
+      }
+      .shellToolbar()
+    case .rules:
+      RulesView(model: session.rules)
+        .shellToolbar()
+    case .importFiles:
       SectionPlaceholder(section: section)
         .shellToolbar()
         .navigationTitle(section.title)
