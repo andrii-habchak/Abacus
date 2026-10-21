@@ -36,7 +36,10 @@ let package = Package(
       dependencies: ["AbacusDomain", "AbacusStore", "AbacusFX", "AbacusImport"]
     ),
     // Headless import into the app database with the wizard's defaults (no UI).
-    .executableTarget(name: "AbacusImportTool", dependencies: ["AbacusImport", "AbacusStore"]),
+    .executableTarget(
+      name: "AbacusImportTool",
+      dependencies: ["AbacusImport", "AbacusStore", .product(name: "SQLiteData", package: "sqlite-data")]
+    ),
     // Helpers shared by test targets: fixtures, real-sample lookup, test tags.
     .target(
       name: "AbacusTestSupport",
