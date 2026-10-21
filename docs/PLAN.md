@@ -88,15 +88,15 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
 Each lane first builds its views on `PreviewData` → screenshots to the owner (SwiftUI check,
 TA §6) → then wires them to the real view models as Phase 1 packages land.
 Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
-- [ ] **B1 Shell, settings, rates** (M) — sidebar, toolbar, display-currency state, settings
+- [x] **B1 Shell, settings, rates** (M) — merged 2026-10-21, wired to the live database (all sections but Import) — sidebar, toolbar, display-currency state, settings
   (R-SET-*), rates screen and manual overrides (R-FX-2/5), backup UI.
-- [x] **B2 Dashboard** (M) — merged 2026-10-21 on preview data; wiring pending (after B1) — net worth, budget with per-category bars, donut with drill-down,
+- [x] **B2 Dashboard** (M) — merged and wired to the live database 2026-10-21 — net worth, budget with per-category bars, donut with drill-down,
   month selector (R-HOME-*). Swift Charts.
-- [x] **B3 Transaction list** (M) — merged 2026-10-21 on preview data; wiring to the real store pending (after B1) — filters, search, sort, day grouping, nested attached records,
+- [x] **B3 Transaction list** (M) — merged and wired to the live database 2026-10-21 — filters, search, sort, day grouping, nested attached records,
   totals (R-LIST-*).
-- [x] **B4 Editor** (M) — merged 2026-10-21 on preview data; wiring pending — 3 types, attached records, refunds, original amount, event pre-select,
+- [x] **B4 Editor** (M) — merged and wired to the live database 2026-10-21 — 3 types, attached records, refunds, original amount, event pre-select,
   category suggestion, shortcuts (R-EDIT-*, R-TX-*, R-EVT-2).
-- [x] **B5 Management** (L) — merged 2026-10-21 on preview data; wiring pending — accounts (archive warning), categories tree, budget editor,
+- [x] **B5 Management** (L) — merged and wired to the live database 2026-10-21 — accounts (archive warning), categories tree, budget editor,
   events, rules (R-MGMT-*).
 - [ ] **B6 Import wizard** (L) — file pick, preview counts, mapping, needs-review resolution,
   tags→events, commit, history + undo (R-IMP UI).

@@ -31,7 +31,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | A2 FX | background agent | `wp/A2-fx` | **merged** 2026-10-21 (Frankfurter/NBU + fallback, RateTable converter, RateRefresher) |
 | A4 PKO parser | background agent | `wp/A4-pko` | **merged** 2026-10-21 (79/79 real rows parse) |
 | A1 Calculators | background agent | `wp/A1-calc` | **merged** 2026-10-21 (balances, net worth + series, reporting, budget, events) |
-| B1 Shell, settings, rates | background agent (own worktree) | `wp/B1-shell` | running since 2026-10-21 (on PreviewData) |
+| B1 Shell, settings, rates | background agent | `wp/B1-shell` | **merged** 2026-10-21: live AppSession, routing for all sections but Import, editor, Load Sample Data, rates, Settings |
 | B3 Transaction list | background agent | `wp/B3-transactions` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B3-screens/`; wiring notes in `docs/status/B3.md` |
 | B2 Dashboard | background agent | `wp/B2-dashboard` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B2-screens/`; wiring notes in `docs/status/B2.md` |
 | A6 Import pipeline | background agent | `wp/A6-pipeline` | **merged** 2026-10-21 (real Saldo+PKO pass; decisions in `docs/status/A6.md`) |
@@ -91,3 +91,13 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
   Features vs A6 `RuleMatcher` in AbacusImport — consolidate on A6's); optional protocol
   `balances(asOf:)` / per-category usage counts for 20k-transaction performance; R-CAT-4 default
   categories on first launch still open.
+- Fixed 2026-10-21: the synced app folder (D23) had never been applied — screens merged before
+  were not compiled into the app until `cd15c07`+1; now `project.yml` uses `type: syncedFolder`
+  and the app builds with all screens.
+- B1 incident (reported by the lane): a stale screenshot script launched a debug build on the
+  real database without writing anything; verified afterwards — counts unchanged, no rate rows.
+- Real-data check without screenshots: `RealDataAppSessionTests` imports both real exports into
+  memory and loads every screen through `AppSession.live` (counts/timings only): all load, the
+  dashboard in ~0.6 s, the list in ~0.15 s. Screenshots of real data are not taken (privacy).
+- B1 requests (deferred): `SettingKey.lastBackupExport` (now in UserDefaults); "Change…" data
+  folder needs a store-side move/reopen; editor should call `ensureRates(for:)` for old days.
