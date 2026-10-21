@@ -61,11 +61,13 @@ struct ImportFileBar: View {
         .font(.system(size: 12))
         .foregroundStyle(.secondary)
         .lineLimit(1)
+        .layoutPriority(-1)
       Spacer(minLength: 8)
       if model.file?.source == .pko {
         HStack(spacing: 6) {
           Text("Import into")
             .foregroundStyle(ImportPalette.label)
+            .fixedSize()
           Picker("Import into", selection: target) {
             if model.targetAccountID == nil {
               Text("Choose account…").tag(Account.ID?.none)
@@ -80,6 +82,7 @@ struct ImportFileBar: View {
             Text("remembered")
               .font(.system(size: 11))
               .foregroundStyle(.secondary)
+              .fixedSize()
           }
         }
         .font(.system(size: 13))
@@ -160,8 +163,9 @@ struct ImportCards: View {
             Text(card.hint)
               .font(.system(size: 11))
               .foregroundStyle(.secondary)
+              .lineLimit(2, reservesSpace: true)
           }
-          .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
           .padding(.horizontal, 12)
           .padding(.vertical, 10)
           .background(RoundedRectangle(cornerRadius: 10).fill(isOn ? ImportPalette.accentFill : ImportPalette.surface))

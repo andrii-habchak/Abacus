@@ -147,7 +147,7 @@ struct ImportRowActions: View {
         }
         .labelsHidden()
         .controlSize(.small)
-        .frame(maxWidth: 220, alignment: .leading)
+        .fixedSize()
         .overlay(
           RoundedRectangle(cornerRadius: 5)
             .strokeBorder(needsCategory ? ImportPalette.attentionBorder : .clear)

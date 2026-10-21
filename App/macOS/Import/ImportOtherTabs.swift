@@ -64,7 +64,7 @@ struct ImportMappingRow: View {
         Text(item.source).lineLimit(1)
         Text(item.meta).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
       Image(systemName: "arrow.right")
         .font(.system(size: 11))
         .foregroundStyle(.tertiary)
@@ -79,13 +79,13 @@ struct ImportMappingRow: View {
           }
           .labelsHidden()
           .controlSize(.small)
+          .frame(maxWidth: 240, alignment: .leading)
         }
         if let note = item.note {
           ImportNoteText(note: note)
         }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .layoutPriority(1)
+      .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
     }
     .font(.system(size: 13))
     .padding(.horizontal, 12)
@@ -168,7 +168,7 @@ struct ImportNeedsReviewTab: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
           if model.unresolvedReviewCount > 0 {
-            Button("Use suggestions for \(model.unresolvedReviewCount.formatted())") { model.acceptSuggestions() }
+            Button("Use suggestions (\(model.unresolvedReviewCount.formatted()))") { model.acceptSuggestions() }
           }
         }
         if model.reviewItems.isEmpty {
