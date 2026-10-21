@@ -4,9 +4,9 @@ _Last updated: 2026-10-21 (orchestrator)_
 
 ## Now
 
-**P0 Foundation done** (package, contracts, schema, preview data, app shell, CI). **D1** in
-progress: groups 1–5 approved, group 6 (Rates + Settings) in review — see
-`docs/design/README.md`. Wave 2 lanes (A5, A3, A2, A4; A1 filler) can start.
+**P0 Foundation** and **D1 Prototypes** done (all six screen groups approved, `docs/design/`).
+**Wave 2 running**: lanes A5 Store, A3 Saldo parser, A2 FX, A4 PKO parser — one session and
+branch each (table below). A1 Calculators is the filler for the first lane that finishes.
 
 ## Done
 
@@ -15,14 +15,18 @@ progress: groups 1–5 approved, group 6 (Rates + Settings) in review — see
 - Saldo and PKO exports analysed → `docs/import/`. Real files in git-ignored `samples/private/`.
 - TA v1.2 (all questions closed; prototype-review changes), decisions D1–D20, `PLAN.md`.
 - P0 Foundation (`docs/status/P0.md`).
+- D1 Prototypes: all six groups approved; sources + decisions in `docs/design/`.
 
 ## Next
 
-1. Wave 2 lanes A5, A3, A2, A4 (A1 as filler), each in its own session/worktree.
-2. D1 prototypes, group by group, owner approval → `docs/design/`.
+1. Review and merge Wave 2 branches as they finish; start A1 when a slot frees up.
+2. Wave 3: A6 Import pipeline (after A5) and UI lanes B1–B3 on PreviewData.
 
 ## In flight
 
 | WP | Lane / session | Branch | State |
 |----|----------------|--------|-------|
-| D1 | orchestrator + owner | — | group 6 in review |
+| A5 Store | lane session | `wp/A5-store` | started 2026-10-21 |
+| A3 Saldo parser | lane session | `wp/A3-saldo` | started 2026-10-21 |
+| A2 FX | lane session | `wp/A2-fx` | started 2026-10-21 |
+| A4 PKO parser | lane session | `wp/A4-pko` | started 2026-10-21 |

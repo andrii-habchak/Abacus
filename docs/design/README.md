@@ -1,7 +1,7 @@
 # Screen prototypes (WP D1)
 
-Interactive macOS-styled prototypes, reviewed by the owner one group at a time. A B-lane builds a
-screen only after its group is **approved** here. The prototypes use synthetic data only.
+Interactive macOS-styled prototypes, reviewed by the owner one group at a time. **All six groups are approved** (2026-10-21); B-lanes build
+against the decisions below and the `.dc.html` sources in this folder. The prototypes use synthetic data only.
 
 The live canvas is the owner's private "Abacus prototypes" page; each approved artboard's
 source is copied into this folder (`<n>-<name>.dc.html`).
@@ -13,7 +13,7 @@ source is copied into this folder (`<n>-<name>.dc.html`).
 | 3 | Editor (3 types, attached records, event) | **approved** 2026-10-21 | With the currency picker and last-used defaults (TA 1.2) |
 | 4 | Accounts / Categories / Budget / Events / Rules | **approved** 2026-10-21 | |
 | 5 | Import wizard | **approved** 2026-10-21 | |
-| 6 | Rates + Settings | in review | |
+| 6 | Rates + Settings | **approved** 2026-10-21 | |
 
 ## Approved decisions per screen
 
@@ -104,3 +104,19 @@ source is copied into this folder (`<n>-<name>.dc.html`).
   - Footer: uncategorised count, rules to be saved, "All or nothing", Cancel, Import N.
 - Step 3: summary lines, Undo this import, Show transactions.
 - History panel: batches with counts, "Undo import…", undone ones greyed.
+
+### 6 · Exchange rates + Settings
+- Rates screen toolbar: "Updated today 09:00 · NBU rates for <day>" / "Updated just now",
+  Refresh rates (disabled while refreshing). Fetch failure → amber banner "Couldn't reach the
+  rate service. Amounts use the last known rates, from <day>" + Try again.
+- Today's rates: "Show in" UAH/PLN/EUR/USD; rows = currency, "1 X = r Y", day change ▲/▼ %,
+  30-day sparkline, source badge (NBU / Manual). Note on date rate vs latest rate and weekends.
+- Manual rates: list (pair, "on <day> only" / "from <day> until changed", note, Remove) and an
+  add form: 1 [cur] = [rate] [cur] (fetched rate shown), On one day / From <day> until changed,
+  note. Manual wins for its days; removing returns to the fetched rate.
+- Settings window (⌘,), tabs General / Rates / Data:
+  - General: default display currency; "Refunds reduce category spending" (off by default)
+    with an explanation that changes with the toggle.
+  - Rates: "Update rates automatically" (on launch and daily); source; manual-rate count.
+  - Data: database path + Show in Finder / Change…; Export backup… / Restore from backup… with
+    "Replace all data with …?" confirmation; last export date.

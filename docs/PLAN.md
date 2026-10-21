@@ -48,7 +48,7 @@ Size: S ≈ one sitting, M ≈ 2–3, L ≈ 4+.
   - Done when: `swift test` and `xcodebuild … build` green locally and in CI.
 
 ### Phase D — Screen prototypes (parallel with P0 and Phase 1; owner in the loop)
-- [ ] **D1 Prototypes** (M + review rounds) — owns `docs/design/**`.
+- [x] **D1 Prototypes** (M + review rounds) — all six groups approved 2026-10-21 — owns `docs/design/**`.
   Interactive macOS-styled HTML prototypes, one per group, iterated until the owner approves:
   1. Shell + Dashboard · 2. Transaction list + filters · 3. Editor (3 types, attached records,
   event) · 4. Accounts / Categories / Budget / Events / Rules · 5. Import wizard (preview,

@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Abacus — Exchange rates and Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+a{color:#0066CC}a:hover{color:#004C99}
+button,input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 1000px; padding: 24px; display: flex; justify-content: center;">
+<div style="position: relative; width: 100%; max-width: 1232px; min-height: 950px; background: #FFFFFF; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 16px 48px rgba(0,0,0,0.18); overflow: hidden; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+<nav aria-label="Sections" style="flex: 1 1 220px; box-sizing: border-box; background: #EDEDF0; border-right: 1px solid #D6D6DB; padding: 14px 10px 16px; display: flex; flex-direction: column; gap: 2px;">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding: 2px 8px 18px;">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FEBC2E;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #28C840;"></span>
+</div>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 6px 10px 4px;">Overview</div>
+<sc-for list="{{nav1}}" as="item" hint-placeholder-count="3">
+<button type="button" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 14px 10px 4px;">Manage</div>
+<sc-for list="{{nav2}}" as="item" hint-placeholder-count="6">
+<button type="button" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="flex-grow: 1; min-height: 24px;"></div>
+<button type="button" onClick="{{openSettings}}" style="display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 6px; font-size: 13px; color: #1D1D1F; min-height: 30px;">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>
+<span>Settings… ⌘,</span>
+</button>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: #FFFFFF;">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #E0E0E5;">
+<h1 style="margin: 0; font-size: 17px; font-weight: 600; flex-grow: 1;">Exchange rates</h1>
+<span style="font-size: 12px; color: #6E6E73;">{{updatedLabel}}</span>
+<button type="button" onClick="{{refresh}}" disabled="{{refreshing}}" style="display: flex; align-items: center; gap: 6px; border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">
+<svg aria-hidden="true" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6.5A4.5 4.5 0 1 1 9.2 2.9M11 1.5v3h-3"></path></svg>
+<span>{{refreshLabel}}</span>
+</button>
+</div>
+
+<sc-if value="{{offline}}" hint-placeholder-val="{{ false }}">
+<div role="status" style="display: flex; gap: 10px; align-items: center; margin: 14px 20px 0; padding: 10px 12px; border-radius: 8px; background: #FFF6E5; border: 1px solid #F0D9A8; font-size: 13px; color: #6B3D00;">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#B26A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8 15 14H1z M8 6v3.5 M8 11.8h.01"></path></svg>
+<span style="flex-grow: 1;">Couldn't reach the rate service. Amounts use the last known rates, from 20 Oct 2026.</span>
+<button type="button" onClick="{{refresh}}" style="border: 0; background: transparent; color: #0A66D9; font-size: 13px; padding: 4px 6px; min-height: 28px;">Try again</button>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 18px 20px;">
+<section aria-labelledby="cur-title" style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 10px;">
+<div style="display: flex; align-items: center; gap: 10px;">
+<h2 id="cur-title" style="margin: 0; font-size: 13px; font-weight: 600; flex-grow: 1;">Today's rates</h2>
+<label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #3A3A3C;">Show in
+<select value="{{base}}" onChange="{{onBase}}" style="font-size: 12px; padding: 3px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option value="UAH">UAH</option><option value="PLN">PLN</option><option value="EUR">EUR</option><option value="USD">USD</option></select>
+</label>
+</div>
+<div style="display: flex; flex-direction: column; border: 1px solid #E5E5EA; border-radius: 10px; overflow: hidden;">
+<div style="display: grid; grid-template-columns: 70px minmax(0, 1fr) 80px 120px 80px; gap: 10px; padding: 8px 12px; background: #FAFAFC; font-size: 11px; font-weight: 600; color: #6E6E73;"><span>Currency</span><span style="text-align: right;">Rate</span><span style="text-align: right;">Day</span><span>30 days</span><span>Source</span></div>
+<sc-for list="{{rateRows}}" as="r" hint-placeholder-count="3">
+<div style="display: grid; grid-template-columns: 70px minmax(0, 1fr) 80px 120px 80px; gap: 10px; align-items: center; padding: 9px 12px; border-top: 1px solid #EEEEF2; font-size: 13px;">
+<span style="font-weight: 600;">{{r.code}}</span>
+<span style="text-align: right; font-variant-numeric: tabular-nums;">{{r.rate}}</span>
+<span style="{{r.changeStyle}}">{{r.change}}</span>
+<svg role="img" aria-label="{{r.sparkLabel}}" width="120" height="26" viewBox="0 0 120 26"><polyline points="{{r.spark}}" fill="none" stroke="{{r.sparkColor}}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>
+<span style="{{r.sourceStyle}}">{{r.source}}</span>
+</div>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: #6E6E73;">Official National Bank of Ukraine rates. Monthly totals use each transaction's own day; net worth uses today's rate. Weekends and holidays use the last published rate.</span>
+</section>
+
+<section aria-labelledby="man-title" style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 10px;">
+<h2 id="man-title" style="margin: 0; font-size: 13px; font-weight: 600;">Manual rates</h2>
+<sc-for list="{{overrides}}" as="o" hint-placeholder-count="2">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #E5E5EA; border-radius: 8px; font-size: 13px;">
+<span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1;">
+<span style="font-weight: 600;">{{o.pair}}</span>
+<span style="font-size: 12px; color: #6E6E73;">{{o.applies}}</span>
+<span style="font-size: 12px; color: #3A3A3C;">{{o.note}}</span>
+</span>
+<button type="button" aria-label="{{o.removeLabel}}" onClick="{{o.remove}}" style="border: 1px solid #E8B4BA; background: #FFFFFF; color: #B3001B; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px;">Remove</button>
+</div>
+</sc-for>
+<sc-if value="{{noOverrides}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 12px; color: #6E6E73;">No manual rates. Fetched rates are used everywhere.</span>
+</sc-if>
+<form style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: #FAFAFC; border: 1px solid #E5E5EA; font-size: 13px;">
+<span style="font-weight: 600;">Add a manual rate</span>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px;">
+<span>1</span>
+<select aria-label="From currency" value="{{fFrom}}" onChange="{{onFFrom}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option value="EUR">EUR</option><option value="USD">USD</option><option value="PLN">PLN</option><option value="UAH">UAH</option></select>
+<span>=</span>
+<input aria-label="Rate" type="text" inputmode="decimal" value="{{fRate}}" onChange="{{onFRate}}" style="width: 100px; font-size: 13px; padding: 4px 8px; border-radius: 6px; border: 1px solid #D2D2D7; text-align: right;">
+<select aria-label="To currency" value="{{fTo}}" onChange="{{onFTo}}" style="font-size: 13px; padding: 4px 6px; border-radius: 6px; border: 1px solid #D2D2D7; background: #FFFFFF;"><option value="UAH">UAH</option><option value="PLN">PLN</option><option value="EUR">EUR</option><option value="USD">USD</option></select>
+<span style="font-size: 11px; color: #6E6E73;">{{fFetched}}</span>
+</div>
+<div role="radiogroup" aria-label="Applies" style="display: flex; flex-direction: column; gap: 6px;">
+<label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="applies" checked="{{fSingle}}" onChange="{{pickSingle}}"><span>On one day</span><input aria-label="Day" type="date" value="2026-10-15" style="font-size: 12px; padding: 3px 6px; border-radius: 5px; border: 1px solid #D2D2D7;"></label>
+<label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="applies" checked="{{fFromDay}}" onChange="{{pickFrom}}"><span>From</span><input aria-label="From day" type="date" value="2026-10-01" style="font-size: 12px; padding: 3px 6px; border-radius: 5px; border: 1px solid #D2D2D7;"><span>until changed</span></label>
+</div>
+<input aria-label="Note" type="text" placeholder="Note (optional), e.g. rate my bank charged" style="font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid #D2D2D7;">
+<div style="display: flex; justify-content: flex-end;"><button type="button" onClick="{{addOverride}}" style="border: 0; background: #0A66D9; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 6px; min-height: 30px;">Add manual rate</button></div>
+</form>
+<span style="font-size: 12px; color: #6E6E73;">A manual rate wins over the fetched one for its days and is marked “Manual”. Remove it to go back to the official rate.</span>
+</section>
+</div>
+</main>
+
+<sc-if value="{{settingsOpen}}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-labelledby="set-title" style="position: absolute; top: 90px; left: 50%; transform: translateX(-40%); width: 560px; max-width: calc(100% - 32px); background: #F6F6F8; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.14), 0 24px 70px rgba(0,0,0,0.30); overflow: hidden; display: flex; flex-direction: column;">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 14px 0; background: #ECECEF; border-bottom: 1px solid #D6D6DB;">
+<div style="display: flex; width: 100%; align-items: center;">
+<span aria-hidden="true" style="display: flex; gap: 8px;"><span style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57;"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #D0D0D4;"></span><span style="width: 12px; height: 12px; border-radius: 6px; background: #D0D0D4;"></span></span>
+<h2 id="set-title" style="margin: 0; font-size: 13px; font-weight: 600; flex-grow: 1; text-align: center;">{{tabTitle}}</h2>
+<button type="button" aria-label="Close settings" onClick="{{closeSettings}}" style="width: 28px; height: 28px; border: 0; background: transparent; color: #6E6E73; border-radius: 5px;">✕</button>
+</div>
+<div role="tablist" aria-label="Settings" style="display: flex; gap: 4px; padding-bottom: 6px;">
+<sc-for list="{{settingTabs}}" as="t" hint-placeholder-count="3">
+<button type="button" role="tab" aria-selected="{{t.selected}}" onClick="{{t.pick}}" style="{{t.style}}">
+<svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.icon}}"></path></svg>
+<span>{{t.label}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="padding: 18px 24px 22px; display: flex; flex-direction: column; gap: 16px; font-size: 13px;">
+<sc-if value="{{tabGeneral}}" hint-placeholder-val="{{ true }}">
+<div style="display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 14px 12px; align-items: start;">
+<span style="text-align: right; color: #3A3A3C; padding-top: 4px;">Display currency</span>
+<span style="display: flex; flex-direction: column; gap: 4px;">
+<span role="group" aria-label="Display currency" style="display: flex; background: #E3E3E8; border-radius: 7px; padding: 2px; gap: 2px; width: fit-content;">
+<sc-for list="{{dispCur}}" as="c" hint-placeholder-count="4"><button type="button" aria-pressed="{{c.pressed}}" onClick="{{c.pick}}" style="{{c.style}}">{{c.code}}</button></sc-for>
+</span>
+<span style="font-size: 11px; color: #6E6E73;">Default for the dashboard and totals; each screen can still switch.</span>
+</span>
+<span style="text-align: right; color: #3A3A3C;">Refunds</span>
+<span style="display: flex; flex-direction: column; gap: 4px;">
+<label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked="{{refundsReduce}}" onChange="{{toggleRefunds}}"><span>Refunds reduce category spending</span></label>
+<span style="font-size: 11px; color: #6E6E73; line-height: 1.4;">{{refundsHint}}</span>
+</span>
+</div>
+</sc-if>
+<sc-if value="{{tabRates}}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 14px 12px; align-items: start;">
+<span style="text-align: right; color: #3A3A3C;">Updates</span>
+<span style="display: flex; flex-direction: column; gap: 4px;">
+<label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked="{{autoRates}}" onChange="{{toggleAuto}}"><span>Update rates automatically</span></label>
+<span style="font-size: 11px; color: #6E6E73;">{{autoHint}}</span>
+</span>
+<span style="text-align: right; color: #3A3A3C;">Source</span>
+<span style="display: flex; flex-direction: column; gap: 2px;"><span>Official NBU rates</span><span style="font-size: 11px; color: #6E6E73;">Via Frankfurter (providers=NBU); falls back to the NBU API. No account or key needed.</span></span>
+<span style="text-align: right; color: #3A3A3C;">Manual rates</span>
+<span>{{overrideCount}} · managed on the Exchange rates screen</span>
+</div>
+</sc-if>
+<sc-if value="{{tabData}}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 14px 12px; align-items: start;">
+<span style="text-align: right; color: #3A3A3C; padding-top: 4px;">Data folder</span>
+<span style="display: flex; flex-direction: column; gap: 6px;">
+<code style="font-size: 12px; background: #FFFFFF; border: 1px solid #E0E0E5; border-radius: 6px; padding: 5px 8px; word-break: break-all;">~/Library/Application Support/Abacus/abacus.sqlite</code>
+<span style="display: flex; gap: 8px;"><button type="button" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #1D1D1F;">Show in Finder</button><button type="button" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #1D1D1F;">Change…</button></span>
+</span>
+<span style="text-align: right; color: #3A3A3C; padding-top: 4px;">Backup</span>
+<span style="display: flex; flex-direction: column; gap: 6px;">
+<span style="display: flex; gap: 8px;"><button type="button" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #1D1D1F;">Export backup…</button><button type="button" onClick="{{askRestore}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 12px; padding: 4px 10px; border-radius: 6px; min-height: 28px; color: #1D1D1F;">Restore from backup…</button></span>
+<span style="font-size: 11px; color: #6E6E73;">One file with all accounts, transactions, categories, budgets, events, rules and rates. Last export: 14 Oct 2026.</span>
+</span>
+</div>
+<sc-if value="{{restoreAsk}}" hint-placeholder-val="{{ false }}">
+<div role="alertdialog" aria-labelledby="rst-title" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E8B4BA;">
+<strong id="rst-title" style="font-weight: 600;">Replace all data with “abacus-backup-2026-10-14.abacus”?</strong>
+<span style="color: #3A3A3C; line-height: 1.4;">Everything currently in Abacus is replaced by the backup. Export a backup first if you might need today's data.</span>
+<span style="display: flex; justify-content: flex-end; gap: 8px;"><button type="button" onClick="{{cancelRestore}}" style="border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 12px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">Cancel</button><button type="button" onClick="{{cancelRestore}}" style="border: 0; background: #B3001B; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 5px 12px; border-radius: 6px; min-height: 30px;">Replace all data</button></span>
+</div>
+</sc-if>
+</sc-if>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"view":{"editor":"enum","options":["rates","settings"],"default":"rates"},"offline":{"editor":"boolean","default":false},"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      base: 'UAH', refreshing: false, refreshed: false,
+      overrides: [{ id: 1, from: 'EUR', to: 'UAH', rate: '48.20', applies: 'single', day: '15 Oct 2026', note: 'Rate my bank charged for the Lyon hotel' }],
+      fFrom: 'EUR', fTo: 'UAH', fRate: '48.50', fMode: 'single',
+      settingsOpen: (props.view ?? 'rates') === 'settings', tab: 'general', disp: 'UAH', refunds: false, auto: true, restoreAsk: false
+    };
+  }
+  componentDidUpdate(prev) {
+    if (prev.view !== this.props.view) this.setState({ settingsOpen: this.props.view === 'settings' });
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    function set(p) { self.setState(p); }
+    var navBase = 'display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; min-height: 30px; color: #1D1D1F;';
+    var I = {
+      home: 'M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H10v-4H6v4H3a.5.5 0 0 1-.5-.5z',
+      list: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01',
+      events: 'M3 3.5h10v10H3zM3 6.5h10M5.5 2v3M10.5 2v3',
+      accounts: 'M2 4.5h12v8H2zM2 7h12M4.5 10h2',
+      categories: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+      budget: 'M8 2a6 6 0 1 0 6 6H8z M9.5 1.5a5 5 0 0 1 5 5h-5z',
+      importI: 'M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12v1.5h11V12',
+      rates: 'M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5',
+      rules: 'M3 4h10M3 8h6M3 12h8'
+    };
+    function navItem(label, icon, on) {
+      return { label: label, icon: icon, current: on ? 'page' : 'false', style: navBase + (on ? ' background: #D4D4DA; font-weight: 500;' : ' background: transparent;') };
+    }
+    var nav1 = [navItem('Dashboard', I.home), navItem('Transactions', I.list), navItem('Events', I.events)];
+    var nav2 = [navItem('Accounts', I.accounts), navItem('Categories', I.categories), navItem('Budget', I.budget), navItem('Import', I.importI), navItem('Exchange rates', I.rates, true), navItem('Rules', I.rules)];
+
+    // UAH per unit, today and 30 days back (synthetic).
+    var TODAY = { UAH: 1, PLN: 11.3046, EUR: 48.5012, USD: 41.5872 };
+    var PREV = { UAH: 1, PLN: 11.2810, EUR: 48.6230, USD: 41.5500 };
+    var SERIES = {
+      PLN: [11.05, 11.08, 11.12, 11.10, 11.15, 11.18, 11.16, 11.20, 11.22, 11.25, 11.24, 11.28, 11.30],
+      EUR: [48.10, 48.22, 48.30, 48.25, 48.41, 48.38, 48.55, 48.60, 48.52, 48.70, 48.62, 48.55, 48.50],
+      USD: [41.30, 41.35, 41.42, 41.40, 41.38, 41.45, 41.50, 41.48, 41.52, 41.56, 41.55, 41.58, 41.59],
+      UAH: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    };
+    var base = st.base;
+    var manualOn = {};
+    st.overrides.forEach(function (o) { if (o.to === 'UAH') manualOn[o.from] = o; });
+    var rateRows = ['UAH', 'PLN', 'EUR', 'USD'].filter(function (c) { return c !== base; }).map(function (c) {
+      var r = TODAY[c] / TODAY[base];
+      var p = PREV[c] / PREV[base];
+      var ch = (r - p) / p * 100;
+      var series = SERIES[c].map(function (v, i) { return v / SERIES[base][i]; });
+      var mn = Math.min.apply(null, series), mx = Math.max.apply(null, series);
+      var pts = series.map(function (v, i) { return (2 + i * 116 / (series.length - 1)).toFixed(1) + ',' + (mx === mn ? 13 : (23 - (v - mn) / (mx - mn) * 20)).toFixed(1); }).join(' ');
+      return {
+        code: c,
+        rate: '1 ' + c + ' = ' + r.toFixed(4) + ' ' + base,
+        change: (ch >= 0 ? '▲ ' : '▼ ') + Math.abs(ch).toFixed(2) + '%',
+        changeStyle: 'text-align: right; font-size: 12px; color: ' + (ch >= 0 ? '#1B6B3A' : '#B3261E') + ';',
+        spark: pts, sparkColor: '#0A66D9', sparkLabel: c + ' over the last 30 days',
+        source: 'NBU',
+        sourceStyle: 'font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 9px; width: fit-content; background: #EEEEF1; color: #3A3A3C;'
+      };
+    });
+
+    var overrides = st.overrides.map(function (o) {
+      return {
+        pair: '1 ' + o.from + ' = ' + o.rate + ' ' + o.to,
+        applies: o.applies === 'single' ? 'Manual · on ' + o.day + ' only' : 'Manual · from ' + o.day + ' until changed',
+        note: o.note, removeLabel: 'Remove manual rate ' + o.from + '/' + o.to,
+        remove: function () { set({ overrides: st.overrides.filter(function (x) { return x.id !== o.id; }) }); }
+      };
+    });
+    var fetched = (TODAY[st.fFrom] / TODAY[st.fTo]).toFixed(4);
+
+    var tabBase = 'display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; font-size: 11px; padding: 5px 12px; border-radius: 7px; min-width: 70px; min-height: 44px;';
+    var TABS = [['general', 'General', 'M10 3v2.5M10 14.5V17M3 10h2.5M14.5 10H17M5 5l1.8 1.8M13.2 13.2 15 15M5 15l1.8-1.8M13.2 6.8 15 5 M10 7.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6'], ['rates', 'Rates', 'M4 7h11l-3-3M16 13H5l3 3'], ['data', 'Data', 'M4 5c0-1.2 2.7-2 6-2s6 .8 6 2-2.7 2-6 2-6-.8-6-2zM4 5v10c0 1.2 2.7 2 6 2s6-.8 6-2V5M4 10c0 1.2 2.7 2 6 2s6-.8 6-2']];
+    var settingTabs = TABS.map(function (t) {
+      var on = st.tab === t[0];
+      return { label: t[1], icon: t[2], selected: on ? 'true' : 'false', style: tabBase + (on ? ' background: #D9D9DE; color: #0A4FA8;' : ' background: transparent; color: #3A3A3C;'), pick: function () { set({ tab: t[0], restoreAsk: false }); } };
+    });
+    var segBase = 'border: 0; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 5px; min-height: 26px;';
+    var dispCur = ['UAH', 'PLN', 'EUR', 'USD'].map(function (c) {
+      var on = st.disp === c;
+      return { code: c, pressed: on ? 'true' : 'false', style: segBase + (on ? ' background: #FFFFFF; color: #1D1D1F; box-shadow: 0 1px 2px rgba(0,0,0,0.15);' : ' background: transparent; color: #3A3A3C;'), pick: function () { set({ disp: c }); } };
+    });
+
+    return {
+      nav1: nav1, nav2: nav2,
+      offline: !!this.props.offline,
+      updatedLabel: st.refreshed ? 'Updated just now · NBU' : 'Updated today 09:00 · NBU rates for 21 Oct 2026',
+      refreshing: st.refreshing,
+      refreshLabel: st.refreshing ? 'Refreshing…' : 'Refresh rates',
+      refresh: function () {
+        set({ refreshing: true });
+        setTimeout(function () { self.setState({ refreshing: false, refreshed: true }); }, 900);
+      },
+      base: base, onBase: function (e) { set({ base: e.target.value }); },
+      rateRows: rateRows,
+      overrides: overrides, noOverrides: st.overrides.length === 0,
+      fFrom: st.fFrom, fTo: st.fTo, fRate: st.fRate,
+      onFFrom: function (e) { set({ fFrom: e.target.value }); },
+      onFTo: function (e) { set({ fTo: e.target.value }); },
+      onFRate: function (e) { set({ fRate: e.target.value }); },
+      fFetched: 'fetched: ' + fetched,
+      fSingle: st.fMode === 'single', fFromDay: st.fMode === 'from',
+      pickSingle: function () { set({ fMode: 'single' }); },
+      pickFrom: function () { set({ fMode: 'from' }); },
+      addOverride: function () {
+        set({ overrides: st.overrides.concat([{ id: Date.now(), from: st.fFrom, to: st.fTo, rate: st.fRate, applies: st.fMode, day: st.fMode === 'single' ? '15 Oct 2026' : '1 Oct 2026', note: '' }]) });
+      },
+      openSettings: function () { set({ settingsOpen: true }); },
+      closeSettings: function () { set({ settingsOpen: false, restoreAsk: false }); },
+      settingsOpen: st.settingsOpen,
+      settingTabs: settingTabs,
+      tabTitle: st.tab === 'general' ? 'General' : (st.tab === 'rates' ? 'Rates' : 'Data'),
+      tabGeneral: st.tab === 'general', tabRates: st.tab === 'rates', tabData: st.tab === 'data',
+      dispCur: dispCur,
+      refundsReduce: st.refunds, toggleRefunds: function () { set({ refunds: !st.refunds }); },
+      refundsHint: st.refunds
+        ? 'On: a refund is subtracted from its category’s spending and budget.'
+        : 'Off (default): a refund counts as income (“Refunds”); category spending is unchanged. Balances are the same either way.',
+      autoRates: st.auto, toggleAuto: function () { set({ auto: !st.auto }); },
+      autoHint: st.auto ? 'On launch and once a day while Abacus is open.' : 'Only when you click “Refresh rates”.',
+      overrideCount: st.overrides.length + (st.overrides.length === 1 ? ' manual rate' : ' manual rates'),
+      askRestore: function () { set({ restoreAsk: true }); },
+      cancelRestore: function () { set({ restoreAsk: false }); },
+      restoreAsk: st.restoreAsk
+    };
+  }
+}
+</script>
+</body>
+</html>

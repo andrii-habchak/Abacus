@@ -21,6 +21,9 @@ then the docs below, before touching code.
 - **Lane** (one WP): own worktree + branch `wp/<id>-<slug>` from current `main`. Edits only the
   WP's owned paths. Progress, blockers and contract-change requests go to `docs/status/<id>.md`
   (create it at start). Commits on its branch and pushes the branch; never pushes `main`.
+  If the session's worktree branch has another name, rename it first
+  (`git branch -m wp/<id>-<slug>`): only `wp/…` branches are pushed, so no tool names end up
+  in branch names on GitHub.
 
 ## Working rules
 
