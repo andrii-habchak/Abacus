@@ -86,7 +86,8 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
   now equals the bank's latest booked balance with pending holds counted as spent. 1 currency
   exchange half is under "Uncategorised" for review.
 - Done on `main`: `TxnRepository.transaction(_:)` (default implementation for fakes).
-- B5 requests: one rule-matching implementation for the tester and imports (B5 `RuleMatcher` in
+- Done: one rule matcher (AbacusImport `RuleMatcher`, case/diacritic/whitespace folding) used by imports,
+  the editor suggestion and the rules tester. Remaining B5 requests:
   Features vs A6 `RuleMatcher` in AbacusImport — consolidate on A6's); optional protocol
   `balances(asOf:)` / per-category usage counts for 20k-transaction performance; R-CAT-4 default
   categories on first launch still open.

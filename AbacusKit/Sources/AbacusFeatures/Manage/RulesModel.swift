@@ -1,25 +1,7 @@
 import AbacusDomain
+import AbacusImport
 import Foundation
 import Observation
-
-/// "Description contains X → category Y" (R-IMP-8): the first enabled rule, in order, whose
-/// pattern the description contains (ignoring case) and whose account, if it has one, is the
-/// transaction's. Rules are checked top to bottom; the first match wins.
-public enum RuleMatcher {
-  /// `accountID == nil` (the tester's "any account") lets per-account rules match too.
-  public static func firstMatch(
-    description: String, accountID: Account.ID?, rules: [CategoryRule]
-  ) -> CategoryRule? {
-    let text = description.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else { return nil }
-    return rules.first { rule in
-      let pattern = rule.pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard rule.isEnabled, !pattern.isEmpty else { return false }
-      if let required = rule.accountID, let accountID, required != accountID { return false }
-      return text.range(of: pattern, options: .caseInsensitive) != nil
-    }
-  }
-}
 
 /// One rule row: enable toggle, pattern, account, category, origin, hit count.
 public struct RuleRow: Identifiable, Equatable, Sendable {
@@ -89,7 +71,8 @@ public final class RulesModel {
   // MARK: Tester
 
   public var match: CategoryRule? {
-    RuleMatcher.firstMatch(description: probe, accountID: probeAccountID, rules: rules)
+    // Same matching as imports and the editor (AbacusImport.RuleMatcher), in rule order.
+    rules.first { RuleMatcher.matches($0, description: probe, accountID: probeAccountID, categories: categories) }
   }
 
   /// "Matches “biedronka” → Food › Groceries" / "No rule matches; the category stays empty for

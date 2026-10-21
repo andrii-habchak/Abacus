@@ -16,6 +16,15 @@ public struct RuleMatcher: Sendable {
       categories.filter { !$0.isArchived }.map { ($0.id, $0.kind) }, uniquingKeysWith: { a, _ in a })
   }
 
+  /// Whether `rule` alone matches `description` (enabled, category active and of the rule's
+  /// kind); `accountID == nil` lets a per-account rule match too (the rules tester's "any
+  /// account").
+  public static func matches(_ rule: CategoryRule, description: String, accountID: Account.ID?, categories: [AbacusDomain.Category]) -> Bool {
+    guard let kind = categories.first(where: { $0.id == rule.categoryID })?.kind else { return false }
+    let matcher = RuleMatcher(rules: [rule], categories: categories)
+    return matcher.match(description: description, accountID: accountID ?? rule.accountID, kind: kind) != nil
+  }
+
   /// The first rule matching `description` for a transaction of `kind` on `accountID`.
   public func match(description: String, accountID: Account.ID?, kind: CategoryKind) -> CategoryRule? {
     let text = RulePattern.normalized(description)
@@ -30,10 +39,11 @@ public struct RuleMatcher: Sendable {
 
 /// Patterns learned from the user's choices (R-IMP-8).
 public enum RulePattern {
-  /// Lowercased with runs of whitespace collapsed to one space: what patterns and descriptions
-  /// are compared as.
+  /// Case- and diacritic-folded with runs of whitespace collapsed to one space: what patterns
+  /// and descriptions are compared as ("Żabka" matches "zabka").
   public static func normalized(_ text: String) -> String {
-    text.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+      .split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
 
   /// A pattern for a description: its first run of up to three words without digits

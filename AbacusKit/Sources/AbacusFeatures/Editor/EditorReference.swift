@@ -1,4 +1,5 @@
 import AbacusDomain
+import AbacusImport
 import Foundation
 
 /// Accounts, categories, events and rules the editor offers and looks things up in.
@@ -123,19 +124,12 @@ public struct EditorReference: Sendable {
   /// (case-insensitive) and whose account, when set, is `accountID`; its category must exist,
   /// be active and of `kind`.
   public func suggestion(for description: String, accountID: Account.ID?, kind: CategoryKind) -> Suggestion? {
-    let text = description.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else { return nil }
-    for rule in rules where rule.isEnabled {
-      let pattern = rule.pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !pattern.isEmpty, text.range(of: pattern, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-      else { continue }
-      if let only = rule.accountID, only != accountID { continue }
-      guard let category = category(rule.categoryID), !category.isArchived, category.kind == kind else {
-        continue
-      }
-      return Suggestion(rule: rule, category: category)
-    }
-    return nil
+    // Same matching as imports and the rules tester (AbacusImport.RuleMatcher).
+    let matcher = RuleMatcher(rules: rules, categories: Array(categoriesByID.values))
+    guard let rule = matcher.match(description: description, accountID: accountID, kind: kind),
+      let category = category(rule.categoryID)
+    else { return nil }
+    return Suggestion(rule: rule, category: category)
   }
 
   /// R-EVT-2: the event whose date range contains `day` (an event without a start day is never
