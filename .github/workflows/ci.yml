@@ -1,9 +1,8 @@
 name: CI
 
+# Manual only (D37): the owner's free GitHub account has no Actions minutes for macOS runners on
+# a private repo. Local `swift test` + app build are the gate (AGENTS.md).
 on:
-  push:
-    branches: [main, "wp/**"]
-  pull_request:
   workflow_dispatch:
 
 concurrency:

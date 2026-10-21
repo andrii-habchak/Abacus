@@ -103,5 +103,4 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
   folder needs a store-side move/reopen; editor should call `ensureRates(for:)` for old days.
 - CI on GitHub has never run: every job stops with "account is locked due to a billing issue"
   (GitHub Actions billing on the owner's account; macOS runners on a private repo use paid
-  minutes). Local `swift test` and app builds are the gate until the owner resolves billing or
-  decides on CI (owner decision, Q25).
+  minutes). Owner: use local builds, ignore GitHub CI (D37) — workflow made manual-only.
