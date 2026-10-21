@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Abacus — Transactions</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+a{color:#0066CC}a:hover{color:#004C99}
+button,input{font-family:inherit}
+</style>
+</helmet>
+<div style="box-sizing: border-box; min-height: 1000px; padding: 24px; display: flex; justify-content: center;">
+<div style="width: 100%; max-width: 1232px; background: #FFFFFF; border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 16px 48px rgba(0,0,0,0.18); overflow: hidden; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+<nav aria-label="Sections" style="flex: 1 1 220px; box-sizing: border-box; background: #EDEDF0; border-right: 1px solid #D6D6DB; padding: 14px 10px 16px; display: flex; flex-direction: column; gap: 2px;">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding: 2px 8px 18px;">
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FF5F57;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #FEBC2E;"></span>
+<span style="width: 12px; height: 12px; border-radius: 6px; background: #28C840;"></span>
+</div>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 6px 10px 4px;">Overview</div>
+<sc-for list="{{nav1}}" as="item" hint-placeholder-count="3">
+<button type="button" style="{{item.style}}" aria-current="{{item.current}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 14px 10px 4px;">Manage</div>
+<sc-for list="{{nav2}}" as="item" hint-placeholder-count="6">
+<button type="button" style="{{item.style}}">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="{{item.icon}}"></path></svg>
+<span>{{item.label}}</span>
+</button>
+</sc-for>
+<div style="flex-grow: 1; min-height: 24px;"></div>
+<button type="button" style="display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; border-radius: 6px; font-size: 13px; color: #1D1D1F;">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"></path></svg>
+<span>Settings</span>
+</button>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: #FFFFFF;">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #E0E0E5;">
+<h1 style="margin: 0; font-size: 17px; font-weight: 600; flex-grow: 1;">Transactions</h1>
+<label style="display: flex; align-items: center; gap: 6px; background: #EEEEF1; border-radius: 7px; padding: 0 10px; min-height: 30px; width: 240px; max-width: 100%;">
+<svg aria-hidden="true" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#6E6E73" stroke-width="1.6" stroke-linecap="round"><circle cx="5.5" cy="5.5" r="4"></circle><path d="m8.6 8.6 3 3"></path></svg>
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Search description and note</span>
+<input type="search" placeholder="Search description, note" value="{{search}}" onChange="{{onSearch}}" style="border: 0; background: transparent; outline: none; font-size: 13px; width: 100%; color: #1D1D1F;">
+</label>
+<div role="group" aria-label="Display currency" style="display: flex; background: #E8E8ED; border-radius: 7px; padding: 2px; gap: 2px;">
+<sc-for list="{{currencies}}" as="c" hint-placeholder-count="4">
+<button type="button" aria-pressed="{{c.pressed}}" onClick="{{c.pick}}" style="{{c.style}}">{{c.code}}</button>
+</sc-for>
+</div>
+<button type="button" style="display: flex; align-items: center; gap: 6px; border: 0; background: #0A66D9; color: #FFFFFF; font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 6px; min-height: 30px;">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 1.5v9M1.5 6h9"></path></svg>
+<span>New transaction</span>
+</button>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 20px; border-bottom: 1px solid #ECECF0; background: #FAFAFC; position: relative;">
+<div style="position: relative;">
+<button type="button" onClick="{{openDate}}" aria-expanded="{{dateOpenAttr}}" style="{{dateChipStyle}}">
+<svg aria-hidden="true" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M1.5 3h10v8.5h-10zM1.5 5.5h10M4 1.5v2.5M9 1.5v2.5"></path></svg>
+<span>{{dateLabel}}</span>
+<svg aria-hidden="true" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m2 3.5 2.5 2.5L7 3.5"></path></svg>
+</button>
+<sc-if value="{{dateOpen}}" hint-placeholder-val="{{ false }}">
+<div role="menu" style="position: absolute; top: 36px; left: 0; z-index: 5; width: 230px; background: #FFFFFF; border-radius: 9px; box-shadow: 0 0 0 1px rgba(0,0,0,0.1), 0 10px 30px rgba(0,0,0,0.18); padding: 6px; display: flex; flex-direction: column;">
+<sc-for list="{{datePresets}}" as="p" hint-placeholder-count="6">
+<button type="button" role="menuitemradio" aria-checked="{{p.checked}}" onClick="{{p.pick}}" style="{{p.style}}">
+<span style="width: 14px;">{{p.mark}}</span><span>{{p.label}}</span>
+</button>
+</sc-for>
+<div style="border-top: 1px solid #EEEEF2; margin: 6px 4px 0; padding: 8px 6px 4px; display: flex; flex-direction: column; gap: 6px;">
+<span style="font-size: 11px; font-weight: 600; color: #6E6E73;">Custom range</span>
+<div style="display: flex; gap: 6px; align-items: center; font-size: 12px;">
+<label style="display: flex; flex-direction: column; gap: 2px;">From<input type="date" value="2026-09-22" style="font-size: 12px; border: 1px solid #D2D2D7; border-radius: 5px; padding: 3px 4px;"></label>
+<label style="display: flex; flex-direction: column; gap: 2px;">To<input type="date" value="2026-10-21" style="font-size: 12px; border: 1px solid #D2D2D7; border-radius: 5px; padding: 3px 4px;"></label>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+
+<div style="position: relative;">
+<button type="button" onClick="{{openCat}}" aria-expanded="{{catOpenAttr}}" style="{{catChipStyle}}">
+<span>{{catLabel}}</span>
+<svg aria-hidden="true" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m2 3.5 2.5 2.5L7 3.5"></path></svg>
+</button>
+<sc-if value="{{catOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; top: 36px; left: 0; z-index: 5; width: 250px; max-height: 360px; overflow-y: auto; background: #FFFFFF; border-radius: 9px; box-shadow: 0 0 0 1px rgba(0,0,0,0.1), 0 10px 30px rgba(0,0,0,0.18); padding: 8px; display: flex; flex-direction: column; gap: 2px;">
+<sc-for list="{{catOptions}}" as="o" hint-placeholder-count="10">
+<sc-if value="{{o.isHeader}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 11px; font-weight: 600; color: #6E6E73; padding: 8px 6px 2px;">{{o.label}}</span>
+</sc-if>
+<sc-if value="{{o.isOption}}" hint-placeholder-val="{{ true }}">
+<label style="{{o.style}}">
+<input type="checkbox" checked="{{o.checked}}" onChange="{{o.toggle}}">
+<span style="{{o.dotStyle}}"></span>
+<span>{{o.label}}</span>
+</label>
+</sc-if>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="position: relative;">
+<button type="button" onClick="{{openAcct}}" aria-expanded="{{acctOpenAttr}}" style="{{acctChipStyle}}">
+<span>{{acctLabel}}</span>
+<svg aria-hidden="true" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m2 3.5 2.5 2.5L7 3.5"></path></svg>
+</button>
+<sc-if value="{{acctOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; top: 36px; left: 0; z-index: 5; width: 240px; background: #FFFFFF; border-radius: 9px; box-shadow: 0 0 0 1px rgba(0,0,0,0.1), 0 10px 30px rgba(0,0,0,0.18); padding: 8px; display: flex; flex-direction: column; gap: 2px;">
+<sc-for list="{{acctOptions}}" as="o" hint-placeholder-count="6">
+<label style="display: flex; align-items: center; gap: 8px; padding: 5px 6px; font-size: 13px; border-radius: 5px;">
+<input type="checkbox" checked="{{o.checked}}" onChange="{{o.toggle}}">
+<span style="flex-grow: 1;">{{o.label}}</span>
+<span style="font-size: 11px; color: #6E6E73;">{{o.cur}}</span>
+</label>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div role="group" aria-label="Type" style="display: flex; background: #E8E8ED; border-radius: 7px; padding: 2px; gap: 2px;">
+<sc-for list="{{typeToggles}}" as="t" hint-placeholder-count="3">
+<button type="button" aria-pressed="{{t.pressed}}" onClick="{{t.toggle}}" style="{{t.style}}">{{t.label}}</button>
+</sc-for>
+</div>
+
+<div style="position: relative;">
+<button type="button" onClick="{{openEvent}}" aria-expanded="{{eventOpenAttr}}" style="{{eventChipStyle}}">
+<span>{{eventLabel}}</span>
+<svg aria-hidden="true" width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m2 3.5 2.5 2.5L7 3.5"></path></svg>
+</button>
+<sc-if value="{{eventOpen}}" hint-placeholder-val="{{ false }}">
+<div role="menu" style="position: absolute; top: 36px; left: 0; z-index: 5; width: 200px; background: #FFFFFF; border-radius: 9px; box-shadow: 0 0 0 1px rgba(0,0,0,0.1), 0 10px 30px rgba(0,0,0,0.18); padding: 6px; display: flex; flex-direction: column;">
+<sc-for list="{{eventOptions}}" as="p" hint-placeholder-count="3">
+<button type="button" role="menuitemradio" aria-checked="{{p.checked}}" onClick="{{p.pick}}" style="{{p.style}}">
+<span style="width: 14px;">{{p.mark}}</span><span>{{p.label}}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="flex-grow: 1;"></div>
+<sc-if value="{{hasFilters}}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{clearFilters}}" style="border: 0; background: transparent; color: #0A66D9; font-size: 13px; padding: 5px 6px; min-height: 30px;">Clear filters</button>
+</sc-if>
+<button type="button" onClick="{{toggleSort}}" aria-label="{{sortAria}}" style="display: flex; align-items: center; gap: 6px; border: 1px solid #D2D2D7; background: #FFFFFF; font-size: 13px; padding: 5px 10px; border-radius: 6px; min-height: 30px; color: #1D1D1F;">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 1.5v9M1.5 8.5l2 2 2-2M8.5 10.5v-9M6.5 3.5l2-2 2 2"></path></svg>
+<span>{{sortLabel}}</span>
+</button>
+</div>
+
+<div style="flex-grow: 1; display: flex; flex-direction: column; min-height: 560px;">
+<div role="presentation" style="display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1.2fr); gap: 12px; padding: 8px 20px 8px 58px; font-size: 11px; font-weight: 600; color: #6E6E73; border-bottom: 1px solid #ECECF0;">
+<span>Description</span><span>Category</span><span>Account</span><span style="text-align: right;">Amount</span>
+</div>
+<sc-if value="{{isEmpty}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 60px 20px; text-align: center; color: #6E6E73; font-size: 14px;">No transactions match these filters.</div>
+</sc-if>
+<sc-for list="{{days}}" as="d" hint-placeholder-count="6">
+<div style="display: flex; align-items: baseline; gap: 8px; padding: 14px 20px 6px; background: #FFFFFF;">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; color: #3A3A3C; flex-grow: 1;">{{d.label}}</h2>
+<span style="font-size: 12px; color: #6E6E73;">{{d.total}}</span>
+</div>
+<sc-for list="{{d.rows}}" as="r" hint-placeholder-count="3">
+<button type="button" onClick="{{r.pick}}" aria-pressed="{{r.selected}}" style="{{r.style}}">
+<span aria-hidden="true" style="{{r.iconStyle}}">{{r.initial}}</span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+<span style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+<span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.payee}}</span>
+<sc-for list="{{r.badges}}" as="b" hint-placeholder-count="1">
+<span style="{{b.style}}">{{b.label}}</span>
+</sc-for>
+</span>
+<span style="font-size: 12px; color: #6E6E73; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.sub}}</span>
+</span>
+<span style="color: #3A3A3C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.category}}</span>
+<span style="color: #3A3A3C; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{r.account}}</span>
+<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+<span style="{{r.amountStyle}}">{{r.amount}}</span>
+<span style="font-size: 11px; color: #6E6E73;">{{r.amountSub}}</span>
+</span>
+</button>
+<sc-for list="{{r.lines}}" as="l" hint-placeholder-count="1">
+<div style="display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1.2fr); gap: 12px; align-items: center; padding: 5px 20px 7px 58px; font-size: 12px; color: #3A3A3C; border-bottom: 1px solid #F3F3F6;">
+<span style="display: flex; align-items: center; gap: 6px;">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8E8E93" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 1.5v5h7M7.5 4.5l2 2-2 2"></path></svg>
+<span>{{l.label}}</span>
+</span>
+<span>{{l.category}}</span>
+<span></span>
+<span style="{{l.amountStyle}}">{{l.amount}}</span>
+</div>
+</sc-for>
+</sc-for>
+</sc-for>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding: 12px 20px; border-top: 1px solid #E0E0E5; background: #FAFAFC; font-size: 13px;">
+<span style="color: #6E6E73; flex-grow: 1;">{{countLabel}}</span>
+<span>Income <strong style="color: #1B6B3A; font-weight: 600;">{{totIncome}}</strong></span>
+<span>Expenses <strong style="font-weight: 600;">{{totExpense}}</strong></span>
+<span>Net <strong style="{{totNetStyle}}">{{totNet}}</strong></span>
+<span style="font-size: 11px; color: #6E6E73;">Converted at each day's NBU rate</span>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      cur: 'PLN', search: '', preset: 'last30', cats: [], accts: [],
+      types: { expense: true, income: true, transfer: true }, event: null,
+      newestFirst: true, open: null, selected: null
+    };
+  }
+  renderVals() {
+    var self = this;
+    var st = this.state;
+    var RATES = { UAH: 1, PLN: 11.3, EUR: 48.5, USD: 41.6 };
+    var cur = st.cur;
+    function fmt(v, c, signed) {
+      var s = new Intl.NumberFormat('en-US', { style: 'currency', currency: c, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v));
+      if (!signed) return s;
+      return (v < 0 ? '−' : '+') + s;
+    }
+    function conv(v, from) { return v * RATES[from] / RATES[cur]; }
+
+    var navBase = 'display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; padding: 6px 10px; border-radius: 6px; font-size: 13px; min-height: 30px;';
+    var navOn = navBase + ' background: #D4D4DA; color: #1D1D1F; font-weight: 500;';
+    var navOff = navBase + ' background: transparent; color: #1D1D1F;';
+    var I = {
+      home: 'M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H10v-4H6v4H3a.5.5 0 0 1-.5-.5z',
+      list: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01',
+      events: 'M3 3.5h10v10H3zM3 6.5h10M5.5 2v3M10.5 2v3',
+      accounts: 'M2 4.5h12v8H2zM2 7h12M4.5 10h2',
+      categories: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+      budget: 'M8 2a6 6 0 1 0 6 6H8z M9.5 1.5a5 5 0 0 1 5 5h-5z',
+      importI: 'M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12v1.5h11V12',
+      rates: 'M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5',
+      rules: 'M3 4h10M3 8h6M3 12h8'
+    };
+    var nav1 = [
+      { label: 'Dashboard', icon: I.home, style: navOff, current: 'false' },
+      { label: 'Transactions', icon: I.list, style: navOn, current: 'page' },
+      { label: 'Events', icon: I.events, style: navOff, current: 'false' }
+    ];
+    var nav2 = [
+      { label: 'Accounts', icon: I.accounts, style: navOff },
+      { label: 'Categories', icon: I.categories, style: navOff },
+      { label: 'Budget', icon: I.budget, style: navOff },
+      { label: 'Import', icon: I.importI, style: navOff },
+      { label: 'Exchange rates', icon: I.rates, style: navOff },
+      { label: 'Rules', icon: I.rules, style: navOff }
+    ];
+    var segBase = 'border: 0; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 5px; min-height: 26px;';
+    var segOn = segBase + ' background: #FFFFFF; color: #1D1D1F; box-shadow: 0 1px 2px rgba(0,0,0,0.15);';
+    var segOff = segBase + ' background: transparent; color: #3A3A3C;';
+    var currencies = ['UAH', 'PLN', 'EUR', 'USD'].map(function (code) {
+      return { code: code, pressed: code === cur ? 'true' : 'false', style: code === cur ? segOn : segOff, pick: function () { self.setState({ cur: code }); } };
+    });
+
+    var ACCTS = {
+      mono: { name: 'Monobank Black', cur: 'UAH' },
+      pko: { name: 'PKO Personal', cur: 'PLN' },
+      pkousd: { name: 'PKO USD', cur: 'USD' },
+      pkocc: { name: 'PKO Credit Card', cur: 'PLN' },
+      rev: { name: 'Revolut EUR', cur: 'EUR' },
+      cash: { name: 'Cash PLN', cur: 'PLN' }
+    };
+    var CATS = {
+      food: { name: 'Food', color: '#E07B14' },
+      groceries: { name: 'Groceries', parent: 'food', color: '#E07B14' },
+      eating: { name: 'Eating out', parent: 'food', color: '#1E9E7E' },
+      housing: { name: 'Housing', color: '#0A64D6' },
+      rent: { name: 'Rent', parent: 'housing', color: '#0A64D6' },
+      transport: { name: 'Transport', color: '#7B4FCF' },
+      taxi: { name: 'Taxi', parent: 'transport', color: '#7B4FCF' },
+      fuel: { name: 'Fuel', parent: 'transport', color: '#7B4FCF' },
+      health: { name: 'Health', color: '#C93B6E' },
+      bills: { name: 'Bills', color: '#5C7B99' },
+      mobile: { name: 'Mobile', parent: 'bills', color: '#5C7B99' },
+      clothing: { name: 'Clothing', color: '#A35A2A' },
+      fees: { name: 'Fees', color: '#8E8E93' },
+      salary: { name: 'Salary', kind: 'income', color: '#1B8A4A' },
+      cashback: { name: 'Cashback', kind: 'income', color: '#1B8A4A' }
+    };
+    function catPath(k) {
+      var c = CATS[k];
+      return c.parent ? CATS[c.parent].name + ' › ' + c.name : c.name;
+    }
+    var TX = [
+      { id: 1, day: '2026-10-21', time: '15:07', type: 'expense', payee: 'Bolt', cat: 'taxi', acct: 'pko', amt: 24.90, pending: true },
+      { id: 2, day: '2026-10-21', time: '12:41', type: 'expense', payee: 'Twoja Farmacja', cat: 'health', acct: 'pko', amt: 26.65, pending: true },
+      { id: 3, day: '2026-10-20', time: '18:02', type: 'transfer', payee: 'ATM withdrawal', acct: 'pko', to: 'cash', amt: 500, toAmt: 500 },
+      { id: 4, day: '2026-10-19', time: '09:15', type: 'expense', payee: 'Biedronka', cat: 'groceries', acct: 'pko', amt: 15.89 },
+      { id: 5, day: '2026-10-18', time: '13:20', type: 'expense', payee: 'Café Bretelles', cat: 'eating', acct: 'mono', amt: 395.52, orig: '€8.90', event: 'Lyon trip', note: 'Lunch with the team' },
+      { id: 6, day: '2026-10-15', time: '10:00', type: 'transfer', payee: 'To EUR card', acct: 'mono', to: 'rev', amt: 4420, toAmt: 100, lines: [{ label: 'Transfer fee', cat: 'fees', amt: 22, kind: 'expense' }] },
+      { id: 7, day: '2026-10-12', time: '08:00', type: 'expense', payee: 'Rent October', cat: 'rent', acct: 'pko', amt: 4000, note: 'Standing order' },
+      { id: 8, day: '2026-10-10', time: '11:30', type: 'income', payee: 'Salary', cat: 'salary', acct: 'rev', amt: 3200 },
+      { id: 9, day: '2026-10-08', time: '19:44', type: 'expense', payee: 'Orange', cat: 'mobile', acct: 'pko', amt: 35.00 },
+      { id: 10, day: '2026-10-08', time: '10:12', type: 'expense', payee: 'Zalando', cat: 'clothing', acct: 'pko', amt: 120.00, refund: true, note: 'Returned jacket' },
+      { id: 11, day: '2026-10-05', time: '17:55', type: 'expense', payee: 'Lidl', cat: 'groceries', acct: 'pko', amt: 86.40, lines: [{ label: 'Cashback', cat: 'cashback', amt: 2.00, kind: 'income' }] },
+      { id: 12, day: '2026-10-03', time: '22:10', type: 'expense', payee: 'Uber', cat: 'taxi', acct: 'rev', amt: 14.20, event: 'Lyon trip' },
+      { id: 13, day: '2026-09-30', time: '07:48', type: 'expense', payee: 'Orlen', cat: 'fuel', acct: 'pkocc', amt: 210.00 },
+      { id: 14, day: '2026-09-28', time: '20:30', type: 'expense', payee: 'Pizzeria Napoli', cat: 'eating', acct: 'mono', amt: 640.00 },
+      { id: 15, day: '2026-09-25', time: '14:05', type: 'transfer', payee: 'Currency exchange', acct: 'pkousd', to: 'pko', amt: 2000, toAmt: 7660 },
+      { id: 16, day: '2026-09-23', time: '18:22', type: 'expense', payee: 'Auchan', cat: 'groceries', acct: 'pko', amt: 142.30 }
+    ];
+
+    var PRESETS = [
+      { id: 'last30', label: 'Last 30 days', from: '2026-09-22', to: '2026-10-21' },
+      { id: 'thisMonth', label: 'This month', from: '2026-10-01', to: '2026-10-31' },
+      { id: 'lastMonth', label: 'Last month', from: '2026-09-01', to: '2026-09-30' },
+      { id: 'last3', label: 'Last 3 months', from: '2026-07-22', to: '2026-10-21' },
+      { id: 'thisYear', label: 'This year', from: '2026-01-01', to: '2026-12-31' }
+    ];
+    var preset = PRESETS.filter(function (p) { return p.id === st.preset; })[0];
+    function toggleIn(list, v) { return list.indexOf(v) >= 0 ? list.filter(function (x) { return x !== v; }) : list.concat([v]); }
+    function setOpen(name) { return function () { self.setState({ open: st.open === name ? null : name }); }; }
+
+    var chipBase = 'display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 5px 10px; border-radius: 6px; min-height: 30px;';
+    var chipOff = chipBase + ' border: 1px solid #D2D2D7; background: #FFFFFF; color: #1D1D1F;';
+    var chipOn = chipBase + ' border: 1px solid #0A66D9; background: #EAF2FD; color: #0A4FA8;';
+    var itemBase = 'display: flex; align-items: center; gap: 6px; border: 0; text-align: left; font-size: 13px; padding: 6px 8px; border-radius: 5px; min-height: 30px; color: #1D1D1F;';
+
+    var datePresets = PRESETS.map(function (p) {
+      var on = p.id === st.preset;
+      return { label: p.label, checked: on ? 'true' : 'false', mark: on ? '✓' : '', style: itemBase + (on ? ' background: #EAF2FD;' : ' background: transparent;'), pick: function () { self.setState({ preset: p.id, open: null }); } };
+    });
+
+    // Category options: parents as group headers, children as options; picking a parent covers its children.
+    var catOptions = [];
+    var groupOrder = ['food', 'housing', 'transport', 'bills', 'health', 'clothing', 'fees', 'salary', 'cashback'];
+    var optBase = 'display: flex; align-items: center; gap: 8px; padding: 5px 6px; font-size: 13px; border-radius: 5px;';
+    groupOrder.forEach(function (k) {
+      var kids = Object.keys(CATS).filter(function (c) { return CATS[c].parent === k; });
+      catOptions.push({ isHeader: false, isOption: true, label: kids.length ? CATS[k].name + ' (all)' : CATS[k].name, checked: st.cats.indexOf(k) >= 0, toggle: function () { self.setState({ cats: toggleIn(st.cats, k) }); }, style: optBase + ' font-weight: 500;', dotStyle: 'width: 8px; height: 8px; border-radius: 4px; background: ' + CATS[k].color + ';' });
+      kids.forEach(function (c) {
+        catOptions.push({ isHeader: false, isOption: true, label: CATS[c].name, checked: st.cats.indexOf(c) >= 0 || st.cats.indexOf(k) >= 0, toggle: function () { self.setState({ cats: toggleIn(st.cats, c) }); }, style: optBase + ' padding-left: 26px;', dotStyle: 'width: 8px; height: 8px; border-radius: 4px; background: ' + CATS[c].color + ';' });
+      });
+    });
+
+    var acctOptions = Object.keys(ACCTS).map(function (k) {
+      return { label: ACCTS[k].name, cur: ACCTS[k].cur, checked: st.accts.indexOf(k) >= 0, toggle: function () { self.setState({ accts: toggleIn(st.accts, k) }); } };
+    });
+
+    var typeToggles = [['expense', 'Expense'], ['income', 'Income'], ['transfer', 'Transfer']].map(function (t) {
+      var on = st.types[t[0]];
+      return { label: t[1], pressed: on ? 'true' : 'false', style: on ? segOn : segOff, toggle: function () { var n = Object.assign({}, st.types); n[t[0]] = !on; self.setState({ types: n }); } };
+    });
+
+    var EVENTS = [null, 'Lyon trip', 'Relocation'];
+    var eventOptions = EVENTS.map(function (e) {
+      var on = st.event === e;
+      return { label: e || 'Any event', checked: on ? 'true' : 'false', mark: on ? '✓' : '', style: itemBase + (on ? ' background: #EAF2FD;' : ' background: transparent;'), pick: function () { self.setState({ event: e, open: null }); } };
+    });
+
+    var q = st.search.trim().toLowerCase();
+    var filtered = TX.filter(function (t) {
+      if (t.day < preset.from || t.day > preset.to) return false;
+      if (!st.types[t.type]) return false;
+      if (st.accts.length && st.accts.indexOf(t.acct) < 0 && st.accts.indexOf(t.to) < 0) return false;
+      if (st.cats.length) {
+        var lineCats = (t.lines || []).map(function (l) { return l.cat; });
+        var ok = [t.cat].concat(lineCats).some(function (c) { return c && (st.cats.indexOf(c) >= 0 || (CATS[c].parent && st.cats.indexOf(CATS[c].parent) >= 0)); });
+        if (!ok) return false;
+      }
+      if (st.event && t.event !== st.event) return false;
+      if (q && (t.payee + ' ' + (t.note || '')).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+    filtered.sort(function (a, b) {
+      var ka = a.day + a.time, kb = b.day + b.time;
+      return st.newestFirst ? (ka < kb ? 1 : -1) : (ka < kb ? -1 : 1);
+    });
+
+    function effect(t) {
+      // Signed value in display currency for totals; transfers are neutral.
+      var a = ACCTS[t.acct];
+      var inc = 0, exp = 0;
+      if (t.type === 'income') inc += conv(t.amt, a.cur);
+      if (t.type === 'expense') { if (t.refund) inc += conv(t.amt, a.cur); else exp += conv(t.amt, a.cur); }
+      (t.lines || []).forEach(function (l) { if (l.kind === 'income') inc += conv(l.amt, a.cur); else exp += conv(l.amt, a.cur); });
+      return { inc: inc, exp: exp };
+    }
+
+    var badge = 'font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px;';
+    var rowBase = 'display: grid; grid-template-columns: 26px minmax(0, 2.4fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1.2fr); gap: 12px; align-items: center; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #F3F3F6; padding: 8px 20px; font-size: 13px; color: #1D1D1F; min-height: 48px;';
+    var DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    var MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    var days = [], byDay = {};
+    var totInc = 0, totExp = 0;
+    filtered.forEach(function (t) {
+      var a = ACCTS[t.acct];
+      var e = effect(t);
+      totInc += e.inc; totExp += e.exp;
+      if (!byDay[t.day]) {
+        var d = new Date(t.day + 'T12:00:00');
+        byDay[t.day] = { label: DOW[d.getDay()] + ', ' + d.getDate() + ' ' + MON[d.getMonth()], rows: [], net: 0 };
+        days.push(byDay[t.day]);
+      }
+      var g = byDay[t.day];
+      g.net += e.inc - e.exp;
+      var badges = [];
+      if (t.pending) badges.push({ label: 'Pending', style: badge + ' background: #FFF1D6; color: #8A4B00;' });
+      if (t.refund) badges.push({ label: 'Refund', style: badge + ' background: #E3F4EA; color: #1B6B3A;' });
+      if (t.event) badges.push({ label: t.event, style: badge + ' background: #EFE8FB; color: #5B34A8;' });
+      var amount, amountStyle, amountSub = '', category, account, color, initial;
+      if (t.type === 'transfer') {
+        var to = ACCTS[t.to];
+        amount = fmt(-t.amt, a.cur, true);
+        amountSub = to.cur !== a.cur ? '→ ' + fmt(t.toAmt, to.cur, true) : '→ ' + to.name;
+        amountStyle = 'color: #3A3A3C; font-weight: 500;';
+        category = 'Transfer';
+        account = a.name + ' → ' + to.name;
+        color = '#8E8E93'; initial = '⇄';
+      } else {
+        var positive = t.type === 'income' || t.refund;
+        amount = fmt(positive ? t.amt : -t.amt, a.cur, true);
+        amountStyle = positive ? 'color: #1B6B3A; font-weight: 600;' : 'color: #1D1D1F; font-weight: 600;';
+        if (t.orig) amountSub = 'Charged ' + t.orig;
+        category = catPath(t.cat);
+        account = a.name;
+        color = CATS[t.cat].color; initial = CATS[t.cat].name.charAt(0);
+      }
+      var sel = st.selected === t.id;
+      g.rows.push({
+        payee: t.payee,
+        sub: (t.note ? t.note + ' · ' : '') + t.time,
+        badges: badges,
+        category: category, account: account,
+        amount: amount, amountStyle: amountStyle, amountSub: amountSub,
+        initial: initial,
+        iconStyle: 'width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #FFFFFF; background: ' + color + ';',
+        selected: sel ? 'true' : 'false',
+        style: rowBase + (sel ? ' background: #DCE9FB;' : ' background: transparent;'),
+        pick: function () { self.setState({ selected: sel ? null : t.id }); },
+        lines: (t.lines || []).map(function (l) {
+          var pos = l.kind === 'income';
+          return { label: l.label, category: catPath(l.cat), amount: fmt(pos ? l.amt : -l.amt, a.cur, true), amountStyle: 'text-align: right; font-weight: 500; color: ' + (pos ? '#1B6B3A' : '#3A3A3C') + ';' };
+        })
+      });
+    });
+    days.forEach(function (g) { g.total = fmt(g.net, cur, true); });
+
+    var catLabel = st.cats.length === 0 ? 'All categories' : (st.cats.length === 1 ? catPath(st.cats[0]) : st.cats.length + ' categories');
+    var acctLabel = st.accts.length === 0 ? 'All accounts' : (st.accts.length === 1 ? ACCTS[st.accts[0]].name : st.accts.length + ' accounts');
+    var allTypes = st.types.expense && st.types.income && st.types.transfer;
+    var hasFilters = st.preset !== 'last30' || st.cats.length > 0 || st.accts.length > 0 || !allTypes || st.event !== null || q.length > 0;
+    var net = totInc - totExp;
+    return {
+      nav1: nav1, nav2: nav2, currencies: currencies,
+      search: st.search,
+      onSearch: function (e) { self.setState({ search: e.target.value }); },
+      dateLabel: preset.label, dateOpen: st.open === 'date', dateOpenAttr: st.open === 'date' ? 'true' : 'false', openDate: setOpen('date'),
+      dateChipStyle: st.preset !== 'last30' ? chipOn : chipOff, datePresets: datePresets,
+      catLabel: catLabel, catOpen: st.open === 'cat', catOpenAttr: st.open === 'cat' ? 'true' : 'false', openCat: setOpen('cat'),
+      catChipStyle: st.cats.length ? chipOn : chipOff, catOptions: catOptions,
+      acctLabel: acctLabel, acctOpen: st.open === 'acct', acctOpenAttr: st.open === 'acct' ? 'true' : 'false', openAcct: setOpen('acct'),
+      acctChipStyle: st.accts.length ? chipOn : chipOff, acctOptions: acctOptions,
+      typeToggles: typeToggles,
+      eventLabel: st.event ? 'Event: ' + st.event : 'Any event', eventOpen: st.open === 'event', eventOpenAttr: st.open === 'event' ? 'true' : 'false', openEvent: setOpen('event'),
+      eventChipStyle: st.event ? chipOn : chipOff, eventOptions: eventOptions,
+      hasFilters: hasFilters,
+      clearFilters: function () { self.setState({ preset: 'last30', cats: [], accts: [], types: { expense: true, income: true, transfer: true }, event: null, search: '', open: null }); },
+      toggleSort: function () { self.setState({ newestFirst: !st.newestFirst }); },
+      sortLabel: st.newestFirst ? 'Newest first' : 'Oldest first',
+      sortAria: st.newestFirst ? 'Sorted newest first. Switch to oldest first' : 'Sorted oldest first. Switch to newest first',
+      days: days, isEmpty: days.length === 0,
+      countLabel: filtered.length + (filtered.length === 1 ? ' transaction' : ' transactions'),
+      totIncome: fmt(totInc, cur), totExpense: fmt(totExp, cur),
+      totNet: fmt(net, cur, true),
+      totNetStyle: 'font-weight: 600; color: ' + (net >= 0 ? '#1B6B3A' : '#B3261E') + ';'
+    };
+  }
+}
+</script>
+</body>
+</html>
