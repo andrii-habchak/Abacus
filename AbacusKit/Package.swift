@@ -46,7 +46,7 @@ let package = Package(
     .testTarget(name: "AbacusFXTests", dependencies: ["AbacusFX", "AbacusTestSupport"]),
     .testTarget(
       name: "AbacusImportTests",
-      dependencies: ["AbacusImport", "AbacusTestSupport"],
+      dependencies: ["AbacusImport", "AbacusStore", "AbacusTestSupport"],
       resources: [.copy("Fixtures")]
     ),
     .testTarget(name: "AbacusFeaturesTests", dependencies: ["AbacusFeatures", "AbacusTestSupport"]),

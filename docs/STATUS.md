@@ -34,6 +34,7 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 | B1 Shell, settings, rates | background agent (own worktree) | `wp/B1-shell` | running since 2026-10-21 (on PreviewData) |
 | B3 Transaction list | background agent (own worktree) | `wp/B3-transactions` | running since 2026-10-21 (on PreviewData) |
 | B2 Dashboard | background agent (own worktree) | `wp/B2-dashboard` | running since 2026-10-21 (on PreviewData + Calc) |
+| A6 Import pipeline | background agent (own worktree) | `wp/A6-pipeline` | running since 2026-10-21 |
 
 ## Contract-change requests (orchestrator queue)
 
@@ -57,5 +58,6 @@ branch each (table below). A1 Calculators is the filler for the first lane that 
 - A5 requests (optional, deferred): fold `StoreError.currencyLocked/.invalidParent` into
   `RepositoryError`; add `list(matching:)` (totals) and `transaction(_:)` to the `TxnRepository`
   protocol if view models need them through the protocol (today on `SQLiteTxnRepository`).
+- Done on `main`: `AbacusImportTests` depends on `AbacusStore` (pipeline integration tests).
 - Done on `main`: migration v3 `importBatchID` on accounts, categories, events; undo removes the
   batch's created entities when unused (D28).
