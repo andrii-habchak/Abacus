@@ -19,7 +19,7 @@ struct RatesModelTests {
     #expect(eur.rateText == "1 EUR = 48.5000 UAH")
     #expect(eur.changeText == "▲ 0.21%")
     #expect(eur.trend == .up)
-    #expect(eur.source == .nbu)
+    #expect(eur.badge == "NBU" && !eur.isManual)
     #expect(eur.series.count == 6)
   }
 
@@ -153,7 +153,7 @@ struct RatesModelTests {
     #expect(saved.fromDay == "2026-10-01")
     #expect(saved.untilDay == nil)
     let eur = try #require(m.rows.first { $0.currency == .EUR })
-    #expect(eur.source == .manual)
+    #expect(eur.isManual == true)
     #expect(eur.rateText == "1 EUR = 49.0000 UAH")
   }
 
@@ -163,12 +163,55 @@ struct RatesModelTests {
     let setup = B1Fixture.setup(overrides: [manual])
     let m = model(setup)
     await m.load()
-    #expect(m.rows.first { $0.currency == .EUR }?.source == .manual)
+    #expect(m.rows.first { $0.currency == .EUR }?.isManual == true)
     await m.removeOverride(manual.id)
     #expect(m.overrideRows.isEmpty)
     #expect(await setup.store.manual.isEmpty)
     let eur = try #require(m.rows.first { $0.currency == .EUR })
-    #expect(eur.source == .nbu)
+    #expect(eur.badge == "NBU" && !eur.isManual)
     #expect(eur.rateText == "1 EUR = 48.5000 UAH")
+  }
+
+  @Test("R-FX-5 a day without rates uses the last published one; cross rates go through UAH")
+  func crossRates() async {
+    let m = model(B1Fixture.setup())
+    await m.load()
+    m.showIn = .EUR
+    #expect(m.rows.map(\.currency) == [.UAH, .PLN, .USD])
+    #expect(m.rows.first { $0.currency == .PLN }?.rateText == "1 PLN = 0.2330 EUR")
+    #expect(m.rows.first { $0.currency == .UAH }?.rateText == "1 UAH = 0.0206 EUR")
+  }
+
+  @Test("R-FX-5 the 30-day series has a point per calendar day from the first known rate")
+  func seriesPoints() async throws {
+    let m = model(B1Fixture.setup())
+    await m.load()
+    let eur = try #require(m.rows.first { $0.currency == .EUR })
+    #expect(eur.series.map(\.day.string) == ["2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21"])
+    #expect(eur.series[1].rate == Decimal(string: "48.00"))  // Saturday repeats Friday
+  }
+
+  @Test("R-FX-2 a one-day manual rate does not touch other days; inverse and UAH legs count")
+  func manualScope() async throws {
+    let past = B1Fixture.override(.EUR, .UAH, "48.20", from: "2026-10-19", until: "2026-10-19")
+    let inverse = B1Fixture.override(.UAH, .USD, "0.025", from: "2026-10-01")
+    let m = model(B1Fixture.setup(overrides: [past, inverse]))
+    await m.load()
+    let eur = try #require(m.rows.first { $0.currency == .EUR })
+    #expect(!eur.isManual)
+    #expect(eur.rateText == "1 EUR = 48.5000 UAH")
+    let usd = try #require(m.rows.first { $0.currency == .USD })
+    #expect(usd.isManual && usd.badge == "Manual")
+    #expect(usd.rateText == "1 USD = 40.0000 UAH")
+    // The UAH leg of USD is manual, so USD shown in PLN is manual too.
+    m.showIn = .PLN
+    #expect(m.rows.first { $0.currency == .USD }?.isManual == true)
+  }
+
+  @Test("R-FX-2 the fetched-rate hint ignores manual rates")
+  func fetchedHintIgnoresManual() async {
+    let m = model(B1Fixture.setup(overrides: [B1Fixture.override(.EUR, .UAH, "49", from: "2026-10-01")]))
+    await m.load()
+    #expect(m.fetchedHint == "fetched: 48.5000")
   }
 }

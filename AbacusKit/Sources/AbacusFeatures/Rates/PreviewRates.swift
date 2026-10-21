@@ -12,10 +12,11 @@ public enum PreviewRates {
     Calendar.current.date(byAdding: .hour, value: 9, to: today.date())!
   }
 
-  private static let shapes: [(Currency, end: Double, drift: Double, wobble: Double)] = [
-    (.PLN, 11.30, 0.25, 0.020),
-    (.EUR, 48.50, 0.40, 0.120),
-    (.USD, 41.60, 0.30, 0.030),
+  /// `dayBefore`: the previous official day's rate relative to `end` (the day change shown).
+  private static let shapes: [(Currency, end: Double, drift: Double, wobble: Double, dayBefore: Double)] = [
+    (.PLN, 11.30, 0.25, 0.020, 0.9979),
+    (.EUR, 48.50, 0.40, 0.120, 1.0025),
+    (.USD, 41.60, 0.30, 0.030, 0.9991),
   ]
 
   public static let fxRates: [FXRate] = {
@@ -36,9 +37,11 @@ public enum PreviewRates {
       for shape in shapes {
         n += 1
         let value: Double =
-          remaining == 0
-          ? shape.end
-          : shape.end - shape.drift * progress + shape.wobble * sin(Double(index) * 1.7)
+          switch remaining {
+          case 0: shape.end
+          case 1: shape.end * shape.dayBefore
+          default: shape.end - shape.drift * progress + shape.wobble * sin(Double(index) * 1.7)
+          }
         let rate = Decimal(string: String(format: "%.4f", value))!
         rates.append(
           FXRate(

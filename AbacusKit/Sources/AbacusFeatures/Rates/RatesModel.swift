@@ -1,4 +1,5 @@
 import AbacusDomain
+import AbacusFX
 import Foundation
 import Observation
 
@@ -25,8 +26,10 @@ public final class RatesModel {
     /// "▲ 0.21%"; empty without a previous official day.
     public var changeText: String
     public var trend: Trend
-    public var series: [RateSeriesPoint]
-    public var source: RateSourceBadge
+    public var series: [RatePoint]
+    /// "NBU" / "Manual".
+    public var badge: String
+    public var isManual: Bool
   }
 
   public struct OverrideRow: Identifiable, Hashable, Sendable {
@@ -81,7 +84,7 @@ public final class RatesModel {
 
   // MARK: Dependencies
 
-  @ObservationIgnored private var table = RatesTable(rates: [], overrides: [])
+  @ObservationIgnored private var table = RateTable()
   @ObservationIgnored let store: any RateStore
   @ObservationIgnored let service: any RatesService
   @ObservationIgnored let today: @Sendable () -> Day
@@ -115,13 +118,13 @@ public final class RatesModel {
     do {
       async let rates = store.rates(from: day.adding(days: -Self.historyDays), to: day)
       async let overrides = store.overrides()
-      table = RatesTable(rates: try await rates, overrides: try await overrides)
+      table = RateTable(rates: try await rates, overrides: try await overrides, today: day)
       errorMessage = nil
     } catch {
       errorMessage = "Couldn't read the rates: \(error.localizedDescription)"
     }
     status = await service.status()
-    if status.latestDay == nil { status.latestDay = table.officialDay(onOrBefore: day) }
+    if status.latestDay == nil { status.latestDay = table.latestDay }
     rebuildRows()
     rebuildOverrides()
     prefillRate()
@@ -192,7 +195,7 @@ public final class RatesModel {
 
   /// The fetched rate for the form's pair on its day, ignoring manual rates.
   public var fetchedFormRate: Decimal? {
-    table.fetchedRate(from: formFrom, to: formTo, on: formStartDay)
+    table.quote(from: formFrom, to: formTo, on: formStartDay, includeOverrides: false)?.rate
   }
 
   /// "fetched: 48.5012".
@@ -255,19 +258,18 @@ public final class RatesModel {
   // MARK: Building
 
   private func rebuildRows() {
-    let day = today()
-    rows = table.rows(showIn: showIn, on: day).map { data in
+    rows = RatesOverview.rows(table, showIn: showIn, on: today()).map { row in
       let trend: Trend =
-        switch data.changePercent {
-        case let change? where change > 0: .up
-        case let change? where change < 0: .down
-        default: .flat
+        switch row.change?.direction {
+        case .up?: .up
+        case .down?: .down
+        case .flat?, nil: .flat
         }
       return Row(
-        currency: data.currency,
-        rateText: "1 \(data.currency.rawValue) = \(formats.rate(data.rate)) \(data.showIn.rawValue)",
-        changeText: data.changePercent.map(formats.change) ?? "",
-        trend: trend, series: data.series, source: data.source)
+        currency: row.currency,
+        rateText: "1 \(row.currency.rawValue) = \(formats.rate(row.quote.rate)) \(row.showIn.rawValue)",
+        changeText: row.change.map { formats.change($0.percent) } ?? "",
+        trend: trend, series: row.series, badge: row.badge, isManual: row.quote.source.isManual)
     }
   }
 
@@ -285,14 +287,12 @@ public final class RatesModel {
   }
 
   func appliesText(_ override: FXOverride) -> String {
-    guard let from = Day(override.fromDay) else { return "Manual" }
-    guard let untilText = override.untilDay else {
-      return "Manual · from \(formats.day(from)) until changed"
+    switch override.scope {
+    case .singleDay(let day)?: "Manual · on \(formats.day(day)) only"
+    case .fromDay(let day)?: "Manual · from \(formats.day(day)) until changed"
+    case .range(let from, let until)?: "Manual · \(formats.day(from)) – \(formats.day(until))"
+    case nil: "Manual"
     }
-    guard let until = Day(untilText), until != from else {
-      return "Manual · on \(formats.day(from)) only"
-    }
-    return "Manual · \(formats.day(from)) – \(formats.day(until))"
   }
 
   private func prefillRate() {
