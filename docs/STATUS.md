@@ -1,29 +1,26 @@
 # Status
 
-_Last updated: 2026-10-21_
+_Last updated: 2026-10-21 (orchestrator)_
 
 ## Now
 
-Tech assignment **draft v0.3** in `docs/REQUIREMENTS.md`: owner answered Q1–Q13, both export
-formats are analysed (`docs/import/`). Waiting on the owner for Q14–Q21 (defaults proposed).
+Planning complete: TA **v1.0 agreed** (`REQUIREMENTS.md`), execution plan in `PLAN.md`.
+Next up: **Wave 1** — WP **P0 Foundation** (orchestrator) and WP **D1 Prototypes** (owner reviews).
 
 ## Done
 
-- Project name agreed (Abacus); GitHub repo `andrii-habchak/Abacus`; docs skeleton pushed.
-- Research: feature set of comparable apps, multi-currency handling, FX sources, persistence
-  options → folded into the TA and `DECISIONS.md` (D5–D8).
-- Saldo and PKO exports analysed → `docs/import/saldo-format.md`, `docs/import/pko-format.md`.
-  Real files are in git-ignored `samples/private/` (only in the main checkout — worktrees must
-  reference `../Abacus/samples/private/` by absolute path).
-- TA v0.3: FX auto + manual, events, subcategories, category budgets, PKO import, deduplication.
+- Repo `andrii-habchak/Abacus`; agent guide `AGENTS.md`.
+- Research (comparable apps, multi-currency, FX sources, persistence) → TA + D5–D8.
+- Saldo and PKO exports analysed → `docs/import/`. Real files in git-ignored `samples/private/`.
+- TA v1.0 (all questions closed), decisions D1–D17, `PLAN.md`.
 
 ## Next
 
-1. Owner answers TA §9 Q14–Q21 → TA v1.0.
-2. Write `docs/PLAN.md` (phases, work packages, owned files, parallel lanes).
-3. Screen prototypes → owner approval → `docs/design/`.
-4. Phase 0 scaffolding.
+1. P0 Foundation → then Wave 2 lanes A5, A3, A2, A4 (A1 as filler).
+2. D1 prototypes, group by group, owner approval → `docs/design/`.
 
-## In flight (who is working on what)
+## In flight
 
-_Nothing yet._
+| WP | Lane / session | Branch | State |
+|----|----------------|--------|-------|
+| — | — | — | — |

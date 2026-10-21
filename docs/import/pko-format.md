@@ -35,7 +35,7 @@ they are first imported._
 | Przelew na telefon przychodz. zew. | BLIK phone transfer | expense/income by sign |
 | Wypłata w bankomacie - kod mobilny | ATM withdrawal | transfer to a cash account (user picks once; remembered) |
 | WYMIANA W KANTORZE - UZNANIE | in-bank currency exchange (credit side) | transfer from the PKO currency account (pair with its export) |
-| Blokada | pending card hold | **skip** (`R-IMP-PKO-2`) |
+| Blokada | pending card hold | expense marked *pending*, upgraded when it settles (`R-IMP-PKO-2`) |
 
 Unknown types → *needs review*, sign decides expense/income.
 
@@ -53,8 +53,16 @@ Description = merchant (from `Lokalizacja` `Adres`) or counterparty name, else `
 
 `pko:<abacus account id>:<Data operacji>:<Data waluty>:<Kwota>:<Saldo po transakcji>:<sha1 of
 the joined detail columns>`. The running balance keeps two identical same-day purchases apart
-(11 same-day/same-amount pairs in one month of data). A pending `Blokada` row is never imported,
-so its later settled row cannot collide with it.
+(11 same-day/same-amount pairs in one month of data).
+
+Pending `Blokada` rows have no booking date and no balance, so their fingerprint is
+`pko:<abacus account id>:hold:<Data waluty>:<Kwota>:<Tytuł>`. A hold disappears from later
+exports once it settles; the settled row (type `Płatność kartą`) gets a normal fingerprint and is
+matched to the pending transaction by account, value date ± 3 days, merchant (`Lokalizacja`
+address) and amount (equal or within 5 %) — then the existing transaction is upgraded, not
+duplicated. A hold that never settles (released by the bank) stays pending; the user deletes it.
+Unverified: whether the hold's `Tytuł` equals the settled row's — check on the first real
+re-import and tighten the match if it does.
 
 ## Cross-source overlap
 

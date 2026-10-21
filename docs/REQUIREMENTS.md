@@ -1,7 +1,7 @@
 # Abacus — tech assignment (TA)
 
-_Status: **DRAFT v0.3** (2026-10-21) — owner answered Q1–Q13; new questions from the export
-analysis are in §9 and must be closed before `PLAN.md` is written._
+_Status: **v1.0 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
+are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
 
@@ -64,11 +64,14 @@ accounts, with as little manual entry as possible (bank and Saldo imports).
 ### 3.4 Transactions — `R-TX`
 - `R-TX-1` Types: **Expense**, **Income**, **Transfer**.
 - `R-TX-2` Common fields: date **and time**, account, amount, description (merchant/payee, from
-  imports or typed), note (optional), optional event (§3.6), source (manual / Saldo / PKO) and
-  import fingerprint.
+  imports or typed), note (optional), optional event (§3.6), source (manual / Saldo / PKO),
+  import fingerprints, and a *pending at the bank* flag (`R-IMP-PKO-2`).
 - `R-TX-3` Expense/Income: category of the matching kind; optional original amount (`R-CUR-4`).
-- `R-TX-4` **Refund**: an expense may be a refund (money comes back into the account and reduces
-  that category's spending); income may likewise be reversed. Shown with its own marker.
+- `R-TX-4` **Refund**: an expense may be marked as a refund (money comes back into the account;
+  it keeps its expense category); income may likewise be reversed. Shown with its own marker.
+  How refunds are counted is a setting (`R-SET-3`): **off by default** → a refund is reported as
+  income ("Refunds") and the category's spending is unchanged; on → it is subtracted from the
+  category's spending and budget. Balances are the same either way.
 - `R-TX-5` Transfer: from-account, to-account, amount sent, amount received. Different
   currencies → both amounts entered, implied rate shown; same currency → one amount. No category;
   not counted as income or expense. Transfers to/from liability accounts are lending/borrowing
@@ -85,8 +88,8 @@ accounts, with as little manual entry as possible (bank and Saldo imports).
 - `R-BUD-1` A **monthly budget**: a total monthly limit in a chosen currency, **allocated across
   categories** (e.g. Rent 4 000, Groceries 2 500). The part of the total not allocated is shown
   as "unallocated / other".
-- `R-BUD-2` Spent per category = that month's expenses (attached expense records included,
-  refunds subtracted) converted to the budget currency at each transaction's date rate. A parent
+- `R-BUD-2` Spent per category = that month's expenses (attached expense records included;
+  refunds subtracted only when `R-SET-3` is on) converted to the budget currency at each transaction's date rate. A parent
   category's limit covers its subcategories.
 - `R-BUD-3` The budget repeats every month until changed; a change applies from the chosen month
   onward (past months keep their limits). No rollover of unspent money in v1.
@@ -98,7 +101,7 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
   the editor pre-selects it for new expenses (can be cleared).
 - `R-EVT-3` Event view: total spent (display currency), by category, transaction list; the list
   filter can filter by event.
-- `R-EVT-4` Events are orthogonal to categories: "Malaga 2024" spending still lands in Eating out,
+- `R-EVT-4` Events are orthogonal to categories: "Trip 2025" spending still lands in Eating out,
   Transport, etc., so monthly category reports stay correct.
 
 ### 3.7 Exchange rates — `R-FX`
@@ -191,13 +194,18 @@ Common pipeline for all sources: **parse → normalise → match/dedupe → prev
 - `R-IMP-SALDO-3` EQUITY "Initial balance" rows become account opening balances (only when the
   account is created by this import).
 - `R-IMP-SALDO-4` Saldo tags are not imported as tags; in the preview the user may turn selected
-  tags into events (e.g. "Malaga 2024").
+  tags into events (e.g. "Trip 2025").
 
 #### PKO BP CSV — `R-IMP-PKO` (details: `docs/import/pko-format.md`)
 - `R-IMP-PKO-1` Windows-1250 encoded, comma-separated, quoted; one file = one PKO account (the file
   does not name it) → the user picks the target account once; remembered.
-- `R-IMP-PKO-2` Rows "Blokada" (pending card holds, balance "W rozliczeniu") are skipped — they
-  appear settled in a later export.
+- `R-IMP-PKO-2` Rows "Blokada" (pending card holds, balance "W rozliczeniu") are **imported as
+  completed payments** (expense dated by `Data waluty`), marked *pending at the bank*. When a later
+  export contains the settled row of the same purchase (same account, value date ± 3 days, same
+  merchant, amount equal or within 5 %), the importer **upgrades** the existing transaction
+  instead of adding a new one: settled amount and booking date win, the settled fingerprint is
+  added, the pending mark is cleared. This is automatic (not a "possible duplicate"), but listed
+  in the preview as "settles N pending payments".
 - `R-IMP-PKO-3` Signed amount → expense/income; a counterparty account number that belongs to an
   Abacus account (`R-ACC-1`) → transfer (paired with the other side if already imported);
   "Oryginalna kwota operacji" → original amount (`R-CUR-4`); merchant/recipient + title →
@@ -207,6 +215,7 @@ Common pipeline for all sources: **parse → normalise → match/dedupe → prev
 - `R-SET-1` Default display currency, rates refresh, data folder location.
 - `R-SET-2` **Backup:** export all data to one file and restore from it (restore replaces all
   data after confirmation).
+- `R-SET-3` "Refunds reduce category spending" — off by default (`R-TX-4`).
 
 ## 5. Non-functional
 - `R-NF-1` Offline-first; only the FX fetch uses the network.
@@ -248,7 +257,7 @@ AI categorisation.
 
 ## 9. Open questions
 
-### Answered (2026-10-21)
+### Answered (2026-10-21) — all
 | # | Answer |
 |---|--------|
 | Q1 | iCloud sync: yes, in v2. Nothing in v1 needs the paid membership. |
@@ -265,14 +274,20 @@ AI categorisation.
 | Q12 | Archived accounts are excluded from net worth; warn before archiving a non-zero account. |
 | Q13 | Date and time. |
 
-### Open (from the export analysis)
-| # | Question | Proposed default |
-|---|----------|------------------|
-| Q14 | Liability accounts (credit cards, debts with people — Saldo has them) and investment accounts in v1, with net worth = assets − liabilities? | Yes |
-| Q15 | Refunds as negative expenses that reduce the category's spending (Saldo has ~25 cancellations)? | Yes |
-| Q16 | Keep the merchant's original amount/currency for card payments abroad (Saldo has HUF/CHF lines on UAH cards)? | Yes, informational |
-| Q17 | Add a **Description** field (merchant/payee) besides Note — imports need it for dedupe and auto-categorisation | Yes |
-| Q18 | Events (§3.6) as the replacement for Saldo tags; offer to turn chosen Saldo tags into events on import | Yes |
-| Q19 | Budget total: set explicitly (with "unallocated" remainder), or always the sum of category limits? | Explicit total |
-| Q20 | Manual rate: per date only, or also "from this date until changed"? | Both |
-| Q21 | Categorisation rules learned from import choices (`R-IMP-8`) | Yes |
+| Q14 | Liability (credit card, loan, debt) and investment accounts in v1; net worth = assets − liabilities. |
+| Q15 | Refund counting is a setting, off by default (`R-SET-3`). |
+| Q16 | Keep the merchant's original amount/currency, informational (`R-CUR-4`). |
+| Q17 | Description field besides Note (`R-TX-2`). |
+| Q18 | Events replace Saldo tags (§3.6, `R-IMP-SALDO-4`). |
+| Q19 | Explicit budget total with an "unallocated" remainder (`R-BUD-1`). |
+| Q20 | Manual rates per date and "from a date until changed" (`R-FX-2`). |
+| Q21 | Categorisation rules learned from import choices (`R-IMP-8`). |
+| — | PKO "Blokada" rows are imported as completed payments and upgraded when they settle (`R-IMP-PKO-2`). |
+
+No open questions. New ones go in a new "Open" table here and block only the requirements they touch.
+
+## 10. Change log
+
+| Version | Date | Change |
+|---------|------|--------|
+| 1.0 | 2026-10-21 | Agreed baseline. |
