@@ -49,6 +49,9 @@ struct ImportView: View {
           }
         }
     }
+    // Fill the window instead of sizing it: without a modest ideal size the hidden scroll
+    // content's height became the window's preferred height and the window grew past the screen.
+    .frame(minWidth: 0, idealWidth: 900, maxWidth: .infinity, minHeight: 0, idealHeight: 600, maxHeight: .infinity)
     .background(ImportPalette.surface)
     .navigationTitle("Import")
     .disabled(model.activity == .committing || model.activity == .undoing)
