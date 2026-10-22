@@ -50,7 +50,7 @@ enum B1Fixture {
   static func setup(
     settings: [SettingKey: String] = [:], overrides: [FXOverride] = [], offline: Bool = false,
     lastUpdate: Date? = at(9), now: Date = at(15), backupFailure: DataServiceError? = nil,
-    lastExport: Date? = nil
+    legacyLastExport: LegacyLastExport = .none
   ) -> Setup {
     let settingsRepo = InMemorySettingsRepository(settings)
     let store = InMemoryRateStore(rates: rates, overrides: overrides)
@@ -62,7 +62,7 @@ enum B1Fixture {
       url: URL(filePath: "/Users/someone/Library/Application Support/Abacus/abacus.sqlite"))
     let environment = AppEnvironment(
       settings: settingsRepo, rateStore: store, rates: service, backup: backup, dataLocation: location,
-      lastExport: .inMemory(lastExport), today: { today }, now: { now }, formats: formats)
+      legacyLastExport: legacyLastExport, today: { today }, now: { now }, formats: formats)
     return Setup(
       environment: environment, settings: settingsRepo, store: store, service: service, backup: backup,
       location: location)

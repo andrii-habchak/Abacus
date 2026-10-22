@@ -4,7 +4,9 @@ import SwiftUI
 /// Menu commands: File › New Transaction (⌘N); View › the sections (⌘1…⌘9) and Refresh Rates
 /// (⌘R); Help › Load Sample Data. Settings… (⌘,) comes with the Settings scene.
 struct AppCommands: Commands {
-  let session: AppSession
+  /// Read on every use: moving the data folder replaces the session (R-SET-1).
+  let host: AppSessionHost
+  private var session: AppSession { host.session }
   private var app: AppModel { session.app }
 
   var body: some Commands {

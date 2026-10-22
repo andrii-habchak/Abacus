@@ -23,6 +23,9 @@ public struct TransactionEditorDependencies: Sendable {
   public var settings: any SettingsRepository
   /// Rates for the "Charged to account" estimate (R-CUR-4); replace it when rates change.
   public var converter: any CurrencyConverter
+  /// Asks for the official rates of `days` (`RateRefresher.ensureRates(for:)`, which follows
+  /// the auto-refresh flag) and answers the rates known afterwards. Nil: rates in memory only.
+  public var requestRates: (@Sendable ([Day]) async -> (any CurrencyConverter)?)?
   public var calendar: Calendar
   /// Date and time a new transaction starts with.
   public var now: @Sendable () -> Date

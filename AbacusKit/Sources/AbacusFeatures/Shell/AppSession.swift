@@ -34,6 +34,10 @@ public final class AppSession {
   @ObservationIgnored private var tasks: [Task<Void, Never>] = []
   @ObservationIgnored private var started = false
   @ObservationIgnored private var ratesStartup: Task<Void, Never>?
+  /// Builds a session like this one on another database (data folder moved, R-SET-1).
+  @ObservationIgnored var rebuild: (@MainActor (any DatabaseWriter) -> AppSession)?
+  /// Set by the app (`AppSessionHost`): shows `next` instead of this session.
+  @ObservationIgnored public var onReplace: (@MainActor (AppSession) -> Void)?
 
   init(
     app: AppModel, dashboard: DashboardModel, transactions: TransactionsViewModel,
@@ -66,14 +70,25 @@ public final class AppSession {
   public static func live(
     database: any DatabaseWriter, source: any OfficialRateSource = FallbackRateSource.standard(),
     calendar: Calendar = .current, now: @escaping @Sendable () -> Date = { Date() },
-    formats: Formats = Formats()
+    formats: Formats = Formats(), legacyLastExport: LegacyLastExport = .none,
+    locationDefaults: UserDefaults? = nil
   ) -> AppSession {
     let rateStore = SQLiteRateStore(database: database)
+    let relay = SessionRelay()
+    let defaultsBox = locationDefaults.map(DefaultsBox.init)
+    var remember: (@Sendable (URL) -> Void)?
+    if let defaultsBox {
+      remember = { url in DatabaseLocation.remember(url, in: defaultsBox.defaults) }
+    }
+    let switchTo: @Sendable (any DatabaseWriter) async -> Bool = { [relay] moved in
+      await relay.session?.switchDatabase(to: moved) ?? false
+    }
+    let location = LiveDataLocation(database: database, remember: remember, switchTo: switchTo)
     let refresher = RateRefresher(store: rateStore, source: source, calendar: calendar, now: now)
     let environment = AppEnvironment(
       settings: SQLiteSettingsRepository(database: database), rateStore: rateStore,
       rates: RefresherRatesService(refresher: refresher), backup: SQLiteBackup(database: database),
-      dataLocation: CurrentDataLocation(database: database), lastExport: .userDefaults(),
+      dataLocation: location, legacyLastExport: legacyLastExport,
       today: { Day(now(), calendar: calendar) }, now: now, formats: formats)
     let transactions = TransactionsViewModel(
       transactions: SQLiteTxnRepository(database: database, calendar: calendar),
@@ -81,30 +96,46 @@ public final class AppSession {
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), converter: RateTable(),
       calendar: calendar, today: { Day(now(), calendar: calendar) })
-    let editor = TransactionEditorDependencies(
+    var editor = TransactionEditorDependencies(
       transactions: SQLiteTxnRepository(database: database, calendar: calendar),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), rules: SQLiteRuleRepository(database: database),
       settings: SQLiteSettingsRepository(database: database), converter: RateTable(), calendar: calendar,
       now: now)
-    return AppSession(
+    // An old day picked in the editor loads its rates (R-EDIT-4, R-FX-1).
+    editor.requestRates = { days in
+      await refresher.ensureRates(for: days)
+      return await refresher.table
+    }
+    let session = AppSession(
       app: AppModel(environment: environment),
       dashboard: DashboardModel(dependencies: .live(database: database, refresher: refresher)),
       transactions: transactions, editorDependencies: editor,
       manage: .live(database: database, refresher: refresher), database: database, refresher: refresher)
+    relay.session = session
+    session.rebuild = { moved in
+      live(
+        database: moved, source: source, calendar: calendar, now: now, formats: formats,
+        locationDefaults: defaultsBox?.defaults)
+    }
+    return session
   }
 
   /// The app database prepared by `AppBootstrap` (`defaultDatabase`), or the database file at
-  /// `path` when given (demos and screenshots that must not touch the real data).
+  /// `path` when given (demos and screenshots that must not touch the real data). A demo
+  /// database never changes the remembered data folder nor takes over the old last-export date.
   public static func live(databasePath path: String? = nil) throws -> AppSession {
-    if let path {
-      let url = URL(filePath: path)
-      try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-      return live(database: try AbacusDatabase.open(at: url))
-    }
     @Dependency(\.defaultDatabase) var database
-    return live(database: database)
+    guard let path else {
+      return live(database: database, legacyLastExport: .userDefaults(), locationDefaults: .standard)
+    }
+    let url = URL(filePath: path)
+    if url.standardizedFileURL.path == URL(filePath: database.path).standardizedFileURL.path {
+      return live(database: database)
+    }
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    return live(database: try AbacusDatabase.open(at: url))
   }
 
   /// Synthetic data in memory; nothing is stored or fetched.
@@ -123,6 +154,8 @@ public final class AppSession {
   public func start() async {
     guard !started else { return }
     started = true
+    // First launch: an empty database gets the editable default categories (R-CAT-4).
+    if let database { _ = try? await DefaultCategories.seedIfEmpty(database) }
     await app.load()
     transactions.displayCurrency = app.displayCurrency
     transactions.refundsReduceSpending = app.refundsReduceSpending
@@ -168,6 +201,21 @@ public final class AppSession {
     if dashboard.phase == .loaded { await dashboard.refreshRates() }
     if events.phase == .loaded { await events.refreshRates() }
     await app.rates.load()
+  }
+
+  /// The data folder moved (R-SET-1): a session on the moved database replaces this one, keeps
+  /// the selected section and is started before the window shows it. False when the app did
+  /// not install `onReplace` (nothing could show the new session).
+  func switchDatabase(to database: any DatabaseWriter) async -> Bool {
+    guard let onReplace, let rebuild else { return false }
+    let next = rebuild(database)
+    next.app.section = app.section
+    stop()
+    await next.start()
+    let folder = URL(filePath: database.path).deletingLastPathComponent()
+    next.app.data.announce(DataSettingsModel.movedMessage(folder: folder))
+    onReplace(next)
+    return true
   }
 
   /// After a restore or loading sample data: every screen re-reads the database.
@@ -253,38 +301,22 @@ public final class AppSession {
 
 /// Seeds the synthetic `PreviewData` set (accounts, categories, events, transactions, budget)
 /// for demos. Settings and rates are left alone: real rates come from the rate service.
+/// Categories already in the database (the default set, R-CAT-4) are reused by name.
 public enum SampleData {
   /// Returns false, changing nothing, when the database already has an account.
   public static func loadIfEmpty(into database: any DatabaseWriter) async throws -> Bool {
     try await database.write { db in
       guard try Account.fetchCount(db) == 0 else { return false }
-      try db.seed {
-        for account in PreviewData.accounts { account }
-        for category in PreviewData.categories { category }
-        for event in PreviewData.events { event }
-        for txn in PreviewData.txns { txn }
-        for record in PreviewData.attachedRecords { record }
-        PreviewData.budgetPlan
-        for allocation in PreviewData.budgetAllocations { allocation }
-      }
+      try seed(db)
       return true
     }
   }
 }
 
-/// The database file in use. Moving it is not supported yet (see docs/status/B1.md).
-public struct CurrentDataLocation: DataLocationService {
-  let url: URL
-
-  public init(database: any DatabaseWriter) {
-    url = URL(filePath: database.path)
-  }
-
-  public func databaseURL() async -> URL { url }
-
-  public func moveDatabase(to folder: URL) async throws {
-    throw DataServiceError.failed("Moving the database to another folder isn't available yet")
-  }
+/// Hands the data folder move to the session once it exists (it is built after its services).
+@MainActor
+final class SessionRelay {
+  weak var session: AppSession?
 }
 
 extension SQLiteBackup: BackupService {}

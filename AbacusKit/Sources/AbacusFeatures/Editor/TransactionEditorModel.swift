@@ -47,6 +47,9 @@ public final class TransactionEditorModel {
   @ObservationIgnored private let dependencies: TransactionEditorDependencies
   @ObservationIgnored private let calendar: Calendar
   @ObservationIgnored private let moneyFormat = TransactionMoneyFormat()
+  /// Days whose rates were asked for (R-EDIT-4, R-FX-1), and the request in flight.
+  @ObservationIgnored private var requestedRateDays: Set<Day> = []
+  @ObservationIgnored private var ratesTask: Task<Void, Never>?
 
   public init(mode: TransactionEditorMode, dependencies: TransactionEditorDependencies) {
     self.mode = mode
@@ -94,6 +97,7 @@ public final class TransactionEditorModel {
       }
     }
     isLoaded = true
+    requestRatesIfNeeded()
   }
 
   /// R-EDIT-4/5: currency and account of the last transaction, From/To of the last transfer.
@@ -137,6 +141,7 @@ public final class TransactionEditorModel {
       if let category = reference.category(draft.categoryID), category.kind != categoryKind {
         draft.categoryID = nil
       }
+      requestRatesIfNeeded()
     }
   }
 
@@ -157,6 +162,7 @@ public final class TransactionEditorModel {
       draft.currencyCode = newValue
       draft.chargedEdited = false
       defaultsTouched = true
+      requestRatesIfNeeded()
     }
   }
 
@@ -167,6 +173,7 @@ public final class TransactionEditorModel {
       draft.accountID = newValue
       draft.chargedEdited = false
       defaultsTouched = true
+      requestRatesIfNeeded()
     }
   }
 
@@ -223,7 +230,10 @@ public final class TransactionEditorModel {
 
   public var occurredAt: Date {
     get { draft.occurredAt }
-    set { draft.occurredAt = newValue }
+    set {
+      draft.occurredAt = newValue
+      requestRatesIfNeeded()
+    }
   }
 
   /// The event shown: the user's pick, else the event active on the date (R-EVT-2).
@@ -361,6 +371,29 @@ public final class TransactionEditorModel {
   public var chargedRate: Decimal? {
     guard isForeign, let account, let currency = Currency(rawValue: draft.currencyCode) else { return nil }
     return converter.rate(from: currency, to: account.currency, on: day)
+  }
+
+  /// A foreign amount in one of the rate currencies (D24: UAH, PLN, EUR, USD; others stay
+  /// manual) asks the rate service for the transaction's day, once per day; when the answer
+  /// arrives the converter is replaced, so an untouched "Charged to account" pre-fills
+  /// (R-EDIT-4, R-FX-1). With auto-refresh off the refresher only remembers the day.
+  private func requestRatesIfNeeded() {
+    guard isLoaded, let request = dependencies.requestRates, isForeign,
+      Currency(rawValue: draft.currencyCode) != nil
+    else { return }
+    let day = day
+    guard requestedRateDays.insert(day).inserted else { return }
+    let previous = ratesTask
+    ratesTask = Task { [weak self] in
+      await previous?.value
+      guard let converter = await request([day]) else { return }
+      self?.converter = converter
+    }
+  }
+
+  /// Waits for the rate requests started so far (tests).
+  public func waitForRates() async {
+    await ratesTask?.value
   }
 
   /// The amount converted at the day's rate, in the account's minor units.
