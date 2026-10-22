@@ -4,10 +4,15 @@ _Last updated: 2026-10-21 (orchestrator)_
 
 ## Now
 
-**All v1 work packages are merged** (P0, D1, A1–A6, B1–B6). Every sidebar section runs on the
-live database, including Import. The owner's real Saldo history and PKO statement are imported.
-Next: **I1** (end-to-end check by the owner on real data, small open items) and **I2** (release
-build, README with sample-data screenshots, tag v1.0.0).
+_Updated 2026-10-22 (orchestrator)._ **v1 is feature-complete and merged** (P0, D1, A1–A6,
+B1–B6, C1, C2, R1). 534 tests pass locally (incl. real-data tests); the app builds; GitHub CI
+is not used (D37). The owner's real Saldo history and PKO statement are in the app database.
+
+**Left before tagging v1.0.0** (see "Open items" below):
+1. Import screen still makes the window ~1,018 pt tall instead of 860 pt (partial fix in 2cf555b).
+2. Rebuild the DMG on the final `main` with `scripts/build-dmg.sh`, check it opens, then tag
+   `v1.0.0` (update the CHANGELOG date if not 2026-10-22).
+3. Owner review of the app on real data, and of the C2 interpretations (D40).
 
 ## Done
 
@@ -20,8 +25,8 @@ build, README with sample-data screenshots, tag v1.0.0).
 
 ## Next
 
-1. Review and merge Wave 2 branches as they finish; start A1 when a slot frees up.
-2. Wave 3: A6 Import pipeline (after A5) and UI lanes B1–B3 on PreviewData.
+See "Open items" at the end: Import window height, then the v1.0.0 DMG and tag. The hand-off for
+a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints and copies it).
 
 ## In flight
 
@@ -40,8 +45,8 @@ build, README with sample-data screenshots, tag v1.0.0).
 | B5 Management | background agent | `wp/B5-manage` | **merged** 2026-10-21 on PreviewData; screenshots `docs/status/B5-screens/`; wiring notes in `docs/status/B5.md` |
 | B6 Import wizard | background agent | `wp/B6-import` | **merged and wired** 2026-10-21; screenshots `docs/status/B6-screens/` |
 | C1 List filters | background agent | `wp/C1-filters` | **merged** 2026-10-22 |
-| C2 Settings, data, defaults | background agent (own worktree) | `wp/C2-settings` | running since 2026-10-21 |
-| R1 Release prep | background agent (own worktree) | `wp/R1-release` | running since 2026-10-21 |
+| C2 Settings, data, defaults | background agent | `wp/C2-settings` | **merged** 2026-10-22 |
+| R1 Release prep | background agent | `wp/R1-release` | **merged** 2026-10-22 (icon, 1.0.0, `scripts/build-dmg.sh`, README, CHANGELOG) |
 
 ## Contract-change requests (orchestrator queue)
 
@@ -114,3 +119,25 @@ build, README with sample-data screenshots, tag v1.0.0).
   transactions" opens only that batch); editing a learned rule inside the preview.
 - Contracts on `main` for Phase 3 lanes: `TxnQuery.includeUncategorised`, `TxnQuery.importBatchIDs`,
   `SettingKey.lastBackupExport`.
+
+## Open items (2026-10-22)
+
+- **Import window height**: on a sample database the Import section grew the window to 2,251 pt;
+  after 2cf555b it is ~1,018 pt vs the 860 pt default. Find the view whose ideal height leaks
+  (step bar? `ImportReviewStep`/`ImportRowsTab` ScrollViews?) — reproduce with the in-app
+  snapshot on a temporary database (see "How to check the UI safely" below).
+- **Release**: `scripts/build-dmg.sh` on final `main`; `hdiutil verify`; tag `v1.0.0`; push tag.
+- **Deferred, small**: an open editor doesn't pick up rates fetched by other screens until its own
+  request returns (C2); per-protocol count/balance queries for very large data (B5/C1 notes).
+- **Owner checks**: real-data look of every screen; 281 "Uncategorised" rows to review (Import /
+  Transactions › Categories › Uncategorised); C2 choices (D40).
+
+## How to check the UI safely (never on the owner's real data)
+
+The app reads launch options before opening a database (C2): `-AbacusDatabasePath <tmp file>`,
+`-AbacusLoadSampleData YES`, `-AbacusPreviewData YES`, `-AbacusSection <section>`,
+`-AbacusOpenSettings general|rates|data`, `-AbacusDark YES`, snapshot `-AbacusSnapshotDir <dir>
+-AbacusSnapshotName <name> [-AbacusSnapshotDelay <s>]` (`App/macOS/Shell/WindowSnapshot.swift`).
+Also set `CFFIXED_USER_HOME=<scratch dir>` so saved window sizes and preferences don't touch the
+owner's. The terminal has no Screen Recording permission; use the in-app snapshot. Never take
+screenshots of the real database.

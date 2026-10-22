@@ -6,6 +6,7 @@ then the docs below, before touching code.
 
 ## Read order
 
+0. `docs/NEXT.md` — hand-off prompt for a new orchestrator session (`scripts/next-session.sh`).
 1. `docs/STATUS.md` — where the work stands, what is in flight, what is next.
 2. `docs/PLAN.md` — phases, work packages (WPs), owned paths, waves, how lanes run.
 3. `docs/status/<WP>.md` — progress notes of the WP you are continuing (if any).

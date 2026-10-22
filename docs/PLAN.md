@@ -111,9 +111,9 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
 ### Phase 3b — Small items and release (2026-10-21)
 - [x] **C1 List filters** (merged 2026-10-22) — uncategorised and import-batch filters through store, list, dashboard
   drill-down and import "Show transactions".
-- [ ] **C2 Settings, data, defaults** — last backup date in the database, data folder Change…,
+- [x] **C2 Settings, data, defaults** (merged 2026-10-22) — last backup date in the database, data folder Change…,
   default categories on first launch, editor fetches rates for old days.
-- [ ] **R1 Release prep** — app icon, version 1.0.0, `scripts/build-dmg.sh`, README with
+- [x] **R1 Release prep** (merged 2026-10-22; DMG build + tag still open) — app icon, version 1.0.0, `scripts/build-dmg.sh`, README with
   sample-data screenshots, CHANGELOG. Orchestrator then builds the DMG and tags `v1.0.0`.
 
 ### Phase 4 — v2 (planned after v1)
