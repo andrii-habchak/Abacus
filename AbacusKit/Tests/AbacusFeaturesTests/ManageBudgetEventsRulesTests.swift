@@ -1,6 +1,7 @@
 import AbacusDomain
 import AbacusFX
 import AbacusFeatures
+import AbacusImport
 import Foundation
 import Synchronization
 import Testing
@@ -268,6 +269,90 @@ struct ManageBudgetTests {
     model.setLimit("4000", for: PreviewData.id(205))
     #expect(model.validationMessage == nil)
   }
+
+  @Test("D56: Save is unchanged → edited → saved, and the next edit makes it edited again")
+  func saveStates() async {
+    let model = await model()
+    #expect(model.saveState == .unchanged)
+    #expect(!model.canSave)
+    model.setLimit("4100", for: PreviewData.id(205))
+    #expect(model.saveState == .edited)
+    #expect(model.canSave)
+    await model.save()
+    #expect(model.saveState == .saved)
+    #expect(!model.canSave)
+    // A reload right after the save (data changed, the page shown again) keeps "Saved".
+    await model.reappeared()
+    #expect(model.saveState == .saved)
+    #expect(model.savedMessage != nil)
+    // Any edit ends it, even one typed back to the saved value.
+    model.totalLimit = "9000"
+    #expect(model.saveState == .edited)
+    model.totalLimit = "8000.00"
+    #expect(model.saveState == .unchanged)
+    await model.save()
+    #expect(model.saveState == .unchanged)  // nothing to save: no save happened
+    model.totalCurrency = .EUR
+    await model.save()
+    #expect(model.saveState == .saved)
+    model.setCurrency(.USD, for: PreviewData.id(205))
+    #expect(model.saveState == .edited)
+    await model.revert()
+    #expect(model.saveState == .unchanged)
+  }
+
+  @Test("D56: each kind of edit ends the saved state")
+  func saveStateEdits() async {
+    let model = await model()
+    func saved() async {
+      model.setLimit(model.limitText(PreviewData.id(205)) == "1" ? "2" : "1", for: PreviewData.id(205))
+      await model.save()
+      #expect(model.saveState == .saved)
+    }
+    await saved()
+    model.categoryToAdd = PreviewData.id(212)
+    model.addLimit()
+    #expect(model.saveState == .edited)
+    await saved()
+    model.removeLimit(PreviewData.id(212))
+    #expect(model.saveState == .edited)
+    await saved()
+    await model.setAppliesFrom(november)
+    #expect(model.saveState == .edited)
+    await saved()
+    // Setting a field to the value it already has is not an edit.
+    model.setLimit(model.limitText(PreviewData.id(205)), for: PreviewData.id(205))
+    model.setCurrency(model.currency(PreviewData.id(205)), for: PreviewData.id(205))
+    model.totalLimit = model.totalLimit
+    await model.setAppliesFrom(november)
+    #expect(model.saveState == .saved)
+  }
+
+  @Test("D56: a failed save stays edited (Save enabled) with an error")
+  func saveFailure() async {
+    var dependencies = ManageFixture.dependencies(store)
+    dependencies.budget = FailingBudgetRepository(wrapped: store.budgetRepository)
+    let model = BudgetEditorModel(dependencies: dependencies)
+    await model.load()
+    model.setLimit("4100", for: PreviewData.id(205))
+    await model.save()
+    #expect(model.saveState == .edited)
+    #expect(model.canSave)
+    #expect(model.errorMessage != nil)
+    #expect(model.savedMessage == nil)
+  }
+}
+
+/// Reads through to a real repository; every save fails.
+private struct FailingBudgetRepository: BudgetRepository {
+  struct Failure: Error {}
+  let wrapped: any BudgetRepository
+
+  func plan(for month: Month) async throws -> (plan: BudgetPlan, allocations: [BudgetAllocation])? {
+    try await wrapped.plan(for: month)
+  }
+
+  func save(_ plan: BudgetPlan, allocations: [BudgetAllocation]) async throws { throw Failure() }
 }
 
 @MainActor
@@ -397,43 +482,48 @@ struct ManageEventsTests {
 struct ManageRulesTests {
   let store = ManagePreviewStore.sample()
 
-  func model(probe: String = "") async -> RulesModel {
-    let model = RulesModel(dependencies: ManageFixture.dependencies(store), probe: probe)
+  func model() async -> RulesModel {
+    let model = RulesModel(dependencies: ManageFixture.dependencies(store))
     await model.load()
     return model
   }
 
-  @Test("R-IMP-8: the tester finds the first enabled rule the description contains, ignoring case")
-  func tester() async {
-    let model = await model(probe: "BIEDRONKA 1234 WARSZAWA")
-    #expect(model.match?.pattern == "biedronka")
-    #expect(model.probeResult == "Matches “biedronka” → Food › Groceries")
-    #expect(model.rows.filter(\.isMatch).map(\.pattern) == ["biedronka"])
-    model.probe = "Spotify"
-    #expect(model.match == nil)
-    #expect(model.probeResult == "No rule matches; the category stays empty for you to pick.")
-    model.probe = ""
-    #expect(model.probeResult == "")
+  /// The first of the page's rules matching like an import does (the page's "Try a description"
+  /// tester was removed, D56; imports use the same `RuleMatcher`).
+  func match(
+    _ model: RulesModel, _ description: String, account: Account.ID? = nil, amount: String = ""
+  ) -> CategoryRule? {
+    let amountMinor = ManageFixture.format.parseAmount(amount).map(abs)
+    return model.rules.first {
+      RuleMatcher.matches(
+        $0, description: description, accountID: account, amountMinor: amountMinor, categories: model.categories,
+        accounts: model.accounts)
+    }
+  }
+
+  @Test("R-IMP-8: the first enabled rule the description contains matches, ignoring case")
+  func firstEnabledMatch() async {
+    let model = await model()
+    #expect(match(model, "BIEDRONKA 1234 WARSZAWA")?.pattern == "biedronka")
+    #expect(match(model, "Spotify") == nil)
   }
 
   @Test("R-IMP-8: the first match wins and disabled rules are skipped")
   func firstMatchWins() async throws {
-    let model = await model(probe: "LIDL ORANGE")
-    #expect(model.match?.pattern == "lidl")
+    let model = await model()
+    #expect(match(model, "LIDL ORANGE")?.pattern == "lidl")
     await model.setEnabled(PreviewData.id(952), false)
     #expect(model.rules.first { $0.id == PreviewData.id(952) }?.isEnabled == false)
-    #expect(model.match?.pattern == "orange")
+    #expect(match(model, "LIDL ORANGE")?.pattern == "orange")
     #expect(try await store.ruleRepository.rules().first { $0.pattern == "lidl" }?.isEnabled == false)
   }
 
   @Test("R-IMP-8: a per-account rule applies only to its account")
   func perAccount() async {
-    let model = await model(probe: "ORLEN STACJA 12")
-    #expect(model.match?.pattern == "orlen")
-    model.probeAccountID = PreviewData.pkoPersonal.id
-    #expect(model.match == nil)
-    model.probeAccountID = PreviewData.pkoCreditCard.id
-    #expect(model.match?.pattern == "orlen")
+    let model = await model()
+    #expect(match(model, "ORLEN STACJA 12")?.pattern == "orlen")
+    #expect(match(model, "ORLEN STACJA 12", account: PreviewData.pkoPersonal.id) == nil)
+    #expect(match(model, "ORLEN STACJA 12", account: PreviewData.pkoCreditCard.id)?.pattern == "orlen")
   }
 
   @Test("R-MGMT-6, D44: rows show each rule in words, origin and hit count in evaluation order")
@@ -454,23 +544,26 @@ struct ManageRulesTests {
     #expect(model.rows[8].summary == "Description contains “friend” → Transfer to/from Loan from friend")
   }
 
-  @Test("R-IMP-8, D44: the tester uses the amount and shows transfer actions")
-  func testerAmountAndTransfer() async {
-    let model = await model(probe: "ZALANDO SE")
-    #expect(model.match == nil)
-    model.probeAmountText = "120"
-    #expect(model.match?.pattern == "zalando")
-    model.probeAmountText = "80"
-    #expect(model.match == nil)
-    model.probe = "Pizzeria  Napoli"
-    model.probeAmountText = ""
-    #expect(model.match?.pattern == "pizzeria napoli")
-    model.probe = "Pizzeria Napoli Lyon"
-    #expect(model.match == nil)
-    model.probe = "Payback to a friend"
-    #expect(model.probeResult == "Matches “friend” → Transfer to/from Loan from friend")
-    model.probeAccountID = PreviewData.loanFromFriend.id
-    #expect(model.match == nil)
+  @Test("R-IMP-8, D44: amount conditions, exact descriptions and transfer rules match like an import")
+  func amountAndTransfer() async {
+    let model = await model()
+    #expect(match(model, "ZALANDO SE") == nil)
+    #expect(match(model, "ZALANDO SE", amount: "120")?.pattern == "zalando")
+    #expect(match(model, "ZALANDO SE", amount: "80") == nil)
+    #expect(match(model, "Pizzeria  Napoli")?.pattern == "pizzeria napoli")
+    #expect(match(model, "Pizzeria Napoli Lyon") == nil)
+    #expect(match(model, "Payback to a friend")?.pattern == "friend")
+    #expect(match(model, "Payback to a friend", account: PreviewData.loanFromFriend.id) == nil)
+  }
+
+  @Test("D56: the Rules page has no tester; New rule starts empty")
+  func newRuleStartsEmpty() async {
+    let model = await model()
+    model.newRule()
+    #expect(model.editor?.pattern == "")
+    #expect(model.editor?.isNew == true)
+    model.cancelEditor()
+    #expect(model.editor == nil)
   }
 
   @Test("R-MGMT-6, D44: the editor adds AND conditions, validates and saves a transfer rule")
@@ -663,9 +756,7 @@ struct ManageRulesTests {
     #expect(saved.amountComparison == .biggerThan && saved.amountMinor == 3_000_00)
     #expect(model.rows.last?.summary == "Amount bigger than 3000.00 → Housing › Rent")
     #expect(model.rows.last?.pattern == "amount > 3000.00")
-    model.probe = "Anything"
-    model.probeAmountText = "3500"
-    #expect(model.match?.id == saved.id)
+    #expect(match(model, "Anything", amount: "3500")?.id == saved.id)
 
     // Adding a description condition back puts it first; either can be removed, not both.
     model.edit(saved.id)
@@ -738,18 +829,20 @@ struct ManageRulesTests {
 
   @Test("R-MGMT-6: dragging a rule changes the order and so which rule wins")
   func reorder() async throws {
-    let model = await model(probe: "LIDL ORANGE")
+    let model = await model()
     await model.move(fromOffsets: [4], toOffset: 0)
     #expect(model.rows.first?.pattern == "orange")
-    #expect(model.match?.pattern == "orange")
+    #expect(match(model, "LIDL ORANGE")?.pattern == "orange")
     #expect(try await store.ruleRepository.rules().map(\.pattern).first == "orange")
   }
 
   @Test("R-MGMT-6, R-IMP-8: rules are created (manual, last), edited and deleted")
   func crud() async throws {
-    let model = await model(probe: "Spotify AB")
+    let model = await model()
     model.newRule()
-    #expect(model.editor?.pattern == "spotify ab")
+    #expect(model.editor?.pattern == "")
+    #expect(model.editorValidation == "Enter the description text.")
+    model.editor?.pattern = "spotify"
     #expect(model.editorValidation == "Choose a category.")
     model.editor?.pattern = " "
     #expect(model.editorValidation == "Enter the description text.")
@@ -760,7 +853,8 @@ struct ManageRulesTests {
     let created = try #require(model.rules.last)
     #expect(created.pattern == "spotify")
     #expect(created.origin == .manual)
-    #expect(model.probeResult == "Matches “spotify” → Bills › Mobile")
+    #expect(match(model, "Spotify AB")?.id == created.id)
+    #expect(model.rows.last?.summary == "Description contains “spotify” → Bills › Mobile")
 
     model.edit(created.id)
     model.editor?.hasAccountCondition = true

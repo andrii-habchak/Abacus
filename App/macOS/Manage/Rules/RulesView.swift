@@ -2,9 +2,10 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// The Rules screen (approved prototype group 4, R-MGMT-6, R-IMP-8, D44): the "Try a description"
-/// tester, the rules in evaluation order and in words (drag to reorder, enable toggles, origin,
-/// hit counts), the Saldo-like editor on double-click, delete; "New rule" in the toolbar.
+/// The Rules screen (approved prototype group 4, R-MGMT-6, R-IMP-8, D44, D56): page search and
+/// the category filter, the rules in evaluation order and in words (drag to reorder, enable
+/// toggles, origin, hit counts), the Saldo-like editor on double-click, delete; "New rule" in
+/// the toolbar.
 public struct RulesView: View {
   @State private var model: RulesModel
 
@@ -142,31 +143,6 @@ struct RulesContent: View {
       .frame(maxWidth: .infinity)
       .accessibilityLabel("Filter rules by category")
 
-      ManageField("Try a description") {
-        HStack(spacing: 8) {
-          TextField("Try a description", text: $model.probe, prompt: Text("e.g. BIEDRONKA 1234 WARSZAWA"))
-            .labelsHidden()
-            .textFieldStyle(.roundedBorder)
-            .frame(maxWidth: 380)
-          TextField("Amount", text: $model.probeAmountText, prompt: Text("amount"))
-            .labelsHidden()
-            .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.trailing)
-            .frame(width: 90)
-          Picker("Account", selection: $model.probeAccountID) {
-            Text("on any account").tag(Account.ID?.none)
-            AccountPickerItems(sections: model.accountSections) { Text("on \($0.name)").tag(Optional($0.id)) }
-          }
-          .labelsHidden()
-          .fixedSize()
-        }
-      }
-      .font(.system(size: 13))
-      if !model.probeResult.isEmpty {
-        Text(model.probeResult)
-          .font(.system(size: 13, weight: .medium))
-          .foregroundStyle(model.match != nil ? ManagePalette.matchText : Color.secondary)
-      }
       if let notice = model.notice {
         HStack(spacing: 10) {
           Image(systemName: "checkmark.circle.fill").foregroundStyle(ManagePalette.matchText)
@@ -205,7 +181,6 @@ struct RulesContent: View {
               Task { await model.setEnabled(row.id, enabled) }
             }
             .tag(row.id)
-            .listRowBackground(row.isMatch ? ManagePalette.match : Color.clear)
             .contextMenu {
               Button("Edit…") { model.edit(row.id) }
               Button("Delete…", role: .destructive) { model.requestDelete(row.id) }
@@ -549,6 +524,6 @@ struct RuleEditorSheet: View {
 }
 
 #Preview("Rules") {
-  RulesView(model: RulesModel(dependencies: .preview(), probe: "BIEDRONKA 1234 WARSZAWA"))
+  RulesView(dependencies: .preview())
     .frame(width: 1000, height: 600)
 }
