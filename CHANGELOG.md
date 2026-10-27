@@ -2,7 +2,47 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
-## [1.1.0] — Unreleased
+## [1.2.0] — Unreleased
+
+Changes from the owner's review of 1.1.0. Opening this version updates the database (rule
+rollback history, category creation dates, debts, account groups); back up `abacus.sqlite` first.
+
+### Added
+
+- **Debts**, separate from accounts: a person and a currency per debt; records I lent, They
+  repaid, I borrowed, I repaid, Paid on their behalf, Forgive; optional "Count as expense / income"
+  and "Count in net worth"; due date, note, settled. Debts tab and a dashboard Debts widget.
+  Existing debt accounts become debts with their history; account balances and net worth stay
+  the same.
+- **Account groups** (Monobank, PKO, …) as folders with their total; drag accounts in and out;
+  search, sort and currency filter on Accounts; pickers list accounts A–Z under their groups; the
+  net worth breakdown shows groups.
+- **Dashboard**: Monthly income donut, Income vs expenses (12 months), drag-to-reorder widgets.
+- **Categories**: sort selector (Name A–Z / Z–A, Custom order, Newest / Oldest first), search,
+  drag onto a category to make a subcategory; a built-in "Uncategorised" with its own colour.
+- **Rules**: conditions on the amount alone; Roll back an applied rule (also after a restart);
+  search and category filter.
+- **Budget**: a total with its own currency again, with Unallocated; the page follows the
+  currency switch.
+
+### Changed
+
+- Search fields sit above the filters on Transactions, Events, Accounts, Categories and Rules.
+- Save buttons are at the bottom-right of every form.
+- Currency switch order EUR, USD, PLN, UAH; no "New transaction" on Budget and Rules.
+- Category pickers are A–Z everywhere except the Categories page.
+- A category has the same colour on every screen.
+- Removing a budget limit uses a red trash button.
+
+### Fixed
+
+- Rule "Save & apply" did not update existing transactions.
+- Budget edits were lost when switching screens before saving.
+- An event's "Show transactions" missed transactions outside the event's dates.
+- Transaction type filter labels wrapped mid-word.
+- The dashboard opened scrolled to the bottom with Full Keyboard Access on.
+
+## [1.1.0] — Not released (test build)
 
 Changes from the owner's review of 1.0.0. Opening this version updates the database (colours,
 budget currencies, rules); back up `abacus.sqlite` first.

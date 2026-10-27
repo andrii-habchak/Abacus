@@ -142,7 +142,7 @@ Wave 2:
   net worth hierarchy.
 - [x] **C13 Dashboard widgets** (merged 2026-10-27) — income donut, income vs expenses, drag-reorder widgets.
 - [x] **C14 Debts** (merged 2026-10-27; migration v10; widget scroll fix pending) — `R-DEBT` (TA v1.7, D51).
-- [ ] **Release 1.2.0**.
+- [ ] **Release 1.2.0** — DMG built for owner testing; tag after the owner's OK.
 
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple

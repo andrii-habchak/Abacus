@@ -43,8 +43,9 @@ public enum DashboardWidget: String, CaseIterable, Codable, Hashable, Sendable, 
 public struct DashboardLayout: Hashable, Sendable {
   public private(set) var order: [DashboardWidget]
 
+  /// The owner's order (D53): full-width rows between pairs of half-width widgets.
   public static let defaultOrder: [DashboardWidget] = [
-    .netWorth, .budget, .expenses, .income, .incomeVsExpenses, .debts,
+    .netWorth, .budget, .expenses, .incomeVsExpenses, .income, .debts,
   ]
   public static let `default` = DashboardLayout(order: defaultOrder)
 

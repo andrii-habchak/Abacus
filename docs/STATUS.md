@@ -139,6 +139,11 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
   default window is 1,018 pt on the owner's 1,117 pt-high screen for every section, not the
   860 pt in `.defaultSize`; that is the window default, not an Import leak.
 - ~~Release~~ → v1.0.0 tagged and pushed 2026-10-27 (DMG local only).
+- **1.2.0 (owner review of 1.1.0, C8–C14)**: merged on `main`, version 1.2.0 (build 3), DMG
+  built locally for owner testing; **not tagged** until the owner's OK. First launch runs
+  migrations v8–v11 (rule applications, category createdAt, debts, account groups) on the real
+  database; owner backs up `abacus.sqlite` first. Lane interpretations to confirm are in
+  `docs/status/C8.md` … `C14.md`.
 - **1.1.0 (owner review of 1.0.0, C4–C7)**: merged on `main`, version 1.1.0 (build 2), DMG built
   locally for owner testing; **not tagged** until the owner has tested it. First launch runs
   migrations v4–v6 on the real database (tested only on synthetic pre-change databases) — owner

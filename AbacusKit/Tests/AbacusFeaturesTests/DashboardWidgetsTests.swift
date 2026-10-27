@@ -124,7 +124,7 @@ struct DashboardWidgetsTests {
   @Test("R-HOME-6: the default order; widths: net worth and income vs expenses are full width, debts half")
   func defaultLayout() {
     let layout = DashboardLayout.default
-    #expect(layout.order == [.netWorth, .budget, .expenses, .income, .incomeVsExpenses, .debts])
+    #expect(layout.order == [.netWorth, .budget, .expenses, .incomeVsExpenses, .income, .debts])
     #expect(layout.isDefault)
     #expect(DashboardWidget.allCases.filter(\.isFullWidth) == [.netWorth, .incomeVsExpenses])
     #expect(Set(DashboardLayout.defaultOrder) == Set(DashboardWidget.allCases))
@@ -144,7 +144,8 @@ struct DashboardWidgetsTests {
 
   @Test("R-HOME-6: a drop puts the dragged widget in the target's place; steps skip hidden widgets")
   func moves() {
-    var layout = DashboardLayout.default
+    let start = DashboardLayout(stored: #"["netWorth","budget","expenses","income","incomeVsExpenses","debts"]"#)
+    var layout = start
     layout.move(.netWorth, to: .income)
     #expect(layout.order == [.budget, .expenses, .income, .netWorth, .incomeVsExpenses, .debts])
     layout.move(.incomeVsExpenses, to: .budget)
@@ -152,10 +153,10 @@ struct DashboardWidgetsTests {
     layout.move(.budget, to: .budget)
     #expect(layout.order == [.incomeVsExpenses, .budget, .expenses, .income, .netWorth, .debts])
 
-    var stepped = DashboardLayout.default
+    var stepped = start
     let visible: [DashboardWidget] = [.netWorth, .budget, .expenses, .income, .incomeVsExpenses]
     stepped.move(.incomeVsExpenses, by: 1, among: visible)  // last visible: no change
-    #expect(stepped == .default)
+    #expect(stepped == start)
     stepped.move(.income, by: -1, among: visible)
     #expect(stepped.order == [.netWorth, .budget, .income, .expenses, .incomeVsExpenses, .debts])
     stepped.move(.netWorth, by: -1, among: visible)
@@ -170,7 +171,8 @@ struct DashboardWidgetsTests {
         == [[.budget], [.netWorth], [.expenses, .income], [.incomeVsExpenses], [.debts]])
     #expect(DashboardLayout.rows(DashboardLayout.defaultOrder, columns: 2).first == [.netWorth])
     #expect(DashboardLayout.rows(DashboardLayout.defaultOrder, columns: 2)[1] == [.budget, .expenses])
-    #expect(DashboardLayout.rows(DashboardLayout.defaultOrder, columns: 2)[2] == [.income])
+    #expect(DashboardLayout.rows(DashboardLayout.defaultOrder, columns: 2)[2] == [.incomeVsExpenses])
+    #expect(DashboardLayout.rows(DashboardLayout.defaultOrder, columns: 2)[3] == [.income, .debts])
     #expect(DashboardLayout.rows(order, columns: 1).allSatisfy { $0.count == 1 })
     // Debts is half width: it pairs with another half-width widget.
     #expect(
@@ -205,6 +207,6 @@ struct DashboardWidgetsTests {
     try await store.settingsRepository.set(.dashboardLayout, #"["debts","savingsGoals","budget"]"#)
     let model = await model(store: store)
     #expect(model.phase == .loaded)
-    #expect(model.layout.order == [.debts, .budget, .netWorth, .expenses, .income, .incomeVsExpenses])
+    #expect(model.layout.order == [.debts, .budget, .netWorth, .expenses, .incomeVsExpenses, .income])
   }
 }
