@@ -18,8 +18,9 @@ public enum DashboardWidget: String, CaseIterable, Codable, Hashable, Sendable, 
   /// widths (R-HOME-6).
   public var isFullWidth: Bool {
     switch self {
-    case .netWorth, .incomeVsExpenses, .debts: true
-    case .budget, .expenses, .income: false
+    case .netWorth, .incomeVsExpenses: true
+    // Debts is half width (owner, 2026-10-27).
+    case .budget, .expenses, .income, .debts: false
     }
   }
 

@@ -3,7 +3,7 @@ import AbacusFeatures
 import SwiftUI
 
 /// The dashboard Debts widget (R-DEBT-6): "Owed to you" / "You owe" in the display currency,
-/// then people with open balances, largest first, per currency. Reads `DashboardModel.debts`
+/// then people with open balances, largest first, per currency. Half width (owner). Reads `DashboardModel.debts`
 /// (it follows the display currency and rates); "Open Debts" goes to the Debts tab.
 struct DashboardDebtsCard: View {
   let model: DashboardModel
@@ -21,7 +21,7 @@ struct DashboardDebtsCard: View {
           .controlSize(.small)
       }
       if let debts = model.debts {
-        HStack(spacing: 28) {
+        HStack(alignment: .top, spacing: 20) {
           figure("Owed to you", debts.owedToMeText, color: DebtStyle.owedToMe)
           figure("You owe", debts.iOweText, color: DebtStyle.iOwe)
         }
@@ -54,22 +54,30 @@ struct DashboardDebtsCard: View {
     }
   }
 
+  /// One person, compact enough for a half-width card: the name (and the ≈ sum in the display
+  /// currency when there are several currencies) on the left, each currency's balance stacked
+  /// on the right.
   private func row(_ person: DashboardDebts.Person) -> some View {
-    HStack(spacing: 10) {
+    HStack(alignment: .top, spacing: 10) {
       DebtAvatar(name: person.name)
-      Text(person.name).lineLimit(1)
-      Spacer()
-      if let converted = person.convertedText {
-        Text(converted).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-      }
-      ForEach(person.balances) { balance in
-        VStack(alignment: .trailing, spacing: 0) {
-          Text(balance.amountText).font(.callout.weight(.semibold)).monospacedDigit()
-            .foregroundStyle(balance.owesMe ? DebtStyle.owedToMe : DebtStyle.iOwe)
-          Text(balance.directionText).font(.caption2).foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(person.name).lineLimit(1).truncationMode(.tail)
+        if let converted = person.convertedText {
+          Text(converted).font(.caption).foregroundStyle(.secondary).monospacedDigit()
         }
-        .frame(minWidth: 72, alignment: .trailing)
       }
+      .layoutPriority(1)
+      Spacer(minLength: 8)
+      VStack(alignment: .trailing, spacing: 4) {
+        ForEach(person.balances) { balance in
+          VStack(alignment: .trailing, spacing: 0) {
+            Text(balance.amountText).font(.callout.weight(.semibold)).monospacedDigit()
+              .foregroundStyle(balance.owesMe ? DebtStyle.owedToMe : DebtStyle.iOwe)
+            Text(balance.directionText).font(.caption2).foregroundStyle(.secondary)
+          }
+        }
+      }
+      .fixedSize()
     }
     .padding(.vertical, 6)
   }
