@@ -49,8 +49,9 @@ struct ImportView: View {
           }
         }
     }
-    // Fill the window instead of sizing it: without a modest ideal size the hidden scroll
-    // content's height became the window's preferred height and the window grew past the screen.
+    // Fill the window instead of sizing it. The leak itself was the choose-file paragraph's
+    // vertical fixedSize (see ImportChooseFileStep); this frame keeps any step's minimum or ideal
+    // height from resizing the window again.
     .frame(minWidth: 0, idealWidth: 900, maxWidth: .infinity, minHeight: 0, idealHeight: 600, maxHeight: .infinity)
     .background(ImportPalette.surface)
     .navigationTitle("Import")
@@ -81,6 +82,12 @@ struct ImportView: View {
     .task {
       model.onDataChanged = onDataChanged
       await model.load()
+      #if DEBUG
+        // UI checks: `-AbacusImportFile <csv>` opens the review step, e.g. for an in-app snapshot.
+        if model.step == .chooseFile, let path = UserDefaults.standard.string(forKey: "AbacusImportFile") {
+          await model.open(url: URL(filePath: path))
+        }
+      #endif
     }
     .animation(.easeOut(duration: 0.18), value: model.isHistoryShown)
   }
@@ -198,8 +205,9 @@ struct ImportChooseFileStep: View {
       .font(.system(size: 13))
       .foregroundStyle(ImportPalette.label)
       .multilineTextAlignment(.center)
+      // No vertical fixedSize here: the window measures its minimum size with a zero width, where
+      // a fixed-height paragraph wraps one glyph per line and became a 2,251 pt minimum height.
       .frame(maxWidth: 460)
-      .fixedSize(horizontal: false, vertical: true)
       Button("Choose file…", action: chooseFile)
         .padding(.top, 2)
     }
