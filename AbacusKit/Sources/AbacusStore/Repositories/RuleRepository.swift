@@ -35,6 +35,52 @@ public struct SQLiteRuleRepository: RuleRepository {
     }
   }
 
+  public func apply(_ rule: CategoryRule, records: [RuleApplication]) async throws {
+    try await database.write { db in
+      try CategoryRule.upsert { CategoryRule.Draft(rule) }.execute(db)
+      for record in records {
+        guard let current = try Txn.find(record.txnID).fetchOne(db) else { throw RepositoryError.notFound }
+        try Txn.upsert { Txn.Draft(record.after.applied(to: current)) }.execute(db)
+        try RuleApplication.insert { RuleApplication.Draft(record) }.execute(db)
+      }
+    }
+  }
+
+  public func applications(of ruleID: CategoryRule.ID) async throws -> [RuleApplication] {
+    try await database.read { db in
+      try RuleApplication.where { $0.ruleID.eq(ruleID) }.order { $0.appliedAt.desc() }.fetchAll(db)
+    }
+  }
+
+  public func rollBack(_ ruleID: CategoryRule.ID) async throws -> RuleRollback {
+    try await database.write { db in
+      // Newest first, so a transaction changed twice gets its oldest state back.
+      let records = try RuleApplication.where { $0.ruleID.eq(ruleID) }.order { $0.appliedAt.desc() }.fetchAll(db)
+      var result = RuleRollback()
+      for record in records {
+        guard let current = try Txn.find(record.txnID).fetchOne(db), let restored = record.restoring(current),
+          try Self.referencesExist(restored, db)
+        else {
+          result.skipped += 1
+          continue
+        }
+        try Txn.upsert { Txn.Draft(restored) }.execute(db)
+        result.restored += 1
+      }
+      try RuleApplication.where { $0.ruleID.eq(ruleID) }.delete().execute(db)
+      return result
+    }
+  }
+
+  /// The category and accounts a restored transaction points at still exist.
+  private static func referencesExist(_ txn: Txn, _ db: Database) throws -> Bool {
+    if let categoryID = txn.categoryID, try AbacusDomain.Category.find(categoryID).fetchCount(db) == 0 { return false }
+    for accountID in [txn.accountID] + (txn.toAccountID.map { [$0] } ?? []) {
+      if try Account.find(accountID).fetchCount(db) == 0 { return false }
+    }
+    return true
+  }
+
   public func delete(_ id: CategoryRule.ID) async throws {
     try await database.write { db in
       try CategoryRule.find(id).delete().execute(db)

@@ -65,6 +65,14 @@ public final class AppSession {
     accounts.onDataChange = referenceChanged
     categories.onDataChange = referenceChanged
     events.onDataChange = referenceChanged
+    // A rule applied to existing transactions or rolled back (C9): the list, the dashboard and
+    // balances follow at once.
+    rules.onTransactionsChange = { [weak self] in
+      guard let self else { return }
+      await self.transactions.reload()
+      await self.dashboard.load()
+      await self.reloadManageScreens()
+    }
     app.onRefundsChange = { [weak self] on in
       guard let self else { return }
       self.transactions.refundsReduceSpending = on

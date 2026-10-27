@@ -54,6 +54,28 @@ public struct RulesView: View {
 
     private func openEditorForSnapshot() {
       let defaults = UserDefaults.standard
+      // `-AbacusRuleDemoApply <text>`: a new rule "<text> → first expense category A–Z" saved
+      // and applied to existing transactions through the editor's path (Save & apply →
+      // confirmation → apply), then opened again (the banner and "Roll back…").
+      if !Self.openedForSnapshot, model.editor == nil, !model.rules.isEmpty,
+        let text = defaults.string(forKey: "AbacusRuleDemoApply")
+      {
+        Self.openedForSnapshot = true
+        Task {
+          model.newRule()
+          model.editor?.pattern = text
+          model.editor?.categoryID = model.categoryOptions.first { $0.kind == .expense }?.id
+          model.editor?.updateExisting = true
+          await model.loadEditorTransactions()
+          await model.saveEditor()
+          if let pending = model.confirmation {
+            model.cancelConfirmation()  // what the alert's binding does before the button's Task
+            await model.confirmApply(pending)
+          }
+          if let rule = model.rules.first(where: { $0.pattern == text }) { model.edit(rule.id) }
+        }
+        return
+      }
       guard !Self.openedForSnapshot, model.editor == nil, let target = defaults.string(forKey: "AbacusRuleEditor") else { return }
       if target != "new", !model.rules.contains(where: { $0.pattern == target }) { return }
       Self.openedForSnapshot = true
@@ -72,8 +94,54 @@ struct RulesContent: View {
 
   static let columns: [ManageColumns.Column] = [.fixed(36), .flex(2.6), .flex(1.5), .flex(1.1), .fixed(52)]
 
+  /// "All categories" / "Food › Groceries".
+  private var categoryFilterTitle: String {
+    guard let id = model.categoryFilter, let category = model.categories.first(where: { $0.id == id }) else {
+      return "All categories"
+    }
+    guard let parent = category.parentID.flatMap({ pid in model.categories.first { $0.id == pid } }) else {
+      return category.name
+    }
+    return "\(parent.name) › \(category.name)"
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
+      // R-MGMT-11: page search, then the category filter, both full width.
+      PageSearchField(text: $model.searchText, prompt: "Search rules")
+      // A menu with a full-width label (a menu picker keeps its own width on macOS).
+      Menu {
+        Picker("Category", selection: $model.categoryFilter) {
+          Text("All categories").tag(AbacusDomain.Category.ID?.none)
+          Divider()
+          ForEach(model.categoryFilterOptions) { category in
+            Text(category.parentID == nil ? category.name : "    \(category.name)").tag(Optional(category.id))
+          }
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: "line.3.horizontal.decrease.circle")
+            .foregroundStyle(.secondary)
+          Text(categoryFilterTitle)
+          Spacer(minLength: 0)
+          Image(systemName: "chevron.up.chevron.down")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity)
+        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
+        .contentShape(.rect)
+      }
+      .menuStyle(.button)
+      .buttonStyle(.plain)
+      .menuIndicator(.hidden)
+      .frame(maxWidth: .infinity)
+      .accessibilityLabel("Filter rules by category")
+
       ManageField("Try a description") {
         HStack(spacing: 8) {
           TextField("Try a description", text: $model.probe, prompt: Text("e.g. BIEDRONKA 1234 WARSZAWA"))
@@ -99,13 +167,15 @@ struct RulesContent: View {
           .font(.system(size: 13, weight: .medium))
           .foregroundStyle(model.match != nil ? ManagePalette.matchText : Color.secondary)
       }
-      if let undo = model.lastApply {
+      if let notice = model.notice {
         HStack(spacing: 10) {
           Image(systemName: "checkmark.circle.fill").foregroundStyle(ManagePalette.matchText)
-          Text(undo.message)
+          Text(notice.message)
           Spacer(minLength: 0)
-          Button("Undo") { Task { await model.undoLastApply() } }
-          Button("Dismiss", systemImage: "xmark") { model.dismissUndo() }
+          if let ruleID = notice.rollbackRuleID {
+            Button("Roll back") { Task { await model.rollBack(ruleID) } }
+          }
+          Button("Dismiss", systemImage: "xmark") { model.dismissNotice() }
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
         }
@@ -141,9 +211,11 @@ struct RulesContent: View {
               Button("Delete…", role: .destructive) { model.requestDelete(row.id) }
             }
           }
-          .onMove { source, destination in
-            Task { await model.move(fromOffsets: source, toOffset: destination) }
-          }
+          // Dragging reorders the full list, so it is off while the search or filter hides rules.
+          .onMove(
+            perform: model.isFiltered
+              ? nil
+              : { source, destination in Task { await model.move(fromOffsets: source, toOffset: destination) } })
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -153,7 +225,7 @@ struct RulesContent: View {
         }
         .overlay {
           if model.rows.isEmpty {
-            Text("No rules yet. Choices you make during an import are saved here.")
+            Text(model.emptyText)
               .foregroundStyle(.secondary)
           }
         }
@@ -163,7 +235,9 @@ struct RulesContent: View {
       .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ManagePalette.border))
 
       HStack(spacing: 8) {
-        Text("Rules are checked top to bottom; the first match wins. Drag to reorder. Choices you make during an import are saved here as rules.")
+        Text(model.isFiltered
+          ? "Rules are checked top to bottom; the first match wins. Clear the search and the category filter to drag rules into another order."
+          : "Rules are checked top to bottom; the first match wins. Drag to reorder. Choices you make during an import are saved here as rules.")
           .font(.system(size: 12))
           .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -249,6 +323,7 @@ struct RuleEditorSheet: View {
           .foregroundStyle(.secondary)
           .padding(.leading, 20)
       }
+      rollback
       if let message = model.editorValidation {
         Text(message).font(.caption).foregroundStyle(.secondary)
       }
@@ -269,12 +344,18 @@ struct RuleEditorSheet: View {
       model.confirmation?.title ?? "",
       isPresented: Binding(get: { model.confirmation != nil }, set: { if !$0 { model.cancelConfirmation() } })
     ) {
+      // The confirmation is captured when the alert is built: tapping a button first clears the
+      // alert's binding (→ cancelConfirmation()), and only then would a Task read the model —
+      // reading `model.confirmation` there found nil and "Save & apply" did nothing (C9).
+      let pending = model.confirmation
       Button("Cancel", role: .cancel) { model.cancelConfirmation() }
-      Button("Save & apply") { Task { await model.confirmApply() } }
+      Button("Save & apply") {
+        if let pending { Task { await model.confirmApply(pending) } }
+      }
     } message: {
       Text(model.confirmation?.message ?? "")
     }
-    .alert("Delete the rule “\(draft.pattern)”?", isPresented: $confirmsDelete) {
+    .alert("Delete this rule?", isPresented: $confirmsDelete) {
       Button("Cancel", role: .cancel) {}
       Button("Delete", role: .destructive) { Task { await model.deleteEditorRule() } }
     } message: {
@@ -297,26 +378,31 @@ struct RuleEditorSheet: View {
 
   // MARK: Condition
 
+  /// TA v1.6: the first row is a description or an amount condition (its picker switches between
+  /// them while it is the only one); "Add AND condition" adds the other kind and the account.
   @ViewBuilder private var conditions: some View {
-    HStack(spacing: 8) {
-      Picker("Description", selection: binding(\.matchKind, .contains)) {
-        Text("Description contains").tag(RuleMatchKind.contains)
-        Text("Description exactly matches").tag(RuleMatchKind.exactly)
+    if draft.hasDescriptionCondition {
+      conditionRow(isFirst: true, remove: draft.canRemoveDescription ? { model.removeDescriptionCondition() } : nil) {
+        firstConditionPicker
+        TextField("Text", text: binding(\.pattern, ""), prompt: Text("e.g. biedronka"))
+          .labelsHidden()
+          .textFieldStyle(.roundedBorder)
       }
-      .labelsHidden()
-      .fixedSize()
-      TextField("Text", text: binding(\.pattern, ""), prompt: Text("e.g. biedronka"))
-        .labelsHidden()
-        .textFieldStyle(.roundedBorder)
     }
     if draft.hasAmountCondition {
-      andRow(remove: { model.editor?.hasAmountCondition = false }) {
-        Picker("Amount", selection: binding(\.amountComparison, .biggerThan)) {
-          Text("Amount is bigger than").tag(RuleAmountComparison.biggerThan)
-          Text("Amount is smaller than").tag(RuleAmountComparison.smallerThan)
+      conditionRow(
+        isFirst: !draft.hasDescriptionCondition, remove: draft.canRemoveAmount ? { model.removeAmountCondition() } : nil
+      ) {
+        if draft.hasDescriptionCondition {
+          Picker("Amount", selection: binding(\.amountComparison, .biggerThan)) {
+            Text("Amount is bigger than").tag(RuleAmountComparison.biggerThan)
+            Text("Amount is smaller than").tag(RuleAmountComparison.smallerThan)
+          }
+          .labelsHidden()
+          .fixedSize()
+        } else {
+          firstConditionPicker
         }
-        .labelsHidden()
-        .fixedSize()
         TextField("Amount", text: binding(\.amountText, ""), prompt: Text("0.00"))
           .labelsHidden()
           .textFieldStyle(.roundedBorder)
@@ -326,10 +412,7 @@ struct RuleEditorSheet: View {
       }
     }
     if draft.hasAccountCondition {
-      andRow(remove: {
-        model.editor?.hasAccountCondition = false
-        model.editor?.accountID = nil
-      }) {
+      conditionRow(isFirst: false, remove: { model.removeAccountCondition() }) {
         Text("Account is")
         Picker("Account", selection: binding(\.accountID, nil)) {
           Text("Choose…").tag(Account.ID?.none)
@@ -341,10 +424,15 @@ struct RuleEditorSheet: View {
     }
     if draft.canAddCondition {
       Menu("Add AND condition", systemImage: "plus") {
-        Button("Amount is bigger or smaller than…") { model.editor?.hasAmountCondition = true }
-          .disabled(draft.hasAmountCondition)
-        Button("Only on account…") { model.editor?.hasAccountCondition = true }
-          .disabled(draft.hasAccountCondition)
+        if !draft.hasDescriptionCondition {
+          Button("Description contains or matches…") { model.addDescriptionCondition() }
+        }
+        if !draft.hasAmountCondition {
+          Button("Amount is bigger or smaller than…") { model.addAmountCondition() }
+        }
+        if !draft.hasAccountCondition {
+          Button("Only on account…") { model.addAccountCondition() }
+        }
       }
       .menuStyle(.borderlessButton)
       .fixedSize()
@@ -352,20 +440,75 @@ struct RuleEditorSheet: View {
     }
   }
 
-  private func andRow<Content: View>(remove: @escaping () -> Void, @ViewBuilder content: () -> Content) -> some View {
+  private var firstConditionPicker: some View {
+    Picker("Condition", selection: binding(\.firstCondition, .descriptionContains)) {
+      ForEach(draft.firstConditionChoices, id: \.self) { choice in
+        Text(Self.title(choice)).tag(choice)
+      }
+    }
+    .labelsHidden()
+    .fixedSize()
+  }
+
+  private static func title(_ choice: RuleFirstCondition) -> String {
+    switch choice {
+    case .descriptionContains: "Description contains"
+    case .descriptionExactly: "Description exactly matches"
+    case .amountBiggerThan: "Amount is bigger than"
+    case .amountSmallerThan: "Amount is smaller than"
+    }
+  }
+
+  /// A condition row: "AND" before every row but the first, a remove button when the rule keeps
+  /// a description or amount condition without it.
+  private func conditionRow<Content: View>(
+    isFirst: Bool, remove: (() -> Void)?, @ViewBuilder content: () -> Content
+  ) -> some View {
     HStack(spacing: 8) {
-      Text("AND")
-        .font(.system(size: 10, weight: .semibold))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 2)
-        .background(ManagePalette.badge, in: .rect(cornerRadius: 4))
+      if !isFirst {
+        Text("AND")
+          .font(.system(size: 10, weight: .semibold))
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 5)
+          .padding(.vertical, 2)
+          .background(ManagePalette.badge, in: .rect(cornerRadius: 4))
+      }
       content()
-      Spacer(minLength: 0)
-      Button("Remove condition", systemImage: "xmark.circle.fill", action: remove)
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .foregroundStyle(.secondary)
+      if let remove {
+        Spacer(minLength: 0)
+        Button("Remove condition", systemImage: "xmark.circle.fill", action: remove)
+          .labelStyle(.iconOnly)
+          .buttonStyle(.borderless)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  // MARK: Roll back
+
+  /// TA v1.6: what the rule changed on existing transactions, with "Roll back…".
+  @ViewBuilder private var rollback: some View {
+    if !draft.isNew, let text = model.editorRollbackText {
+      HStack(spacing: 8) {
+        Image(systemName: "arrow.uturn.backward.circle").foregroundStyle(.secondary)
+        Text(text).foregroundStyle(.secondary)
+        Spacer(minLength: 0)
+        Button("Roll back…") { model.requestRollback() }
+      }
+      .font(.system(size: 12))
+      .alert(
+        model.rollbackConfirmation?.title ?? "",
+        isPresented: Binding(get: { model.rollbackConfirmation != nil }, set: { if !$0 { model.cancelRollback() } })
+      ) {
+        // Capture before the Task: the alert clears its binding first (see confirmApply).
+        let pending = model.rollbackConfirmation
+        Button("Cancel", role: .cancel) { model.cancelRollback() }
+        Button("Roll back", role: .destructive) {
+          if let pending { Task { await model.rollBack(pending.ruleID) } }
+        }
+      } message: {
+        Text(model.rollbackConfirmation?.message ?? "")
+      }
     }
   }
 
