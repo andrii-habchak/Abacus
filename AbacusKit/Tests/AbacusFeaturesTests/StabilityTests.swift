@@ -64,6 +64,30 @@ struct StabilityTests {
     session.stop()
   }
 
+  @Test("A drop re-reads the order (cached drop answers refreshed), balances and counts stay")
+  func dropRefreshesOrderOnly() async throws {
+    let model = AccountsModel(dependencies: .preview())
+    await model.load()
+    let cash = PreviewData.cashPLN.id
+    let group = PreviewData.monobankGroup.id
+    let balances = model.balances
+    let counts = model.txnCounts
+    #expect(model.canDrop(cash, on: group, position: .onto))
+    await model.drop(cash, on: group, position: .onto)
+    #expect(model.account(cash)?.groupID == group)
+    #expect(!model.canDrop(cash, on: group, position: .onto))
+    #expect(model.balances == balances)
+    #expect(model.txnCounts == counts)
+
+    let categories = CategoriesModel(dependencies: .preview())
+    await categories.load()
+    let rows = categories.rows.filter { !$0.isChild }
+    try #require(rows.count >= 3)
+    #expect(categories.canDrop(rows[2].id, on: rows[0].id, position: .before))
+    await categories.drop(rows[2].id, on: rows[0].id, position: .before)
+    #expect(categories.rows.first?.id == rows[2].id)
+  }
+
   @Test("Days and months order by their numbers exactly as their strings do")
   func dayOrderMatchesStrings() {
     let days = [

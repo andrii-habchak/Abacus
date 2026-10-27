@@ -94,6 +94,7 @@ public final class CategoriesModel {
     if phase != .loaded { phase = .loading }
     do {
       categories = try await dependencies.categories.categories(kind: nil, includeArchived: true)
+      dropChecks = [:]
       let txns = try await dependencies.allTransactions()
       var usage: [AbacusDomain.Category.ID: Int] = [:]
       var uncategorised: [CategoryKind: Int] = [:]
@@ -114,6 +115,7 @@ public final class CategoriesModel {
         sortLoaded = true
         let stored = try? await dependencies.settings.value(.categorySort)
         sort = stored.flatMap(CategorySort.init(rawValue:)) ?? .default
+        dropChecks = [:]
       }
       let plan = try await dependencies.budget.plan(for: dependencies.today().yearMonth)
       budgeted = Set(plan?.allocations.map(\.categoryID) ?? [])
@@ -216,6 +218,7 @@ public final class CategoriesModel {
     guard sort != self.sort else { return }
     self.sort = sort
     sortLoaded = true
+    dropChecks = [:]
     try? await dependencies.settings.set(.categorySort, sort.rawValue)
   }
 
@@ -410,7 +413,32 @@ public final class CategoriesModel {
   public func canDrop(
     _ moving: AbacusDomain.Category.ID, on target: AbacusDomain.Category.ID?, position: CategoryDropPosition
   ) -> Bool {
-    plan(moving, on: target, position: position) != nil
+    // Asked on every mouse move of a drag: answered once per proposal until the data changes (S1).
+    let key = DropCheck(kind: kind, moving: moving, target: target, position: position)
+    if let known = dropChecks[key] { return known }
+    let allowed = plan(moving, on: target, position: position) != nil
+    dropChecks[key] = allowed
+    return allowed
+  }
+
+  private struct DropCheck: Hashable {
+    let kind: CategoryKind
+    let moving: AbacusDomain.Category.ID
+    let target: AbacusDomain.Category.ID?
+    let position: CategoryDropPosition
+  }
+
+  /// `canDrop` answers for the current categories and sort.
+  @ObservationIgnored private var dropChecks: [DropCheck: Bool] = [:]
+
+  /// After a drop only parents and positions changed: the categories are re-read without the
+  /// transactions (usage counts stay) (S1).
+  private func reloadOrder() async {
+    guard phase == .loaded,
+      let categories = try? await dependencies.categories.categories(kind: nil, includeArchived: true)
+    else { return await load() }
+    self.categories = categories
+    dropChecks = [:]
   }
 
   /// Applies a drop:
@@ -430,7 +458,7 @@ public final class CategoriesModel {
     do {
       for category in plan.changed { try await dependencies.categories.save(category) }
       if !plan.changed.isEmpty { await onDataChange?() }
-      await load()
+      await reloadOrder()
     } catch {
       errorMessage = ManageFailure.message(error, doing: "move the category")
       await load()
