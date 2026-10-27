@@ -6,8 +6,8 @@ import SwiftUI
 /// with the day's net, nested attached records, footer totals in the display currency.
 ///
 /// The owner of the window keeps `model` alive (e.g. `@State`) so filters survive switching
-/// sections. Search goes into the window toolbar; the display-currency control and "New
-/// transaction" belong to the shell.
+/// sections. The page search sits full width above the filters (R-MGMT-11); the
+/// display-currency control and "New transaction" belong to the shell.
 struct TransactionsView: View {
   @Bindable var model: TransactionsViewModel
   /// From the shell's display-currency control (R-HOME-4).
@@ -19,8 +19,13 @@ struct TransactionsView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      TransactionFilterBar(model: model)
-        .background(TxnPalette.barBackground)
+      VStack(spacing: 0) {
+        PageSearchField(text: $model.filters.search, prompt: "Search description, note")
+          .padding(.horizontal, TxnMetrics.horizontalPadding)
+          .padding(.top, 12)
+        TransactionFilterBar(model: model)
+      }
+      .background(TxnPalette.barBackground)
       Divider()
       TransactionColumnHeader()
         .padding(.horizontal, TxnMetrics.horizontalPadding)
@@ -32,7 +37,6 @@ struct TransactionsView: View {
         .background(TxnPalette.barBackground)
     }
     .navigationTitle("Transactions")
-    .searchable(text: $model.filters.search, placement: .toolbar, prompt: "Search description, note")
     .onChange(of: displayCurrency, initial: true) { _, currency in
       model.displayCurrency = currency
     }
@@ -46,6 +50,9 @@ struct TransactionsView: View {
         if Task.isCancelled { return }
       }
       await model.refresh()
+      #if DEBUG
+        TransactionsDebugLaunch.apply(to: model)
+      #endif
     }
   }
 
@@ -183,3 +190,47 @@ struct TransactionsPreviewHost: View {
     .frame(width: 1040, height: 760)
   }
 }
+
+#if DEBUG
+  /// Debug builds only, for UI checks on a scratch database: `-AbacusTransactionsEvent <name>`
+  /// opens the list as that event's "Show N transactions" does, `-AbacusTransactionsSearch <text>`
+  /// fills the page search, `-AbacusTransactionsTypes expense,income` sets the type toggles.
+  @MainActor
+  enum TransactionsDebugLaunch {
+    private static var applied = false
+
+    static func apply(to model: TransactionsViewModel) {
+      guard !applied else { return }
+      applied = true
+      let defaults = UserDefaults.standard
+      if let name = defaults.string(forKey: "AbacusTransactionsEvent"),
+        let event = model.reference.events.first(where: { $0.name == name })
+      {
+        model.filters = .event(event)
+      }
+      if let search = defaults.string(forKey: "AbacusTransactionsSearch") { model.filters.search = search }
+      if let types = defaults.string(forKey: "AbacusTransactionsTypes") {
+        model.filters.types = Set(types.split(separator: ",").compactMap { TxnType(rawValue: String($0)) })
+      }
+      DebugWindowSize.applyIfRequested()
+    }
+  }
+
+  /// Debug builds only: `-AbacusWindowWidth <points>` (and `-AbacusWindowHeight`) resize the
+  /// main window, to check layouts at a narrow width in a snapshot.
+  @MainActor
+  enum DebugWindowSize {
+    static func applyIfRequested() {
+      let defaults = UserDefaults.standard
+      let width = defaults.double(forKey: "AbacusWindowWidth")
+      guard width > 0 else { return }
+      let height = defaults.double(forKey: "AbacusWindowHeight")
+      for window in NSApp.windows where window.identifier?.rawValue.hasPrefix("main") == true {
+        var frame = window.frame
+        frame.size.width = width
+        if height > 0 { frame.size.height = height }
+        window.setFrame(frame, display: true)
+      }
+    }
+  }
+#endif

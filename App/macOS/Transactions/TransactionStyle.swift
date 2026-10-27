@@ -178,3 +178,61 @@ struct TxnMenuItemStyle: ButtonStyle {
     .contentShape(Rectangle())
   }
 }
+
+/// Lays its subviews out left to right at their ideal sizes and starts a new line when the next
+/// one does not fit (the filter bar's chips). A subview wider than the whole row is offered the
+/// row's width.
+struct TxnFlowLayout: Layout {
+  var spacing: CGFloat = 8
+  var lineSpacing: CGFloat = 8
+
+  private struct Line {
+    var items: [(index: Int, size: CGSize)] = []
+    var width: CGFloat = 0
+    var height: CGFloat = 0
+  }
+
+  private func lines(for width: CGFloat?, subviews: Subviews) -> [Line] {
+    let limit = width ?? .infinity
+    var lines: [Line] = []
+    var line = Line()
+    for (index, subview) in subviews.enumerated() {
+      var size = subview.sizeThatFits(.unspecified)
+      if size.width > limit {
+        size = subview.sizeThatFits(ProposedViewSize(width: limit, height: nil))
+      }
+      if size.width <= 0 && size.height <= 0 { continue }
+      let needed = line.items.isEmpty ? size.width : line.width + spacing + size.width
+      if needed > limit, !line.items.isEmpty {
+        lines.append(line)
+        line = Line()
+      }
+      line.width = line.items.isEmpty ? size.width : line.width + spacing + size.width
+      line.height = max(line.height, size.height)
+      line.items.append((index, size))
+    }
+    if !line.items.isEmpty { lines.append(line) }
+    return lines
+  }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let lines = lines(for: proposal.width, subviews: subviews)
+    let height = lines.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(0, lines.count - 1))
+    let width = lines.map(\.width).max() ?? 0
+    return CGSize(width: proposal.width ?? width, height: height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    var y = bounds.minY
+    for line in lines(for: bounds.width, subviews: subviews) {
+      var x = bounds.minX
+      for item in line.items {
+        subviews[item.index].place(
+          at: CGPoint(x: x, y: y + line.height / 2), anchor: .leading,
+          proposal: ProposedViewSize(width: item.size.width, height: item.size.height))
+        x += item.size.width + spacing
+      }
+      y += line.height + lineSpacing
+    }
+  }
+}
