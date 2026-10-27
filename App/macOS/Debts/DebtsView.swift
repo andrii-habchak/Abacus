@@ -306,7 +306,10 @@ struct DebtFormSheet: View {
   @State private var confirmDelete = false
 
   var body: some View {
-    if let draft = Binding($model.debtDraft) {
+    // Not `Binding($model.debtDraft)`: Save, Delete and Escape set the draft to nil while the
+    // sheet's fields are still on screen; a force-unwrapped binding crashed there (S1, D54).
+    if let shown = model.debtDraft {
+      let draft = presentBinding({ model.debtDraft }, { model.debtDraft = $0 }, fallback: shown)
       VStack(alignment: .leading, spacing: 0) {
         Text(draft.wrappedValue.id == nil ? "New debt" : "Edit debt").font(.headline).padding([.horizontal, .top], 20)
         Form {
@@ -342,7 +345,7 @@ struct DebtFormSheet: View {
             .keyboardShortcut(.cancelAction)
           Button("Save") { Task { await model.saveDebtDraft() } }
             .keyboardShortcut(.defaultAction)
-            .disabled(model.debtDraftIssue != nil)
+            .disabled(model.debtDraftIssue != nil || model.isSaving)
         }
         .padding(20)
       }
@@ -356,7 +359,9 @@ struct DebtRecordFormSheet: View {
   @State private var confirmDelete = false
 
   var body: some View {
-    if let draft = Binding($model.recordDraft) {
+    // See `DebtFormSheet`: the record draft becomes nil on Save, Delete and Escape (S1, D54).
+    if let shown = model.recordDraft {
+      let draft = presentBinding({ model.recordDraft }, { model.recordDraft = $0 }, fallback: shown)
       let currency = model.recordDebtCurrency?.rawValue ?? ""
       VStack(alignment: .leading, spacing: 0) {
         Text(draft.wrappedValue.recordID == nil ? "New record" : "Edit record").font(.headline)
@@ -414,7 +419,7 @@ struct DebtRecordFormSheet: View {
             .keyboardShortcut(.cancelAction)
           Button("Save") { Task { await model.saveRecordDraft() } }
             .keyboardShortcut(.defaultAction)
-            .disabled(model.recordDraftIssue != nil)
+            .disabled(model.recordDraftIssue != nil || model.isSaving)
             .help(model.recordDraftIssue ?? "")
         }
         .padding(20)

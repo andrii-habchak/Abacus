@@ -38,7 +38,9 @@ public struct Day: Hashable, Comparable, Codable, Sendable, CustomStringConverti
     Day(calendar.date(byAdding: .day, value: days, to: date(calendar: calendar))!, calendar: calendar)
   }
 
-  public static func < (lhs: Day, rhs: Day) -> Bool { lhs.string < rhs.string }
+  /// By the numbers, not by `string` (S1): formatting two strings per comparison made every
+  /// date filter and balance-through-a-day loop slow. Same order as the `YYYY-MM-DD` strings.
+  public static func < (lhs: Day, rhs: Day) -> Bool { (lhs.year, lhs.month, lhs.day) < (rhs.year, rhs.month, rhs.day) }
 }
 
 /// A calendar month, stored as `YYYY-MM` (budgets, month selectors).
@@ -70,5 +72,6 @@ public struct Month: Hashable, Comparable, Codable, Sendable, CustomStringConver
     adding(months: 1).firstDay.adding(days: -1, calendar: calendar)
   }
 
-  public static func < (lhs: Month, rhs: Month) -> Bool { lhs.string < rhs.string }
+  /// By the numbers (S1); same order as the `YYYY-MM` strings.
+  public static func < (lhs: Month, rhs: Month) -> Bool { (lhs.year, lhs.month) < (rhs.year, rhs.month) }
 }

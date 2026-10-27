@@ -151,6 +151,7 @@ public final class AccountsModel {
       let txns = try await dependencies.allTransactions()
       self.accounts = accounts
       self.groups = groups
+      dropChecks = [:]
       balances = Calc.balances(accounts: accounts, txns: txns, through: dependencies.today(), calendar: format.calendar)
       var counts: [Account.ID: Int] = [:]
       for item in txns {
@@ -162,6 +163,7 @@ public final class AccountsModel {
         sortLoaded = true
         let stored = try? await dependencies.settings.value(.accountSort)
         sort = stored.flatMap(AccountSort.init(rawValue:)) ?? .default
+        dropChecks = [:]
       }
       converter = await dependencies.converter()
       phase = .loaded
@@ -330,6 +332,7 @@ public final class AccountsModel {
     guard sort != self.sort else { return }
     self.sort = sort
     sortLoaded = true
+    dropChecks = [:]
     try? await dependencies.settings.set(.accountSort, sort.rawValue)
   }
 
@@ -642,7 +645,34 @@ public final class AccountsModel {
 
   /// Whether `moving` (an account or a group) may be dropped there.
   public func canDrop(_ moving: UUID, on target: UUID?, position: AccountDropPosition) -> Bool {
-    newGroupDrop(moving, on: target, position: position) != nil || plan(moving, on: target, position: position) != nil
+    // Asked on every mouse move of a drag: answered once per proposal until the data changes (S1).
+    let key = DropCheck(moving: moving, target: target, position: position)
+    if let known = dropChecks[key] { return known }
+    let allowed =
+      newGroupDrop(moving, on: target, position: position) != nil || plan(moving, on: target, position: position) != nil
+    dropChecks[key] = allowed
+    return allowed
+  }
+
+  private struct DropCheck: Hashable {
+    let moving: UUID
+    let target: UUID?
+    let position: AccountDropPosition
+  }
+
+  /// `canDrop` answers for the current accounts, groups and sort.
+  @ObservationIgnored private var dropChecks: [DropCheck: Bool] = [:]
+
+  /// After a drop: only names, groups and positions changed, so the accounts and groups are
+  /// re-read without the transactions (balances and counts stay) (S1).
+  private func reloadOrder() async {
+    guard phase == .loaded,
+      let accounts = try? await dependencies.accounts.accounts(includeArchived: true),
+      let groups = try? await dependencies.accounts.groups()
+    else { return await load() }
+    self.accounts = accounts
+    self.groups = groups
+    dropChecks = [:]
   }
 
   /// An account in a group that still exists.
@@ -691,7 +721,7 @@ public final class AccountsModel {
       for group in plan.groups { try await dependencies.accounts.saveGroup(group) }
       for account in plan.accounts { try await dependencies.accounts.save(account) }
       if !plan.accounts.isEmpty || !plan.groups.isEmpty { await onDataChange?() }
-      await load()
+      await reloadOrder()
     } catch {
       errorMessage = ManageFailure.message(error, doing: "move the account")
       await load()
