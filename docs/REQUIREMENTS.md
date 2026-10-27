@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.4 — agreed** (2026-10-21). All open questions closed (§9). Changes after this point
+_Status: **v1.5 — agreed** (2026-10-27). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -87,18 +87,19 @@ accounts, with as little manual entry as possible (bank and Saldo imports).
 - `R-TX-7` Edit, delete (with confirmation), duplicate.
 
 ### 3.5 Budget — `R-BUD`
-- `R-BUD-1` A **monthly budget**: a total monthly limit in a chosen currency, **allocated across
-  categories** (e.g. Rent 4 000, Groceries 2 500). The part of the total not allocated is shown
-  as "unallocated / other".
+- `R-BUD-1` A **monthly budget**: per-category monthly limits, **each in its own currency** (e.g.
+  Groceries 400 EUR, Home 5 747 PLN). There is no separate total: the budget's total is the sum
+  of the limits converted to the display currency (v1.5; replaces the single-currency total and
+  the "unallocated" remainder).
 - `R-BUD-2` Spent per category = that month's expenses (attached expense records included;
-  refunds subtracted only when `R-SET-3` is on) converted to the budget currency at each transaction's date rate. A parent
+  refunds subtracted only when `R-SET-3` is on) converted to that category limit's currency at each transaction's date rate. A parent
   category's limit covers its subcategories.
 - `R-BUD-3` The budget repeats every month until changed; a change applies from the chosen month
   onward (past months keep their limits). No rollover of unspent money in v1.
 
 ### 3.6 Events — `R-EVT`
 Answers "how do I track a vacation / a relocation / the car" (what Saldo tags were used for).
-- `R-EVT-1` An **event** has a name, optional date range, optional budget, and an archived flag.
+- `R-EVT-1` An **event** has a name, colour, optional date range, optional budget, and an archived flag.
 - `R-EVT-2` A transaction belongs to **at most one** event. While an event's date range is active,
   the editor pre-selects it for new expenses (can be cleared).
 - `R-EVT-3` Event view: total spent (display currency), by category, transaction list; the list
@@ -132,9 +133,13 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
   of non-archived accounts in the display currency, with a per-account breakdown on expand.
 - `R-HOME-2` **Monthly budget**: total limit, spent, remaining, % used, days left; per-category
   bars; **categories over their limit are highlighted** (and near-limit, ≥ 90 %, shown in amber).
+  An edit button opens the Budget screen.
 - `R-HOME-3` **Monthly expenses** donut by category (parents, expandable to subcategories);
   legend with amounts and %; click a slice → transaction list filtered to that category and month.
+  Only a click navigates; hovering never switches screens (the app never changes section without
+  a user action).
 - `R-HOME-4` **Display currency** switch (UAH / PLN / EUR / USD) for all widgets; remembered.
+  The switch is shown only on screens it affects: Dashboard, Transactions, Accounts, Events.
 - `R-HOME-5` Month selector (← →) for the budget and donut widgets.
 
 ### 4.2 Transaction list — `R-LIST`
@@ -160,10 +165,14 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
 - `R-MGMT-1` Accounts: grouped list with balances, CRUD, archive (`R-ACC-4`).
 - `R-MGMT-2` Categories: income / expense tabs, tree with subcategories, CRUD, reorder,
   reassign-on-delete.
-- `R-MGMT-3` Budget editor: monthly total + per-category allocations.
+- `R-MGMT-3` Budget editor: per-category limits, each with its own currency.
 - `R-MGMT-4` Events: CRUD, archive.
 - `R-MGMT-5` Exchange rates (`R-FX-5`).
-- `R-MGMT-6` Categorisation rules: list, edit, delete (`R-IMP-8`).
+- `R-MGMT-6` Rules: list, edit (conditions + action, Saldo-style), delete, "Update existing
+  transactions" on save (`R-IMP-8`).
+- `R-MGMT-7` Colours: categories, accounts and events get a random distinct colour when created
+  (and existing grey/uncoloured ones once); the colour can be changed manually. Transaction icons
+  use their category's colour everywhere and follow a colour change immediately.
 
 ### 4.5 Import — `R-IMP`
 Common pipeline for all sources: **parse → normalise → match/dedupe → preview → commit**.
@@ -188,9 +197,15 @@ Common pipeline for all sources: **parse → normalise → match/dedupe → prev
 - `R-IMP-6` Commit runs in one database transaction — all or nothing; a summary is shown and the
   batch is listed in an import history with **"Undo import"** (deletes that batch's transactions).
 - `R-IMP-7` Imports never change opening balances or existing transactions, except via *link*.
-- `R-IMP-8` **Categorisation rules** ("description contains X → category Y", optionally per
-  account) are created from the user's choices in the preview and applied to later imports and
-  the editor. This is what removes the manual work for recurring merchants.
+- `R-IMP-8` **Rules** (v1.5, Saldo-like). Conditions: one description condition — *exactly
+  matches* or *contains* — AND optionally one amount condition — *bigger than* or *smaller than*,
+  on the absolute amount in the account's currency — and optionally "only on account X".
+  Actions: **assign category Y**, or **turn into a transfer** between the transaction's own
+  account and account Y (outgoing money → to Y, incoming → from Y; e.g. description contains
+  "Kitty" → transfer to the personal-debt account "Kitty"). Rules are created manually or from
+  the user's choices in the import preview (learned rules are *contains*), apply to later imports
+  and to the editor's suggestion; saving a rule with "Update existing transactions" applies it to
+  matching past transactions. Text matching folds case, diacritics and whitespace.
 
 #### Saldo CSV — `R-IMP-SALDO` (details: `docs/import/saldo-format.md`)
 - `R-IMP-SALDO-1` Double-entry rows grouped by Transaction ID; leg types (BANK_ACCOUNTS, CASH,
@@ -308,6 +323,7 @@ No open questions.
 |---------|------|--------|
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
+| 1.5 | 2026-10-27 | Owner review of v1.0.0: per-category budget currencies, no separate total (`R-BUD-1/2`, `R-MGMT-3`); Saldo-like rules with amount conditions and a transfer action (`R-IMP-8`, `R-MGMT-6`); colours for categories, accounts, events (`R-MGMT-7`, `R-EVT-1`); click-only drill-down (`R-HOME-3`); budget edit button (`R-HOME-2`); currency switch only where it applies (`R-HOME-4`). |
 | 1.4 | 2026-10-21 | Q23: no second Saldo pairing pass; cross-currency halves go to Needs review. |
 | 1.3 | 2026-10-21 | Q22: PKO rows dated by the purchase day, booking day kept (`R-IMP-PKO-2`, new `R-IMP-PKO-4`). |
 | 1.2 | 2026-10-21 | Editor review: currency picker replaces "paid in another currency" (`R-CUR-4`, `R-EDIT-4`); last-used currency/account and transfer accounts as defaults (`R-EDIT-4/5`). |
