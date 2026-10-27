@@ -2,8 +2,9 @@ import AbacusDomain
 import Foundation
 import Observation
 
-/// The dashboard (R-HOME-1…5): net worth with its monthly chart, the month's budget and the
-/// expenses donut, in the display currency, for the selected month.
+/// The dashboard (R-HOME-1…6): net worth with its monthly chart, the month's budget, the
+/// expenses and income donuts and income vs expenses over twelve months, in the display
+/// currency, for the selected month; and the widget order (`layout`).
 ///
 /// Reads everything once in `load()`; a display-currency or month change recomputes from what
 /// was read (a month change also reads that month's budget plan). Call `load()` again when the
@@ -26,10 +27,18 @@ public final class DashboardModel {
   /// nil when no budget plan is in effect for `month` (or before loading).
   public private(set) var budget: DashboardBudget?
   public private(set) var expenses: DashboardExpenses?
+  /// The income donut (R-HOME-6).
+  public private(set) var income: DashboardDonut?
+  /// Income vs expenses, twelve months ending at `month` (R-HOME-6).
+  public private(set) var incomeVsExpenses: DashboardIncomeExpenses?
   public private(set) var ratesAsOf: Day?
   public private(set) var ratesFetchFailed = false
-  /// The donut slice picked last (cleared when the month changes).
+  /// The expenses donut slice picked last (cleared when the month changes).
   public private(set) var selectedSlice: CategoryKey?
+  /// The income donut slice picked last (cleared when the month changes).
+  public private(set) var selectedIncomeSlice: CategoryKey?
+  /// The widget order (R-HOME-6), read in `load()` from `SettingKey.dashboardLayout`.
+  public private(set) var layout: DashboardLayout = .default
   /// The earliest month the selector goes back to: the month of the first transaction.
   public private(set) var earliestMonth: Month
 
@@ -83,6 +92,8 @@ public final class DashboardModel {
         accounts: accounts, categories: categories, txns: txns, refundsReduceSpending: refunds == "true")
       loaded.uncategorisedColor = await dependencies.settings.uncategorisedColor()
       loaded.accountGroups = (try? await dependencies.accounts.groups()) ?? []
+      // A layout that can't be read is the default one, never a failed dashboard.
+      layout = DashboardLayout(stored: (try? await dependencies.settings.value(.dashboardLayout)) ?? nil)
       data = loaded
       plans = [:]
       _ = try await planEntry(for: month)
@@ -151,6 +162,7 @@ public final class DashboardModel {
     guard target != month else { return }
     month = target
     selectedSlice = nil
+    selectedIncomeSlice = nil
     if data != nil {
       do {
         _ = try await planEntry(for: target)
@@ -162,16 +174,47 @@ public final class DashboardModel {
     recomputeMonth()
   }
 
-  /// Picks a donut slice or legend row (R-HOME-3) and returns where to drill down: the
-  /// category (nil for "Uncategorised": expenses without a category) and the month, or nil
-  /// for a slice with nothing to filter by ("Refunds").
+  /// Picks a slice or legend row of either donut (R-HOME-3, R-HOME-6) and returns where to
+  /// drill down: the slice's kind, its category (nil for "Uncategorised": that kind without a
+  /// category) and the month, or nil for a slice with nothing to filter by ("Refunds").
   @discardableResult
-  public func select(_ slice: DashboardExpenses.Slice) -> (categoryID: AbacusDomain.Category.ID?, month: Month)? {
-    selectedSlice = slice.id
+  public func select(_ slice: DashboardDonut.Slice) -> DashboardDrillDown.Target? {
+    switch slice.kind {
+    case .expense: selectedSlice = slice.id
+    case .income: selectedIncomeSlice = slice.id
+    }
     switch slice.id {
-    case .category, .uncategorized: return (slice.categoryID, month)
+    case .category, .uncategorized: return DashboardDrillDown.Target(kind: slice.kind, categoryID: slice.categoryID, month: month)
     case .refunds: return nil
     }
+  }
+
+  // MARK: Layout (R-HOME-6)
+
+  /// Moves a widget to another's place (a drag and drop) and remembers the order.
+  public func moveWidget(_ widget: DashboardWidget, to target: DashboardWidget) async {
+    var next = layout
+    next.move(widget, to: target)
+    await save(next)
+  }
+
+  /// Moves a widget one place earlier (-1) or later (1) among the `visible` ones.
+  public func moveWidget(_ widget: DashboardWidget, by step: Int, among visible: [DashboardWidget]) async {
+    var next = layout
+    next.move(widget, by: step, among: visible)
+    await save(next)
+  }
+
+  /// Back to the default order ("Reset layout").
+  public func resetLayout() async {
+    await save(.default)
+  }
+
+  private func save(_ next: DashboardLayout) async {
+    guard next != layout else { return }
+    layout = next
+    // Not saved is not fatal: the order holds for this session and the next save retries.
+    try? await dependencies.settings.set(.dashboardLayout, next.stored)
   }
 
   // MARK: Texts
@@ -208,6 +251,8 @@ public final class DashboardModel {
     if let netWorth { all.merge(netWorth.missing) }
     if let budget { all.merge(budget.missing) }
     if let expenses { all.merge(expenses.missing) }
+    if let income { all.merge(income.missing) }
+    if let incomeVsExpenses { all.merge(incomeVsExpenses.missing) }
     return all
   }
 
@@ -234,5 +279,13 @@ public final class DashboardModel {
       month: month, accounts: data.accounts, categories: data.categories, txns: data.txns,
       currency: displayCurrency, converter: rates.converter, refundsReduceSpending: data.refundsReduceSpending,
       format: format, uncategorisedColor: data.uncategorisedColor)
+    income = DashboardDonut.make(
+      kind: .income, month: month, accounts: data.accounts, categories: data.categories, txns: data.txns,
+      currency: displayCurrency, converter: rates.converter, refundsReduceSpending: data.refundsReduceSpending,
+      format: format, uncategorisedColor: data.uncategorisedColor)
+    incomeVsExpenses = DashboardIncomeExpenses.make(
+      month: month, accounts: data.accounts, categories: data.categories, txns: data.txns,
+      currency: displayCurrency, converter: rates.converter, refundsReduceSpending: data.refundsReduceSpending,
+      format: format)
   }
 }

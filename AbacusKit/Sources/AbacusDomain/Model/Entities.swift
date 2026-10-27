@@ -685,6 +685,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
   case categorySort
   /// The Accounts page sort (`AccountSort.rawValue`); default custom order (R-MGMT-9).
   case accountSort
+  /// The dashboard widget order (`DashboardLayout`): a JSON array of widget ids (R-HOME-6).
+  case dashboardLayout
 }
 
 @Table("appSettings")
