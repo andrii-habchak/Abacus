@@ -129,7 +129,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
 
 ### Phase 3d — Owner review of 1.1.0 (2026-10-27, TA v1.6, D46–D50)
 Wave 1 (parallel):
-- [ ] **C8 Budget** — widget bug (wrong limit currency), total + currency + unallocated (D46),
+- [x] **C8 Budget** (merged 2026-10-27) — widget bug (wrong limit currency), total + currency + unallocated (D46),
   switcher on Budget page, red trash, Save bottom-right.
 - [x] **C9 Rules** (merged 2026-10-27; migration v8) — apply-to-existing bug, rollback, amount-only condition, category filter,
   page search.
