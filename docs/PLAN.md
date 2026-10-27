@@ -140,7 +140,7 @@ Wave 1 (parallel):
 Wave 2:
 - [ ] **C12 Accounts** — account groups (D48), drag/sort/search/currency filter, grouped pickers,
   net worth hierarchy.
-- [ ] **C13 Dashboard widgets** — income donut, income vs expenses, drag-reorder widgets.
+- [x] **C13 Dashboard widgets** (merged 2026-10-27) — income donut, income vs expenses, drag-reorder widgets.
 - [ ] **C14 Debts** — `R-DEBT` (TA v1.7, D51).
 - [ ] **Release 1.2.0**.
 
