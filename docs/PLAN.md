@@ -121,7 +121,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
 ### Phase 3c — Owner review of v1.0.0 (2026-10-27, TA v1.5, D42–D45)
 - [x] **C4 Navigation** (merged 2026-10-27) — click-only donut drill-down, budget edit button,
   currency switch only on Dashboard/Transactions/Accounts/Events.
-- [ ] **C5 Colours** — random + manual colours for categories, accounts, events; category-coloured
+- [x] **C5 Colours** (merged 2026-10-27) — random + manual colours for categories, accounts, events; category-coloured
   transaction icons. Migration "v4: colours".
 - [ ] **C6 Budget currency** — per-category limit currency, no separate total. Migration "v5".
 - [ ] **C7 Rules** — Saldo-like conditions and category/transfer actions. Migration "v6: rules".
