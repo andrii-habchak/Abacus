@@ -18,7 +18,8 @@ build the owner is testing; it is **not tagged**. Released so far: only `v1.0.0`
 - Database: migrations v4–v11 run on the owner's real database at the first launch of 1.1.0+.
   The debts conversion (v10) was checked on the real Saldo export in memory (balances and net
   worth unchanged). The owner backs up `abacus.sqlite` before installing.
-- README rewritten for 1.2.1 with new screenshots (sample data only, 2026-10-27).
+- README screenshots retaken 2026-10-28 with real window captures (ScreenCaptureKit, R2), EUR,
+  full dashboard; sample data only.
 - `build.noindex/` is the build output folder (Spotlight skips it); the old `build/` can be deleted.
 
 **Waiting on the owner**: test 1.2.1 (`dist/Abacus-1.2.1.dmg`), especially real mouse drag and
