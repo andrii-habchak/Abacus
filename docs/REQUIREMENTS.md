@@ -178,7 +178,9 @@ Answers "who owes me, whom do I owe, and how much".
   Budget; order EUR, USD, PLN, UAH. "New transaction" is not shown on Budget and Rules.
 - `R-HOME-6` (v1.6) **Monthly income** donut (like expenses) and an **income vs expenses**
   widget (last 12 months, bars per month with the net). Widgets can be **reordered by drag and
-  drop**; full-width and half-width widgets keep their width; the order is remembered.
+  drop**; full-width and half-width widgets keep their width; the order is remembered. Widths
+  (owner): Net worth and Income vs expenses full; Monthly budget, Monthly expenses, Monthly
+  income and Debts half.
 - `R-HOME-5` Month selector (← →) for the budget and donut widgets.
 
 ### 4.2 Transaction list — `R-LIST`
