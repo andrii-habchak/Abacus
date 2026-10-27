@@ -54,6 +54,8 @@ public final class DashboardModel {
     var refundsReduceSpending: Bool
     /// The built-in "Uncategorised" colour (D47).
     var uncategorisedColor: String = Uncategorised.defaultColorHex
+    /// Net worth breakdown by account group (R-HOME-1, R-MGMT-9).
+    var accountGroups: [AccountGroup] = []
   }
 
   struct PlanEntry {
@@ -89,6 +91,7 @@ public final class DashboardModel {
       var loaded = try await LoadedData(
         accounts: accounts, categories: categories, txns: txns, refundsReduceSpending: refunds == "true")
       loaded.uncategorisedColor = await dependencies.settings.uncategorisedColor()
+      loaded.accountGroups = (try? await dependencies.accounts.groups()) ?? []
       // A layout that can't be read is the default one, never a failed dashboard.
       layout = DashboardLayout(stored: (try? await dependencies.settings.value(.dashboardLayout)) ?? nil)
       data = loaded
@@ -261,7 +264,7 @@ public final class DashboardModel {
     guard let data, let rates else { return }
     netWorth = DashboardNetWorth.make(
       accounts: data.accounts, txns: data.txns, currency: displayCurrency, converter: rates.converter,
-      today: today, format: format)
+      today: today, format: format, groups: data.accountGroups)
     recomputeMonth()
   }
 

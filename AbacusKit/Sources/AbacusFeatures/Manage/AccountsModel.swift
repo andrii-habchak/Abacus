@@ -8,27 +8,33 @@ public enum ManagePhase: Equatable, Sendable {
   case failed(String)
 }
 
-/// One account row (R-MGMT-1): tile, name, "Kind · CUR", balance in the account currency.
+/// One row of the Accounts list (R-MGMT-1, R-MGMT-9): an account (tile, name, "Kind · CUR",
+/// balance in the account currency) or a group (folder, name, "3 accounts", the sum of its
+/// accounts in the display currency).
 public struct AccountRow: Identifiable, Equatable, Sendable {
-  public let id: Account.ID
+  public let id: UUID
   public let name: String
-  /// "Card · UAH".
+  /// "Card · UAH"; for a group "3 accounts".
   public let detail: String
   public let symbol: String
   public let balanceText: String
   public let isNegative: Bool
   public let isLiability: Bool
   public let isArchived: Bool
-  /// The account's colour (R-MGMT-7); nil falls back to blue / red by kind.
+  /// The account's (group's) colour (R-MGMT-7); nil falls back to blue / red by kind.
   public var colorHex: String? = nil
+  /// A group (folder) row.
+  public var isGroup = false
+  /// An account inside a group (indented).
+  public var isChild = false
+  /// False for a group shown only because one of its accounts matches the search.
+  public var matchesSearch = true
 }
 
-/// Accounts under one group name ("Monobank", "PKO", …; ungrouped ones under "Other").
-public struct AccountGroup: Identifiable, Equatable, Sendable {
-  public let name: String
-  public let rows: [AccountRow]
-  public var id: String { name }
-}
+/// Where a dragged account or group lands (R-MGMT-9, like Reminders): `.before` / `.after` a
+/// row reorders (the sort becomes "Custom order"), `.onto` a group (or an account in one) moves
+/// an account into that group.
+public typealias AccountDropPosition = CategoryDropPosition
 
 /// The inspector form of an account (R-ACC-1). Amounts stay text until saved.
 public struct AccountDraft: Equatable, Sendable {
@@ -40,29 +46,52 @@ public struct AccountDraft: Equatable, Sendable {
   /// Signed: a liability normally opens negative.
   public var openingBalance: String
   public var openingDate: Date
-  public var group: String
+  /// nil = top level (R-MGMT-9).
+  public var groupID: AccountGroup.ID?
   public var iban: String
   /// `#RRGGBB` (R-MGMT-7).
   public var colorHex: String? = nil
 }
 
-/// The Accounts screen (approved prototype group 4, R-MGMT-1, R-ACC-1…5): accounts grouped with
-/// their balances, "Show archived accounts", an inspector to create and edit, archive with a
+/// The inspector form of an account group (R-MGMT-9): name and an optional colour.
+public struct AccountGroupDraft: Equatable, Sendable {
+  public let id: AccountGroup.ID
+  public let isNew: Bool
+  public var name: String
+  public var colorHex: String?
+}
+
+/// The Accounts screen (approved prototype group 4, R-MGMT-1, R-MGMT-9, R-ACC-1…5, D48): page
+/// search, sort (Name A–Z / Z–A / Custom order) and currency filter, groups as folders with the
+/// sum of their accounts, drag and drop (between rows reorders, onto a group moves into it),
+/// "Show archived accounts", an inspector to create and edit accounts and groups, archive with a
 /// warning when the balance is not zero, unarchive, delete only without transactions.
 @MainActor
 @Observable
 public final class AccountsModel {
   public private(set) var phase: ManagePhase = .idle
   public private(set) var accounts: [Account] = []
+  public private(set) var groups: [AccountGroup] = []
   /// R-ACC-3, in the account currency, through today.
   public private(set) var balances: [Account.ID: Money] = [:]
   /// Transactions touching the account (either side of a transfer).
   public private(set) var txnCounts: [Account.ID: Int] = [:]
   /// R-ACC-4: archived accounts are listed only on request.
   public var showArchived = false
-  public private(set) var selection: Account.ID?
-  /// The inspector's form; edits are kept until `save()` or `revert()`.
+  /// The page search: account and group names (R-MGMT-11).
+  public var searchText = ""
+  /// The currency filter; nil = all currencies.
+  public var currencyFilter: Currency?
+  /// The page's order (R-MGMT-9); remembered in the settings.
+  public private(set) var sort: AccountSort = .default
+  /// Group sums are in this currency (the app's display currency).
+  public private(set) var displayCurrency: Currency
+  /// An account or a group id.
+  public private(set) var selection: UUID?
+  /// The account inspector's form; edits are kept until `save()` or `revert()`.
   public var draft: AccountDraft?
+  /// The group inspector's form (a group selected or "New group").
+  public var groupDraft: AccountGroupDraft?
   public private(set) var dialog: ManageDialog?
   public private(set) var errorMessage: String?
 
@@ -70,21 +99,27 @@ public final class AccountsModel {
   /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
   /// so the transaction list and the dashboard re-read it.
   @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
+  @ObservationIgnored private var converter: (any CurrencyConverter)?
+  @ObservationIgnored private var sortLoaded = false
   private var format: ManageFormat { dependencies.format }
 
-  public init(dependencies: ManageDependencies) {
+  public init(dependencies: ManageDependencies, displayCurrency: Currency = .UAH) {
     self.dependencies = dependencies
+    self.displayCurrency = displayCurrency
   }
 
   // MARK: Loading
 
-  /// Reads every account (archived too) and transaction; keeps the selection when it still exists.
+  /// Reads every account (archived too), group and transaction; keeps the selection when it
+  /// still exists.
   public func load() async {
     if phase != .loaded { phase = .loading }
     do {
       let accounts = try await dependencies.accounts.accounts(includeArchived: true)
+      let groups = try await dependencies.accounts.groups()
       let txns = try await dependencies.allTransactions()
       self.accounts = accounts
+      self.groups = groups
       balances = Calc.balances(accounts: accounts, txns: txns, through: dependencies.today(), calendar: format.calendar)
       var counts: [Account.ID: Int] = [:]
       for item in txns {
@@ -92,16 +127,33 @@ public final class AccountsModel {
         if let to = item.txn.toAccountID, to != item.txn.accountID { counts[to, default: 0] += 1 }
       }
       txnCounts = counts
+      if !sortLoaded {
+        sortLoaded = true
+        let stored = try? await dependencies.settings.value(.accountSort)
+        sort = stored.flatMap(AccountSort.init(rawValue:)) ?? .default
+      }
+      converter = await dependencies.converter()
       phase = .loaded
     } catch {
       phase = .failed("Couldn't load accounts: \(error.localizedDescription)")
       return
     }
-    if let selection, let account = account(selection) {
+    if let selection, let group = group(selection) {
+      if groupDraft?.id != selection { groupDraft = Self.groupDraft(group) }
+    } else if let selection, let account = account(selection) {
       if draft?.id != selection || draft?.isNew == true { draft = Self.draft(account, format: format) }
-    } else if draft?.isNew != true {
-      select(visibleAccounts.first?.id)
+    } else if draft?.isNew != true && groupDraft?.isNew != true {
+      select(firstAccountID)
     }
+  }
+
+  /// Re-reads the rates (after a refresh): group sums follow.
+  public func refreshRates() async {
+    converter = await dependencies.converter()
+  }
+
+  public func setDisplayCurrency(_ currency: Currency) {
+    displayCurrency = currency
   }
 
   // MARK: List
@@ -110,75 +162,172 @@ public final class AccountsModel {
     accounts.filter { showArchived || !$0.isArchived }
   }
 
-  /// R-MGMT-1: groups in the order of their first account, ungrouped ("Other") last.
-  public var groups: [AccountGroup] {
-    var order: [String] = []
-    var rows: [String: [AccountRow]] = [:]
-    for account in visibleAccounts {
-      let name = Self.groupName(account)
-      if rows[name] == nil { order.append(name) }
-      rows[name, default: []].append(row(account))
+  private var firstAccountID: Account.ID? {
+    rows.first { !$0.isGroup }?.id
+  }
+
+  private var trimmedSearch: String { searchText.trimmingCharacters(in: .whitespaces) }
+
+  private func matches(_ name: String) -> Bool {
+    trimmedSearch.isEmpty || name.localizedStandardContains(trimmedSearch)
+  }
+
+  /// The tree in the page's sort (R-MGMT-9), every account and group (archived too).
+  public var ordered: [AccountTreeItem] {
+    AccountOrder.tree(accounts, groups: groups, by: sort)
+  }
+
+  /// What the list shows: the tree in the page's sort, archived accounts only on request, the
+  /// currency filter, the search (a matching account brings its group; a matching group shows
+  /// its accounts). Empty groups show only without a search or filter.
+  public var rows: [AccountRow] {
+    let filtering = !trimmedSearch.isEmpty || currencyFilter != nil
+    var result: [AccountRow] = []
+    var pendingGroup: (group: AccountGroup, matches: Bool)?
+    var groupShown = false
+    for item in AccountOrder.tree(visibleAccounts, groups: groups, by: sort) {
+      switch item {
+      case .group(let group):
+        pendingGroup = (group, matches(group.name))
+        groupShown = false
+        if !filtering {
+          result.append(groupRow(group))
+          groupShown = true
+        }
+      case .account(let account):
+        let inGroup = account.groupID.flatMap { id in groups.contains { $0.id == id } ? id : nil }
+        if inGroup == nil { pendingGroup = nil }
+        if let filter = currencyFilter, account.currency != filter { continue }
+        let groupMatches = inGroup != nil && pendingGroup?.matches == true
+        guard matches(account.name) || groupMatches else { continue }
+        if let pending = pendingGroup, inGroup != nil, !groupShown {
+          var header = groupRow(pending.group)
+          header.matchesSearch = pending.matches
+          result.append(header)
+          groupShown = true
+        }
+        result.append(row(account, isChild: inGroup != nil))
+      }
     }
-    if let other = order.firstIndex(of: Self.otherGroup) { order.append(order.remove(at: other)) }
-    return order.map { AccountGroup(name: $0, rows: rows[$0] ?? []) }
+    // A group whose name matches but has no account left after the currency filter.
+    if !trimmedSearch.isEmpty, currencyFilter == nil {
+      let shown = Set(result.map(\.id))
+      for group in groups where matches(group.name) && !shown.contains(group.id) {
+        if let index = insertionIndex(for: group, in: result) { result.insert(groupRow(group), at: index) }
+      }
+    }
+    return result
   }
 
-  static let otherGroup = "Other"
-
-  static func groupName(_ account: Account) -> String {
-    let name = account.groupName?.trimmingCharacters(in: .whitespaces) ?? ""
-    return name.isEmpty ? otherGroup : name
+  /// Keeps a matching empty group at its place in the sort.
+  private func insertionIndex(for group: AccountGroup, in rows: [AccountRow]) -> Int? {
+    let order = AccountOrder.tree(visibleAccounts, groups: groups, by: sort).map(\.id)
+    guard let rank = order.firstIndex(of: group.id) else { return nil }
+    return rows.firstIndex { row in (order.firstIndex(of: row.id) ?? .max) > rank } ?? rows.count
   }
 
-  private func row(_ account: Account) -> AccountRow {
+  /// "No accounts match “xyz”." while the search or filter hides every row.
+  public var emptySearchMessage: String? {
+    guard rows.isEmpty, !accounts.isEmpty else { return nil }
+    let search = trimmedSearch
+    if !search.isEmpty { return "No accounts match “\(search)”." }
+    if let currencyFilter { return "No \(currencyFilter.rawValue) accounts." }
+    return nil
+  }
+
+  /// The currency filter's choices (`Currency.displayOrder`).
+  public var currencyOptions: [Currency] { Currency.displayOrder }
+
+  private func row(_ account: Account, isChild: Bool) -> AccountRow {
     let balance = balance(account)
     return AccountRow(
       id: account.id, name: account.name, detail: "\(ManageText.kindTitle(account.kind)) · \(account.currency.rawValue)",
       symbol: ManageText.symbol(account.currency), balanceText: format.money(balance),
       isNegative: balance.minorUnits < 0, isLiability: account.kind.isLiability, isArchived: account.isArchived,
-      colorHex: account.colorHex)
+      colorHex: account.colorHex, isChild: isChild)
+  }
+
+  private func groupRow(_ group: AccountGroup) -> AccountRow {
+    let members = accounts.filter { $0.groupID == group.id && (showArchived || !$0.isArchived) }
+    let sum = groupSum(group.id)
+    let count = members.count
+    return AccountRow(
+      id: group.id, name: group.name, detail: count == 1 ? "1 account" : "\(count) accounts", symbol: "",
+      balanceText: sum.map { format.money($0) } ?? "—", isNegative: (sum?.minorUnits ?? 0) < 0, isLiability: false,
+      isArchived: false, colorHex: group.colorHex, isGroup: true)
+  }
+
+  /// R-MGMT-9: the sum of the group's non-archived accounts in the display currency at the
+  /// latest rates (like net worth); nil when a non-zero balance has no rate.
+  public func groupSum(_ id: AccountGroup.ID) -> Money? {
+    var total = Money.zero(displayCurrency)
+    for account in accounts where account.groupID == id && !account.isArchived {
+      let balance = balance(account)
+      if balance.minorUnits == 0 { continue }
+      guard let converted = converter?.convertAtLatest(balance, to: displayCurrency)
+        ?? (balance.currency == displayCurrency ? balance : nil)
+      else { return nil }
+      total = total + converted
+    }
+    return total
   }
 
   public func account(_ id: Account.ID) -> Account? { accounts.first { $0.id == id } }
+  public func group(_ id: AccountGroup.ID) -> AccountGroup? { groups.first { $0.id == id } }
 
   public func balance(_ account: Account) -> Money {
     balances[account.id] ?? Money(minorUnits: account.openingBalanceMinor, currency: account.currency)
   }
 
-  /// Picks an account for the inspector, dropping unsaved edits.
-  public func select(_ id: Account.ID?) {
+  /// Picks an account or a group for the inspector, dropping unsaved edits.
+  public func select(_ id: UUID?) {
     selection = id
     errorMessage = nil
     draft = id.flatMap(account).map { Self.draft($0, format: format) }
+    groupDraft = id.flatMap(group).map(Self.groupDraft)
   }
 
   public func setShowArchived(_ show: Bool) {
     showArchived = show
     if let selection, let account = account(selection), account.isArchived, !show {
-      select(visibleAccounts.first?.id)
+      select(firstAccountID)
     }
   }
 
-  // MARK: Inspector
+  /// The sort selector (R-MGMT-9); the choice is remembered.
+  public func setSort(_ sort: AccountSort) async {
+    guard sort != self.sort else { return }
+    self.sort = sort
+    sortLoaded = true
+    try? await dependencies.settings.set(.accountSort, sort.rawValue)
+  }
+
+  /// Groups A–Z for the account inspector's Group picker.
+  public var groupOptions: [AccountGroup] { groups.sorted(by: AccountOrder.byName) }
+
+  // MARK: Account inspector
 
   static func draft(_ account: Account, format: ManageFormat) -> AccountDraft {
     AccountDraft(
       id: account.id, isNew: false, name: account.name, kind: account.kind, currency: account.currency,
       openingBalance: format.amountInput(account.openingBalanceMinor), openingDate: account.openingDate,
-      group: account.groupName ?? "", iban: account.iban ?? "", colorHex: account.colorHex)
+      groupID: account.groupID, iban: account.iban ?? "", colorHex: account.colorHex)
   }
 
-  /// "New account": an empty form in the display currency, opening today.
+  /// "New account": an empty form in the display currency, opening today; inside the selected
+  /// group (or the selected account's group).
   public func newAccount(currency: Currency = .UAH) {
+    let groupID = selection.flatMap { id in group(id)?.id ?? account(id)?.groupID }
     selection = nil
     errorMessage = nil
+    groupDraft = nil
     draft = AccountDraft(
       id: UUID(), isNew: true, name: "", kind: .bank, currency: currency, openingBalance: format.amountInput(0),
-      openingDate: dependencies.today().date(calendar: format.calendar), group: "", iban: "",
+      openingDate: dependencies.today().date(calendar: format.calendar), groupID: groupID, iban: "",
       colorHex: ColorPalette.pick(avoiding: accounts.map(\.colorHex)))
   }
 
-  /// The account being edited (nil for a new one).
+  /// The account being edited (nil for a new one or a group).
   public var selectedAccount: Account? { selection.flatMap(account) }
 
   /// R-ACC-1: the currency is fixed after the first transaction.
@@ -188,6 +337,10 @@ public final class AccountsModel {
   }
 
   public var inspectorTitle: String {
+    if let groupDraft {
+      if groupDraft.isNew { return groupDraft.name.isEmpty ? "New group" : groupDraft.name }
+      return selectedGroup?.name ?? groupDraft.name
+    }
     guard let draft else { return "" }
     if draft.isNew { return draft.name.isEmpty ? "New account" : draft.name }
     return selectedAccount?.name ?? draft.name
@@ -218,8 +371,11 @@ public final class AccountsModel {
       : "No transactions yet; it can be deleted."
   }
 
-  /// What is wrong with the form, or nil when it can be saved.
+  /// What is wrong with the open form, or nil when it can be saved.
   public var validationMessage: String? {
+    if let groupDraft {
+      return groupDraft.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter a name." : nil
+    }
     guard let draft else { return nil }
     if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name." }
     if format.parseAmount(draft.openingBalance) == nil { return "The opening balance is not a number." }
@@ -227,6 +383,11 @@ public final class AccountsModel {
   }
 
   public var isDirty: Bool {
+    if let groupDraft {
+      if groupDraft.isNew { return true }
+      guard let group = group(groupDraft.id) else { return false }
+      return builtGroup(from: groupDraft, base: group) != group
+    }
     guard let draft else { return false }
     if draft.isNew { return true }
     guard let account = account(draft.id) else { return false }
@@ -235,32 +396,43 @@ public final class AccountsModel {
 
   public var canSave: Bool { isDirty && validationMessage == nil }
 
+  /// After every group and top-level account (or last in a group): positions only order
+  /// siblings, so one more than any position is last wherever the account lands.
+  private var nextPosition: Int {
+    ((accounts.map(\.position) + groups.map(\.position)).max() ?? -1) + 1
+  }
+
   private func built(from draft: AccountDraft, base: Account?) -> Account? {
     guard let opening = format.parseAmount(draft.openingBalance) else { return nil }
-    let group = draft.group.trimmingCharacters(in: .whitespaces)
     let iban = draft.iban.trimmingCharacters(in: .whitespaces)
     var account =
       base
       ?? Account(
         id: draft.id, name: "", currency: draft.currency, kind: draft.kind, openingDate: draft.openingDate,
-        position: (accounts.map(\.position).max() ?? -1) + 1)
+        position: nextPosition)
     account.name = draft.name.trimmingCharacters(in: .whitespaces)
     account.kind = draft.kind
     account.currency = draft.currency
     account.openingBalanceMinor = opening
     account.openingDate = draft.openingDate
-    account.groupName = group.isEmpty ? nil : group
+    account.groupID = draft.groupID
     account.iban = iban.isEmpty ? nil : iban
     account.colorHex = draft.colorHex
     return account
   }
 
-  /// Creates or updates the account from the form (R-ACC-1).
+  /// Saves the open form: the account (R-ACC-1) or the group (R-MGMT-9).
   public func save() async {
+    if groupDraft != nil {
+      await saveGroup()
+      return
+    }
     guard let draft, canSave else { return }
     let base = draft.isNew ? nil : account(draft.id)
     guard var account = built(from: draft, base: base) else { return }
     if isCurrencyLocked, let base { account.currency = base.currency }
+    // Moved to another group (or out of one): last there.
+    if let base, base.groupID != account.groupID { account.position = nextPosition }
     do {
       try await dependencies.accounts.save(account)
       await onDataChange?()
@@ -273,13 +445,204 @@ public final class AccountsModel {
     }
   }
 
-  /// Drops the form's edits (a new account's form closes).
+  /// Drops the form's edits (a new account's or group's form closes).
   public func revert() {
-    if draft?.isNew == true {
-      select(visibleAccounts.first?.id)
+    if draft?.isNew == true || groupDraft?.isNew == true {
+      select(firstAccountID)
     } else {
       select(selection)
     }
+  }
+
+  // MARK: Group inspector (R-MGMT-9)
+
+  static func groupDraft(_ group: AccountGroup) -> AccountGroupDraft {
+    AccountGroupDraft(id: group.id, isNew: false, name: group.name, colorHex: group.colorHex)
+  }
+
+  public var selectedGroup: AccountGroup? { selection.flatMap(group) }
+
+  /// "New group": an empty form; the group goes last at the top level.
+  public func newGroup() {
+    selection = nil
+    errorMessage = nil
+    draft = nil
+    groupDraft = AccountGroupDraft(id: UUID(), isNew: true, name: "", colorHex: nil)
+  }
+
+  private func builtGroup(from draft: AccountGroupDraft, base: AccountGroup?) -> AccountGroup {
+    var group = base ?? AccountGroup(id: draft.id, name: "", position: nextPosition)
+    group.name = draft.name.trimmingCharacters(in: .whitespaces)
+    group.colorHex = draft.colorHex
+    return group
+  }
+
+  /// The selected group's accounts (archived too), for the inspector.
+  public var selectedGroupSummary: String? {
+    guard let group = selectedGroup else { return nil }
+    let members = accounts.filter { $0.groupID == group.id }
+    let active = members.filter { !$0.isArchived }.count
+    let archived = members.count - active
+    var text = active == 1 ? "1 account" : "\(active) accounts"
+    if archived > 0 { text += " (+\(archived) archived)" }
+    return text
+  }
+
+  /// The selected group's sum in the display currency (R-MGMT-9).
+  public var selectedGroupSumText: String? {
+    guard let group = selectedGroup else { return nil }
+    return groupSum(group.id).map { format.money($0) } ?? "—"
+  }
+
+  private func saveGroup() async {
+    guard let groupDraft, canSave else { return }
+    let group = builtGroup(from: groupDraft, base: groupDraft.isNew ? nil : self.group(groupDraft.id))
+    do {
+      try await dependencies.accounts.saveGroup(group)
+      await onDataChange?()
+      selection = group.id
+      self.groupDraft = nil
+      await load()
+      self.groupDraft = self.group(group.id).map(Self.groupDraft)
+    } catch {
+      errorMessage = ManageFailure.message(error, doing: "save the group")
+    }
+  }
+
+  /// Delete… a group: after a confirmation; its accounts move to the top level.
+  public func requestDeleteGroup() {
+    guard let group = selectedGroup else { return }
+    let count = accounts.filter { $0.groupID == group.id }.count
+    let message =
+      count == 0
+      ? "It has no accounts."
+      : "Its \(count == 1 ? "account moves" : "\(count) accounts move") to the top level; no account or transaction is deleted."
+    dialog = ManageDialog(
+      action: .deleteAccountGroup(group.id), title: "Delete group “\(group.name)”?", message: message,
+      confirmTitle: "Delete group", isDestructive: true)
+  }
+
+  // MARK: Drag and drop (R-MGMT-9)
+
+  /// Whether `moving` (an account or a group) may be dropped there.
+  public func canDrop(_ moving: UUID, on target: UUID?, position: AccountDropPosition) -> Bool {
+    plan(moving, on: target, position: position) != nil
+  }
+
+  /// Applies a drop (like Reminders):
+  /// - `.onto` a group (or an account in it): an account moves into that group, last; the sort
+  ///   stays. Groups never nest (one level).
+  /// - `.before` / `.after` a row: a reorder in what the page shows, so the sort becomes
+  ///   "Custom order". Between top-level rows → top level (out of its group); next to an
+  ///   account in a group → into that group there; right below a group whose accounts follow →
+  ///   its first account.
+  /// - `target` nil (the space below the list): top level, last.
+  /// Balances and transactions never change.
+  public func drop(_ moving: UUID, on target: UUID?, position: AccountDropPosition) async {
+    guard let plan = plan(moving, on: target, position: position) else { return }
+    if plan.reorders { await setSort(.custom) }
+    do {
+      for group in plan.groups { try await dependencies.accounts.saveGroup(group) }
+      for account in plan.accounts { try await dependencies.accounts.save(account) }
+      if !plan.accounts.isEmpty || !plan.groups.isEmpty { await onDataChange?() }
+      await load()
+    } catch {
+      errorMessage = ManageFailure.message(error, doing: "move the account")
+      await load()
+    }
+  }
+
+  private struct DropPlan {
+    var accounts: [Account]
+    var groups: [AccountGroup]
+    var reorders: Bool
+  }
+
+  private func plan(_ movingID: UUID, on targetID: UUID?, position: AccountDropPosition) -> DropPlan? {
+    let current = ordered
+    let groupIDs = Set(groups.map(\.id))
+    func parent(_ item: AccountTreeItem) -> AccountGroup.ID? {
+      guard case .account(let account) = item, let id = account.groupID, groupIDs.contains(id) else { return nil }
+      return id
+    }
+    guard movingID != targetID, let moving = current.first(where: { $0.id == movingID }) else { return nil }
+    let target = targetID.flatMap { id in current.first { $0.id == id } }
+    if targetID != nil, target == nil { return nil }
+    let movingIsGroup: Bool
+    if case .group = moving { movingIsGroup = true } else { movingIsGroup = false }
+
+    if position == .onto {
+      guard case .account(var account) = moving, let target else { return nil }
+      let groupID: AccountGroup.ID
+      switch target {
+      case .group(let group): groupID = group.id
+      case .account:
+        guard let id = parent(target) else { return nil }
+        groupID = id
+      }
+      // Already in that group: nothing to do (between rows reorders inside it).
+      guard account.groupID != groupID else { return nil }
+      let siblings = accounts.filter { $0.groupID == groupID && $0.id != account.id }
+      account.groupID = groupID
+      account.position = (siblings.map(\.position).max() ?? -1) + 1
+      return DropPlan(accounts: [account], groups: [], reorders: false)
+    }
+
+    // Reorder: blocks of the order shown (group + its accounts, or a top-level account).
+    var blocks: [[AccountTreeItem]] = []
+    for item in current {
+      if parent(item) != nil, !blocks.isEmpty { blocks[blocks.count - 1].append(item) } else { blocks.append([item]) }
+    }
+    var movingBlock: [AccountTreeItem] = [moving]
+    if let index = blocks.firstIndex(where: { $0[0].id == movingID }) {
+      movingBlock = blocks.remove(at: index)
+    } else {
+      for index in blocks.indices { blocks[index].removeAll { $0.id == movingID } }
+    }
+    func withGroup(_ groupID: AccountGroup.ID?) -> AccountTreeItem {
+      guard case .account(var account) = moving else { return moving }
+      account.groupID = groupID
+      return .account(account)
+    }
+
+    if let target {
+      if let groupID = parent(target) {
+        // Next to an account in a group: into that group, there.
+        guard !movingIsGroup,
+          let block = blocks.firstIndex(where: { $0.contains { $0.id == target.id } }),
+          let at = blocks[block].firstIndex(where: { $0.id == target.id })
+        else { return nil }
+        blocks[block].insert(withGroup(groupID), at: position == .before ? at : at + 1)
+      } else {
+        guard let block = blocks.firstIndex(where: { $0[0].id == target.id }) else { return nil }
+        if position == .after, case .group(let group) = target, blocks[block].count > 1, !movingIsGroup {
+          // Right below a group whose accounts follow: its first account.
+          blocks[block].insert(withGroup(group.id), at: 1)
+        } else {
+          movingBlock[0] = withGroup(nil)
+          blocks.insert(movingBlock, at: position == .before ? block : block + 1)
+        }
+      }
+    } else {
+      movingBlock[0] = withGroup(nil)
+      blocks.append(movingBlock)
+    }
+
+    var changedAccounts: [Account] = []
+    var changedGroups: [AccountGroup] = []
+    for (index, item) in blocks.flatMap({ $0 }).enumerated() {
+      switch item {
+      case .group(var group):
+        group.position = index
+        if group != self.group(group.id) { changedGroups.append(group) }
+      case .account(var account):
+        account.position = index
+        if account != self.account(account.id) {
+          if account.id == movingID { changedAccounts.insert(account, at: 0) } else { changedAccounts.append(account) }
+        }
+      }
+    }
+    return DropPlan(accounts: changedAccounts, groups: changedGroups, reorders: true)
   }
 
   // MARK: Archive and delete
@@ -332,6 +695,16 @@ public final class AccountsModel {
         await load()
       } catch {
         errorMessage = ManageFailure.message(error, doing: "delete the account")
+      }
+    case .deleteAccountGroup(let id):
+      do {
+        try await dependencies.accounts.deleteGroup(id)
+        await onDataChange?()
+        selection = nil
+        groupDraft = nil
+        await load()
+      } catch {
+        errorMessage = ManageFailure.message(error, doing: "delete the group")
       }
     default:
       break

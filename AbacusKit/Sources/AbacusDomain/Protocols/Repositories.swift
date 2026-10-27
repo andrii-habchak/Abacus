@@ -20,6 +20,19 @@ public protocol AccountRepository: Sendable {
   func setArchived(_ id: Account.ID, _ isArchived: Bool) async throws
   /// Throws `accountHasTransactions` when the account is used (R-ACC-5).
   func delete(_ id: Account.ID) async throws
+  /// Account groups (R-MGMT-9, D48), in custom order.
+  func groups() async throws -> [AccountGroup]
+  /// Inserts or updates a group.
+  func saveGroup(_ group: AccountGroup) async throws
+  /// Deletes a group; its accounts move to the top level (no account is touched otherwise).
+  func deleteGroup(_ id: AccountGroup.ID) async throws
+}
+
+extension AccountRepository {
+  /// Read-only fakes without groups: every account is at the top level.
+  public func groups() async throws -> [AccountGroup] { [] }
+  public func saveGroup(_ group: AccountGroup) async throws { throw RepositoryError.notFound }
+  public func deleteGroup(_ id: AccountGroup.ID) async throws { throw RepositoryError.notFound }
 }
 
 public protocol CategoryRepository: Sendable {

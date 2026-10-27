@@ -206,7 +206,7 @@ struct EditorAccountSection: View {
     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
       GridRow {
         EditorLabel("Account")
-        EditorAccountPicker(title: "Account", selection: $model.accountID, accounts: model.accountOptions)
+        EditorAccountPicker(title: "Account", selection: $model.accountID, sections: model.accountSections)
       }
       if model.isForeign {
         GridRow(alignment: .firstTextBaseline) {
@@ -253,11 +253,11 @@ struct EditorTransferSection: View {
     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
       GridRow {
         EditorLabel("From")
-        EditorAccountPicker(title: "From", selection: $model.fromID, accounts: model.accountOptions)
+        EditorAccountPicker(title: "From", selection: $model.fromID, sections: model.accountSections)
       }
       GridRow {
         EditorLabel("To")
-        EditorAccountPicker(title: "To", selection: $model.toID, accounts: model.accountOptions)
+        EditorAccountPicker(title: "To", selection: $model.toID, sections: model.accountSections)
       }
       if model.sameAccounts {
         GridRow {
@@ -338,18 +338,19 @@ struct EditorDetailsSection: View {
   }
 }
 
-/// An account menu: "Monobank Black · UAH" (R-ACC-1); archived accounts are hidden.
+/// An account menu: "Monobank Black · UAH" (R-ACC-1) A–Z under its group (R-MGMT-8);
+/// archived accounts are hidden.
 struct EditorAccountPicker: View {
   let title: String
   @Binding var selection: Account.ID?
-  let accounts: [Account]
+  let sections: [AccountPickerSection]
 
   var body: some View {
     Picker(title, selection: $selection) {
       if selection == nil {
         Text("Choose an account").tag(Account.ID?.none)
       }
-      ForEach(accounts) { account in
+      AccountPickerItems(sections: sections) { account in
         Text(EditorReference.accountLabel(account)).tag(Optional(account.id))
       }
     }

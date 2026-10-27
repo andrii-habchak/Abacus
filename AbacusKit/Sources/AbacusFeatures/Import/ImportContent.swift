@@ -486,6 +486,12 @@ extension ImportWizardModel {
     "\(account.name) · \(account.currency.rawValue)" + (account.isArchived ? " (archived)" : "")
   }
 
+  /// In account pickers: "PKO › PKO Personal · PLN" (the group first, R-MGMT-8).
+  private func accountOptionLabel(_ account: Account) -> String {
+    "\(AccountOrder.label(account, groups: accountGroups)) · \(account.currency.rawValue)"
+      + (account.isArchived ? " (archived)" : "")
+  }
+
   private func accountGroup(_ preview: ImportPreview, title: String) -> ImportMappingGroup {
     let items = preview.accountMappings.map { mapping -> ImportMappingItem in
       let external = mapping.external
@@ -496,7 +502,9 @@ extension ImportWizardModel {
           choice: .create,
           label: "Create “\(mapping.newName)” (\(mapping.newKind.importLabel)\(mapping.newIsArchived ? ", archived" : ""))")
       ]
-      options += preview.accountOptions(for: mapping.id).map { ImportMappingOption(choice: .existing($0.id), label: accountLabel($0)) }
+      options += AccountOrder.alphabetical(preview.accountOptions(for: mapping.id), groups: accountGroups).map {
+        ImportMappingOption(choice: .existing($0.id), label: accountOptionLabel($0))
+      }
       let selection: ImportMappingChoice = switch mapping.target {
       case .create: .create
       case .existing(let id): .existing(id)
@@ -700,8 +708,8 @@ extension ImportWizardModel {
     case .skip: .skip
     }
     let ownID: Account.ID? = if case .existing(let id) = row.account { id } else { nil }
-    let transferAccounts = accounts.filter { !$0.isArchived && $0.id != ownID }
-      .map { ImportReviewItem.AccountOption(id: $0.id, label: accountLabel($0)) }
+    let transferAccounts = AccountOrder.alphabetical(accounts.filter { !$0.isArchived && $0.id != ownID }, groups: accountGroups)
+      .map { ImportReviewItem.AccountOption(id: $0.id, label: accountOptionLabel($0)) }
     return ImportReviewItem(
       id: row.id, title: title, date: format.day(row.day), detail: detail, options: options, selected: selected,
       suggested: suggested, pairCandidates: candidates, selectedPair: selectedPair, recordKind: recordKind,

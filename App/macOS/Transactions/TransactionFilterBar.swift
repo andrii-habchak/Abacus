@@ -225,27 +225,43 @@ struct TransactionFilterBar: View {
     .frame(maxHeight: 360)
   }
 
+  /// Accounts A–Z under their group names (R-MGMT-8).
   private var accountsPopover: some View {
     VStack(alignment: .leading, spacing: 2) {
-      ForEach(model.accountOptions) { account in
-        Toggle(
-          isOn: Binding(
-            get: { model.filters.accountIDs.contains(account.id) },
-            set: { _ in model.filters.toggleAccount(account.id) })
-        ) {
-          HStack {
-            Text(account.name)
-            Spacer()
-            Text(account.currency.rawValue).font(.system(size: 11)).foregroundStyle(.secondary)
-          }
+      ForEach(model.accountSections) { section in
+        if let title = section.title {
+          Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.top, section.id == model.accountSections.first?.id ? 0 : 6)
+        } else if section.id != model.accountSections.first?.id {
+          Divider().padding(.vertical, 4)
         }
-        .toggleStyle(.checkbox)
-        .padding(.vertical, 3)
+        ForEach(section.accounts) { account in
+          accountToggle(account, indented: section.title != nil)
+        }
       }
     }
     .font(.system(size: 13))
     .padding(10)
     .frame(width: 240)
+  }
+
+  private func accountToggle(_ account: Account, indented: Bool) -> some View {
+    Toggle(
+      isOn: Binding(
+        get: { model.filters.accountIDs.contains(account.id) },
+        set: { _ in model.filters.toggleAccount(account.id) })
+    ) {
+      HStack {
+        Text(account.name)
+        Spacer()
+        Text(account.currency.rawValue).font(.system(size: 11)).foregroundStyle(.secondary)
+      }
+    }
+    .toggleStyle(.checkbox)
+    .padding(.leading, indented ? 10 : 0)
+    .padding(.vertical, 3)
   }
 
   private var eventPopover: some View {

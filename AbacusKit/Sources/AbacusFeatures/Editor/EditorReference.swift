@@ -25,6 +25,8 @@ public struct EditorReference: Sendable {
   public static let currencyCodes = ["UAH", "PLN", "EUR", "USD", "CHF", "CZK", "GBP", "HUF"]
 
   public private(set) var accounts: [Account]
+  /// Account groups: pickers list accounts A–Z under them (R-MGMT-8, R-MGMT-9).
+  public private(set) var accountGroups: [AccountGroup]
   public private(set) var categories: [AbacusDomain.Category]
   public private(set) var events: [Event]
   /// In evaluation order (the repository's order: position, then most used).
@@ -34,9 +36,10 @@ public struct EditorReference: Sendable {
 
   public init(
     accounts: [Account] = [], categories: [AbacusDomain.Category] = [], events: [Event] = [],
-    rules: [CategoryRule] = []
+    rules: [CategoryRule] = [], accountGroups: [AccountGroup] = []
   ) {
     self.accounts = accounts.sorted { ($0.position, $0.name) < ($1.position, $1.name) }
+    self.accountGroups = accountGroups
     self.categories = categories
     self.events = events
     self.rules = rules
@@ -49,10 +52,16 @@ public struct EditorReference: Sendable {
 
   // MARK: Pickers
 
-  /// Active accounts (R-ACC-4: archived ones are hidden), plus `selected` when it is archived.
+  /// Active accounts (R-ACC-4: archived ones are hidden), plus `selected` when it is archived;
+  /// A–Z under their groups (R-MGMT-8, `AccountOrder`).
   public func accountOptions(including selected: [Account.ID?] = []) -> [Account] {
+    accountSections(including: selected).flatMap(\.accounts)
+  }
+
+  /// `accountOptions` as picker sections: groups A–Z, then the accounts without a group.
+  public func accountSections(including selected: [Account.ID?] = []) -> [AccountPickerSection] {
     let keep = Set(selected.compactMap { $0 })
-    return accounts.filter { !$0.isArchived || keep.contains($0.id) }
+    return AccountOrder.pickerSections(accounts.filter { !$0.isArchived || keep.contains($0.id) }, groups: accountGroups)
   }
 
   /// "Monobank Black · UAH".

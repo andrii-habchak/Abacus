@@ -8,6 +8,7 @@ public struct ManageDialog: Identifiable, Equatable, Sendable {
   public enum Action: Equatable, Sendable {
     case archiveAccount(Account.ID)
     case deleteAccount(Account.ID)
+    case deleteAccountGroup(AccountGroup.ID)
     case deleteCategory(AbacusDomain.Category.ID)
     case deleteEvent(Event.ID)
     case deleteRule(CategoryRule.ID)

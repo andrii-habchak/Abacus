@@ -44,6 +44,7 @@ struct BackupTests {
     try await f.rates.save([FXRate(day: "2026-03-02", base: .EUR, quote: .PLN, rateE8: 425_000_000, provider: "NBU")])
     try await f.rates.save(FXOverride(base: .EUR, quote: .PLN, rateE8: 430_000_000, fromDay: "2026-03-01"))
     try await f.settings.set(.displayCurrency, "PLN")
+    try await f.accounts.saveGroup(AccountGroup(name: "Bank group"))
   }
 
   @Test("R-SET-2: export writes all tables to one file; restore replaces all data with it")
