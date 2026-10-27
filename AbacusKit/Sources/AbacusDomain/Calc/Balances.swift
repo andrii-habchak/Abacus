@@ -17,7 +17,9 @@ extension Calc {
   /// - expense: out; an expense refund: in;
   /// - income: in; an income reversal: out;
   /// - transfer: `amountMinor` out of `accountID`, `toAmountMinor` (or `amountMinor` when the
-  ///   same currency left it empty) into `toAccountID`. `isRefund` does not apply to transfers.
+  ///   same currency left it empty) into `toAccountID`. `isRefund` does not apply to transfers,
+  ///   except on a transfer without a destination (a debt leg, R-DEBT-3): there it means money
+  ///   comes in.
   public static func mainEffects(of txn: Txn) -> [AccountEffect] {
     switch txn.type {
     case .expense:
@@ -25,6 +27,7 @@ extension Calc {
     case .income:
       return [AccountEffect(accountID: txn.accountID, amountMinor: txn.isRefund ? -txn.amountMinor : txn.amountMinor)]
     case .transfer:
+      if txn.isOneSidedInflow { return [AccountEffect(accountID: txn.accountID, amountMinor: txn.amountMinor)] }
       var effects = [AccountEffect(accountID: txn.accountID, amountMinor: -txn.amountMinor)]
       if let to = txn.toAccountID {
         effects.append(AccountEffect(accountID: to, amountMinor: txn.toAmountMinor ?? txn.amountMinor))
