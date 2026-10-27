@@ -32,13 +32,18 @@ struct ManageAccountsTests {
     try await store.txnRepository.transactions(matching: TxnQuery())
   }
 
-  @Test("R-MGMT-1, R-ACC-3: accounts are grouped (ungrouped under Other, last) with their balances")
+  @Test("R-MGMT-1, R-MGMT-9, R-ACC-3: groups as folders with their accounts and balances, custom order")
   func groupedWithBalances() async throws {
     let model = await model()
-    #expect(model.groups.map(\.name) == ["Monobank", "PKO", "Revolut", "Other"])
-    #expect(model.groups[1].rows.map(\.name) == ["PKO Personal", "PKO USD", "PKO Credit Card"])
+    #expect(
+      model.rows.map(\.name) == [
+        "Monobank", "Monobank Black", "PKO", "PKO Personal", "PKO USD", "PKO Credit Card", "Revolut", "Revolut EUR",
+        "Cash PLN", "EUR Deposit", "Loan from friend",
+      ])
+    #expect(model.rows.filter(\.isGroup).map(\.name) == ["Monobank", "PKO", "Revolut"])
+    #expect(model.rows.filter(\.isChild).count == 5)
     let expected = Calc.balances(accounts: PreviewData.accounts, txns: try await allTxns(), through: PreviewData.today)
-    let pko = try #require(model.groups[1].rows.first)
+    let pko = try #require(model.rows.first { $0.id == PreviewData.pkoPersonal.id })
     #expect(pko.balanceText == ManageFixture.format.money(expected[PreviewData.pkoPersonal.id]!))
     #expect(pko.detail == "Bank account · PLN")
     #expect(pko.symbol == "zł")
@@ -47,7 +52,7 @@ struct ManageAccountsTests {
   @Test("R-ACC-2: liabilities are flagged and negative balances marked")
   func liabilities() async throws {
     let model = await model()
-    let rows = model.groups.flatMap(\.rows)
+    let rows = model.rows
     let card = try #require(rows.first { $0.id == PreviewData.pkoCreditCard.id })
     #expect(card.isLiability)
     #expect(card.isNegative)
@@ -60,9 +65,9 @@ struct ManageAccountsTests {
   @Test("R-ACC-4: archived accounts are listed only with “Show archived accounts”")
   func showArchived() async {
     let model = await model()
-    #expect(!model.groups.flatMap(\.rows).contains { $0.id == PreviewData.oldCard.id })
+    #expect(!model.rows.contains { $0.id == PreviewData.oldCard.id })
     model.setShowArchived(true)
-    let old = model.groups.flatMap(\.rows).first { $0.id == PreviewData.oldCard.id }
+    let old = model.rows.first { $0.id == PreviewData.oldCard.id }
     #expect(old?.isArchived == true)
   }
 
@@ -148,7 +153,7 @@ struct ManageAccountsTests {
     model.draft?.name = "mBank"
     model.draft?.kind = .savings
     model.draft?.openingBalance = "1 250,50"
-    model.draft?.group = "mBank"
+    model.draft?.groupID = PreviewData.pkoGroup.id
     model.draft?.iban = "PL00 1111"
     #expect(model.canSave)
     await model.save()
@@ -156,10 +161,12 @@ struct ManageAccountsTests {
     #expect(saved.kind == .savings)
     #expect(saved.currency == .PLN)
     #expect(saved.openingBalanceMinor == 1_250_50)
-    #expect(saved.groupName == "mBank")
+    #expect(saved.groupID == PreviewData.pkoGroup.id)
     #expect(saved.iban == "PL00 1111")
     #expect(model.selection == saved.id)
-    #expect(model.groups.map(\.name).contains("mBank"))
+    // Last in its group (R-MGMT-9).
+    let pkoRows = model.rows.drop { $0.id != PreviewData.pkoGroup.id }.dropFirst().prefix { $0.isChild }
+    #expect(pkoRows.last?.name == "mBank")
     #expect(!model.isDirty)
   }
 

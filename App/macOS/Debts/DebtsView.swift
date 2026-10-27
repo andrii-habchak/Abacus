@@ -375,7 +375,7 @@ struct DebtRecordFormSheet: View {
           if draft.wrappedValue.kind.movesMoney {
             Picker("Account", selection: draft.accountID) {
               Text("No account").tag(Account.ID?.none)
-              ForEach(model.accountOptions) { account in
+              AccountPickerItems(sections: model.accountSections) { account in
                 Text("\(account.name) (\(account.currency.rawValue))").tag(Account.ID?.some(account.id))
               }
             }

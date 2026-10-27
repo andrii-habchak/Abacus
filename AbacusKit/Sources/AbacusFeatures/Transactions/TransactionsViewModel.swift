@@ -96,8 +96,10 @@ public final class TransactionsViewModel {
       let categoryList = try await categories.categories(kind: nil, includeArchived: true)
       let eventList = try await events.events(includeArchived: true)
       let uncategorisedColor = await settings?.uncategorisedColor() ?? Uncategorised.defaultColorHex
+      let groups = (try? await accounts.groups()) ?? []
       reference = TransactionsReference(
-        accounts: accountList, categories: categoryList, events: eventList, uncategorisedColor: uncategorisedColor)
+        accounts: accountList, categories: categoryList, events: eventList, uncategorisedColor: uncategorisedColor,
+        accountGroups: groups)
     } catch {
       errorMessage = "Couldn't load accounts and categories."
     }
@@ -206,9 +208,17 @@ public final class TransactionsViewModel {
     return "Event: " + (reference.eventsByID[id]?.name ?? "Unknown")
   }
 
-  /// Accounts offered in the accounts menu: active ones, plus archived ones already selected.
+  /// Accounts offered in the accounts menu: active ones, plus archived ones already selected;
+  /// A–Z under their groups (R-MGMT-8).
   public var accountOptions: [Account] {
-    reference.accounts.filter { !$0.isArchived || filters.accountIDs.contains($0.id) }
+    accountSections.flatMap(\.accounts)
+  }
+
+  /// `accountOptions` in sections: groups A–Z, then the accounts without a group.
+  public var accountSections: [AccountPickerSection] {
+    AccountOrder.pickerSections(
+      reference.accounts.filter { !$0.isArchived || filters.accountIDs.contains($0.id) },
+      groups: reference.accountGroups)
   }
 
   /// Events offered in the event menu: active ones, plus the selected one.

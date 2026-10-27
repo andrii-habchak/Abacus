@@ -243,6 +243,7 @@ public final class AppSession {
     editorDependencies.converter = snapshot.table
     if dashboard.phase == .loaded { await dashboard.refreshRates() }
     if events.phase == .loaded { await events.refreshRates() }
+    if accounts.phase == .loaded { await accounts.refreshRates() }
     if budget.phase == .loaded { await budget.refreshRates() }
     if debts.phase == .loaded { await debts.refreshRates() }
     await app.rates.load()

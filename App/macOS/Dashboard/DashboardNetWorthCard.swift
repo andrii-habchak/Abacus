@@ -4,7 +4,8 @@ import Charts
 import SwiftUI
 
 /// Net worth (R-HOME-1): today's figure, the change since the previous month end, assets and
-/// liabilities, a month-end line chart with hover, and the per-account breakdown on demand.
+/// liabilities, a month-end line chart with hover, and the per-account breakdown on demand:
+/// account groups with the sum of their accounts, the accounts indented beneath (R-MGMT-9).
 struct DashboardNetWorthCard: View {
   let netWorth: DashboardNetWorth
   let format: DashboardFormat
@@ -14,7 +15,12 @@ struct DashboardNetWorthCard: View {
   init(netWorth: DashboardNetWorth, format: DashboardFormat, showsAccounts: Bool = false) {
     self.netWorth = netWorth
     self.format = format
-    _showsAccounts = State(initialValue: showsAccounts)
+    var expanded = showsAccounts
+    #if DEBUG
+      // UI reviews (in-app snapshot): `-AbacusNetWorthExpanded YES` opens the breakdown.
+      if UserDefaults.standard.bool(forKey: "AbacusNetWorthExpanded") { expanded = true }
+    #endif
+    _showsAccounts = State(initialValue: expanded)
   }
 
   var body: some View {
@@ -191,20 +197,24 @@ struct DashboardNetWorthCard: View {
     VStack(alignment: .leading, spacing: 8) {
       Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
         Divider()
-        ForEach(netWorth.accounts) { row in
+        ForEach(netWorth.breakdown) { row in
           GridRow {
-            Text(row.name).fontWeight(.medium)
+            Text(row.name)
+              .fontWeight(row.level == .group ? .semibold : .medium)
+              .padding(.leading, row.level == .groupedAccount ? 16 : 0)
               .frame(maxWidth: .infinity, alignment: .leading)
-            Text(row.kind).foregroundStyle(.secondary)
+            Text(row.detail).foregroundStyle(.secondary)
               .frame(maxWidth: .infinity, alignment: .leading)
             Text(row.balanceText)
-              .foregroundStyle(row.balance.minorUnits < 0 ? Color.red : Color.primary)
+              .foregroundStyle(row.isNegative ? Color.red : Color.primary)
               .frame(maxWidth: .infinity, alignment: .leading)
             Text(row.convertedText)
-              .foregroundStyle(.secondary)
+              .fontWeight(row.level == .group ? .semibold : .regular)
+              .foregroundStyle(row.level == .group ? (row.isNegative ? Color.red : Color.primary) : Color.secondary)
               .frame(maxWidth: .infinity, alignment: .trailing)
           }
           .monospacedDigit()
+          .accessibilityElement(children: .combine)
           Divider()
         }
       }

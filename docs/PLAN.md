@@ -138,7 +138,7 @@ Wave 1 (parallel):
 - [x] **C11 Transactions, events, shell** (merged 2026-10-27) — page search on Transactions/Events, event inspector
   layout + read-only archived event, type filter layout, Save bottom-right in event inspector.
 Wave 2:
-- [ ] **C12 Accounts** — account groups (D48), drag/sort/search/currency filter, grouped pickers,
+- [x] **C12 Accounts** (merged 2026-10-27; migration v11) — account groups (D48), drag/sort/search/currency filter, grouped pickers,
   net worth hierarchy.
 - [x] **C13 Dashboard widgets** (merged 2026-10-27) — income donut, income vs expenses, drag-reorder widgets.
 - [ ] **C14 Debts** — `R-DEBT` (TA v1.7, D51).

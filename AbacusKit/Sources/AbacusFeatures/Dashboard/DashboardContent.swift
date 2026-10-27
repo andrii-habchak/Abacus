@@ -109,6 +109,26 @@ public struct DashboardNetWorth: Sendable {
     public let convertedText: String
   }
 
+  /// One line of the expanded breakdown (R-HOME-1, R-MGMT-9): a group with the sum of its
+  /// accounts, an account in it (indented), or an account without a group; in the Accounts
+  /// page's custom order.
+  public struct BreakdownRow: Hashable, Sendable, Identifiable {
+    public enum Level: Hashable, Sendable {
+      case group, groupedAccount, account
+    }
+
+    public let id: UUID
+    public let level: Level
+    public let name: String
+    /// The account kind ("Card"), or "2 accounts" for a group.
+    public let detail: String
+    /// In the account's currency; empty for a group (its accounts may differ in currency).
+    public let balanceText: String
+    public let isNegative: Bool
+    /// In the display currency; "—" without a rate (a group: when one of its accounts has none).
+    public let convertedText: String
+  }
+
   public let currency: Currency
   /// Today's net worth: the headline. Partial when `isComplete` is false.
   public let total: Money
@@ -121,6 +141,8 @@ public struct DashboardNetWorth: Sendable {
   public let changeFraction: Decimal?
   public let points: [Point]
   public let accounts: [AccountRow]
+  /// `accounts` under their groups, with group sums (the expanded breakdown).
+  public let breakdown: [BreakdownRow]
   public let missing: DashboardMissingRates
 
   public let totalText: String
@@ -153,7 +175,7 @@ public struct DashboardNetWorth: Sendable {
 
   static func make(
     accounts: [Account], txns: [TxnWithLines], currency: Currency, converter: any CurrencyConverter,
-    today: Day, format: DashboardFormat, debts: DebtBook = .empty
+    today: Day, format: DashboardFormat, groups: [AccountGroup] = [], debts: DebtBook = .empty
   ) -> DashboardNetWorth {
     let calendar = format.calendar
     let series = Calc.netWorthSeries(
@@ -222,7 +244,8 @@ public struct DashboardNetWorth: Sendable {
     let liabilities = now?.liabilities ?? .zero(currency)
     var result = DashboardNetWorth(
       currency: currency, total: total, isComplete: isComplete, assets: assets, liabilities: liabilities,
-      change: change, changeFraction: fraction, points: points, accounts: rows, missing: missing,
+      change: change, changeFraction: fraction, points: points, accounts: rows,
+      breakdown: breakdown(rows, accounts: accounts, groups: groups, currency: currency, format: format), missing: missing,
       totalText: format.money(total), assetsText: format.money(assets), liabilitiesText: format.owed(liabilities),
       changeText: changeText, chartLabel: "Net worth at the end of each month, \(first) to \(last)")
     // R-DEBT-7: debts counted in net worth, one separate line (already inside assets/liabilities).
@@ -230,6 +253,57 @@ public struct DashboardNetWorth: Sendable {
       result.debtsTotal = now.debtsTotal
       result.debtsText = format.signed(now.debtsTotal)
     }
+    return result
+  }
+
+  /// Groups (with the sum of their accounts in the display currency) and accounts in the custom
+  /// order of the Accounts page; groups without a counted account are left out.
+  static func breakdown(
+    _ rows: [AccountRow], accounts: [Account], groups: [AccountGroup], currency: Currency, format: DashboardFormat
+  ) -> [BreakdownRow] {
+    let byID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let counted = accounts.filter { byID[$0.id] != nil }
+    func line(_ row: AccountRow, _ level: BreakdownRow.Level) -> BreakdownRow {
+      BreakdownRow(
+        id: row.id, level: level, name: row.name, detail: row.kind, balanceText: row.balanceText,
+        isNegative: row.balance.minorUnits < 0, convertedText: row.convertedText)
+    }
+    var result: [BreakdownRow] = []
+    var members: [AccountRow] = []
+    var openGroup: AccountGroup?
+    func closeGroup() {
+      defer {
+        openGroup = nil
+        members = []
+      }
+      guard let group = openGroup, !members.isEmpty else { return }
+      var total: Money? = .zero(currency)
+      for member in members where member.balance.minorUnits != 0 {
+        total = member.converted.flatMap { converted in total.map { $0 + converted } }
+      }
+      result.append(
+        BreakdownRow(
+          id: group.id, level: .group, name: group.name,
+          detail: members.count == 1 ? "1 account" : "\(members.count) accounts", balanceText: "",
+          isNegative: (total?.minorUnits ?? 0) < 0, convertedText: total.map(format.money) ?? "—"))
+      result += members.map { line($0, .groupedAccount) }
+    }
+    for item in AccountOrder.tree(counted, groups: groups, by: .custom) {
+      switch item {
+      case .group(let group):
+        closeGroup()
+        openGroup = group
+      case .account(let account):
+        guard let row = byID[account.id] else { continue }
+        if let group = openGroup, account.groupID == group.id {
+          members.append(row)
+        } else {
+          closeGroup()
+          result.append(line(row, .account))
+        }
+      }
+    }
+    closeGroup()
     return result
   }
 

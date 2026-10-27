@@ -22,6 +22,26 @@ public enum AccountKind: String, CaseIterable, Codable, Hashable, Sendable, Quer
   }
 }
 
+/// A folder of accounts ("Monobank", "PKO"; R-MGMT-9, D48). It holds no money of its own: the
+/// Accounts page and the net worth widget show the sum of its accounts. One level only.
+/// Ordering (custom order): a group and the accounts outside any group share one `position`
+/// space at the top level; accounts in a group are ordered by their own `position`.
+@Table("accountGroups")
+public struct AccountGroup: Hashable, Identifiable, Sendable {
+  public let id: UUID
+  public var name: String
+  public var position: Int
+  /// `#RRGGBB`, optional.
+  public var colorHex: String?
+
+  public init(id: UUID = UUID(), name: String, position: Int = 0, colorHex: String? = nil) {
+    self.id = id
+    self.name = name
+    self.position = position
+    self.colorHex = colorHex
+  }
+}
+
 @Table("accounts")
 public struct Account: Hashable, Identifiable, Sendable {
   public let id: UUID
@@ -33,9 +53,12 @@ public struct Account: Hashable, Identifiable, Sendable {
   public var openingDate: Date
   /// Used by importers to recognise own-account transfers (R-ACC-1, R-IMP-PKO-3).
   public var iban: String?
-  public var groupName: String?
+  /// The account's group (R-MGMT-9); nil = top level. (The old free-text `groupName` column
+  /// stays in the table unused since migration v11.)
+  public var groupID: AccountGroup.ID?
   public var colorHex: String?
   public var icon: String?
+  /// Custom order: among the top-level groups and accounts, or within the group.
   public var position: Int
   public var isArchived: Bool
   /// The import that created this account; undoing it removes the account if unused (R-IMP-6).
@@ -44,7 +67,7 @@ public struct Account: Hashable, Identifiable, Sendable {
   public init(
     id: UUID = UUID(), name: String, currency: Currency, kind: AccountKind,
     openingBalanceMinor: Int64 = 0, openingDate: Date, iban: String? = nil,
-    groupName: String? = nil, colorHex: String? = nil, icon: String? = nil,
+    groupID: AccountGroup.ID? = nil, colorHex: String? = nil, icon: String? = nil,
     position: Int = 0, isArchived: Bool = false, importBatchID: ImportBatch.ID? = nil
   ) {
     self.id = id
@@ -54,7 +77,7 @@ public struct Account: Hashable, Identifiable, Sendable {
     self.openingBalanceMinor = openingBalanceMinor
     self.openingDate = openingDate
     self.iban = iban
-    self.groupName = groupName
+    self.groupID = groupID
     self.colorHex = colorHex
     self.icon = icon
     self.position = position
@@ -673,6 +696,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
   case uncategorisedColor
   /// The Categories page sort (`CategorySort.rawValue`); default custom order (R-MGMT-8).
   case categorySort
+  /// The Accounts page sort (`AccountSort.rawValue`); default custom order (R-MGMT-9).
+  case accountSort
   /// The dashboard widget order (`DashboardLayout`): a JSON array of widget ids (R-HOME-6).
   case dashboardLayout
 }

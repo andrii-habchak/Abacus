@@ -23,35 +23,45 @@ public enum PreviewData {
 
   // MARK: Accounts
 
+  /// Account groups (R-MGMT-9): folders sharing the top-level custom order with the accounts
+  /// outside any group (positions 0…11 across groups and accounts, as migration v11 numbers them).
+  public static let monobankGroup = AccountGroup(id: id(151), name: "Monobank", position: 0)
+  public static let pkoGroup = AccountGroup(id: id(152), name: "PKO", position: 2)
+  public static let revolutGroup = AccountGroup(id: id(153), name: "Revolut", position: 6)
+  public static let accountGroups = [monobankGroup, pkoGroup, revolutGroup]
+
   public static let monobank = Account(
     id: id(101), name: "Monobank Black", currency: .UAH, kind: .card,
-    openingBalanceMinor: 52_000_00, openingDate: at("2026-01-01"), groupName: "Monobank", colorHex: "#2E9E4F", position: 0)
+    openingBalanceMinor: 52_000_00, openingDate: at("2026-01-01"), groupID: monobankGroup.id, colorHex: "#2E9E4F",
+    position: 1)
   public static let pkoPersonal = Account(
     id: id(102), name: "PKO Personal", currency: .PLN, kind: .bank,
     openingBalanceMinor: 19_800_00, openingDate: at("2026-01-01"), iban: "PL00000000000000000000000001",
-    groupName: "PKO", colorHex: "#0A64D6", position: 1)
+    groupID: pkoGroup.id, colorHex: "#0A64D6", position: 3)
   public static let pkoUSD = Account(
     id: id(103), name: "PKO USD", currency: .USD, kind: .bank,
     openingBalanceMinor: 3_000_00, openingDate: at("2026-01-01"), iban: "PL00000000000000000000000002",
-    groupName: "PKO", colorHex: "#7A9E1F", position: 2)
+    groupID: pkoGroup.id, colorHex: "#7A9E1F", position: 4)
   public static let pkoCreditCard = Account(
     id: id(104), name: "PKO Credit Card", currency: .PLN, kind: .creditCard,
-    openingBalanceMinor: -1_030_00, openingDate: at("2026-01-01"), groupName: "PKO", colorHex: "#E5484D", position: 3)
+    openingBalanceMinor: -1_030_00, openingDate: at("2026-01-01"), groupID: pkoGroup.id, colorHex: "#E5484D",
+    position: 5)
   public static let revolutEUR = Account(
     id: id(105), name: "Revolut EUR", currency: .EUR, kind: .card,
-    openingBalanceMinor: -886_00, openingDate: at("2026-01-01"), groupName: "Revolut", colorHex: "#4F5BD5", position: 4)
+    openingBalanceMinor: -886_00, openingDate: at("2026-01-01"), groupID: revolutGroup.id, colorHex: "#4F5BD5",
+    position: 7)
   public static let cashPLN = Account(
     id: id(106), name: "Cash PLN", currency: .PLN, kind: .cash,
-    openingBalanceMinor: 0, openingDate: at("2026-01-01"), colorHex: "#C99A00", position: 5)
+    openingBalanceMinor: 0, openingDate: at("2026-01-01"), colorHex: "#C99A00", position: 8)
   public static let eurDeposit = Account(
     id: id(107), name: "EUR Deposit", currency: .EUR, kind: .savings,
-    openingBalanceMinor: 5_000_00, openingDate: at("2026-01-01"), colorHex: "#0F96B0", position: 6)
+    openingBalanceMinor: 5_000_00, openingDate: at("2026-01-01"), colorHex: "#0F96B0", position: 9)
   public static let loanFromFriend = Account(
     id: id(108), name: "Loan from friend", currency: .UAH, kind: .debt,
-    openingBalanceMinor: -8_000_00, openingDate: at("2026-01-01"), colorHex: "#B04BC4", position: 7)
+    openingBalanceMinor: -8_000_00, openingDate: at("2026-01-01"), colorHex: "#B04BC4", position: 10)
   public static let oldCard = Account(
     id: id(109), name: "Old card", currency: .UAH, kind: .card,
-    openingBalanceMinor: 0, openingDate: at("2025-01-01"), colorHex: "#A35A2A", position: 8, isArchived: true)
+    openingBalanceMinor: 0, openingDate: at("2025-01-01"), colorHex: "#A35A2A", position: 11, isArchived: true)
 
   public static let accounts = [
     monobank, pkoPersonal, pkoUSD, pkoCreditCard, revolutEUR, cashPLN, eurDeposit, loanFromFriend, oldCard,
@@ -179,6 +189,7 @@ public enum PreviewData {
   /// Inserts everything above into a migrated database.
   public static func seed(_ db: Database) throws {
     try db.seed {
+      for group in accountGroups { group }
       for account in accounts { account }
       for category in categories { category }
       for event in events { event }

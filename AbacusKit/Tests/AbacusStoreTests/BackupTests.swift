@@ -51,6 +51,7 @@ struct BackupTests {
     try await debts.save(
       DebtRecord(debtID: debt.id, kind: .lent, day: "2026-03-03", amountMinor: 20_00),
       leg: DebtLegInput(accountID: F.bank.id, amountMinor: 20_00))
+    try await f.accounts.saveGroup(AccountGroup(name: "Bank group"))
   }
 
   @Test("R-SET-2: export writes all tables to one file; restore replaces all data with it")

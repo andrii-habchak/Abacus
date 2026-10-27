@@ -78,13 +78,20 @@ extension AbacusDatabase {
     }
     // R-DEBT (TA v1.7, C14): debts and their records, the leg link on transactions, then every
     // account of kind `debt` converted into a debt (R-DEBT-8, docs/status/C14.md). Raw SQL only:
-    // later migrations may add columns to the entity structs. Registered last; "v11: account
-    // groups" (C12) follows it.
+    // later migrations may add columns to the entity structs. Registered before "v11: account
+    // groups" (C12); the two are independent.
     migrator.registerMigration("v10: debts") { db in
       for statement in debtsV10 {
         try db.execute(sql: statement)
       }
       _ = try DebtConversion.convertDebtAccounts(db)
+    }
+    // R-MGMT-9, D48: account groups as folders. Every distinct (trimmed) `groupName` becomes a
+    // group; accounts point at it through `groupID` (ON DELETE SET NULL: deleting a group moves
+    // its accounts to the top level). The `groupName` column stays, unused (append-only).
+    // Registered last; "v10" is left to the debts lane.
+    migrator.registerMigration("v11: account groups") { db in
+      try accountGroupsV11(db)
     }
     return migrator
   }
@@ -131,6 +138,69 @@ extension AbacusDatabase {
     #"CREATE INDEX "idx_debtRecords_importBatchID" ON "debtRecords"("importBatchID")"#,
     #"CREATE INDEX "idx_debtRecords_fingerprint" ON "debtRecords"("fingerprint")"#,
   ]
+
+  /// Creates `accountGroups` and `accounts.groupID` (both only if missing), then turns the group
+  /// names into groups. The custom order keeps what the Accounts page showed before: groups in
+  /// the order of their first account (position, name), each followed by its accounts, then the
+  /// accounts without a group — numbered 0, 1, 2… across that sequence (a group and the
+  /// top-level accounts share one position space; accounts in a group sort among themselves).
+  /// Balances and transactions are untouched. Ids are lowercase UUID text, as SQLiteData binds.
+  static func accountGroupsV11(_ db: Database) throws {
+    if try !db.tableExists("accountGroups") {
+      try db.execute(
+        sql: """
+          CREATE TABLE "accountGroups" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "name" TEXT NOT NULL,
+            "position" INTEGER NOT NULL DEFAULT 0,
+            "colorHex" TEXT
+          ) STRICT
+          """)
+    }
+    if try !db.columns(in: "accounts").contains(where: { $0.name == "groupID" }) {
+      try db.execute(
+        sql: #"ALTER TABLE "accounts" ADD COLUMN "groupID" TEXT REFERENCES "accountGroups"("id") ON DELETE SET NULL"#)
+      try db.execute(sql: #"CREATE INDEX IF NOT EXISTS "idx_accounts_groupID" ON "accounts"("groupID")"#)
+    }
+    // "id<TAB>trimmed group name" in the old display order (ids never contain a tab).
+    let lines = try String.fetchAll(
+      db,
+      sql: #"SELECT "id" || char(9) || TRIM(COALESCE("groupName", '')) FROM "accounts" ORDER BY "position", "name", "id""#
+    )
+    var groupOrder: [String] = []
+    var members: [String: [String]] = [:]
+    var ungrouped: [String] = []
+    for line in lines {
+      let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
+      let id = String(parts[0])
+      let group = parts.count > 1 ? String(parts[1]) : ""
+      if group.isEmpty {
+        ungrouped.append(id)
+      } else {
+        if members[group] == nil { groupOrder.append(group) }
+        members[group, default: []].append(id)
+      }
+    }
+    guard !groupOrder.isEmpty else { return }
+    var position = 0
+    for name in groupOrder {
+      let groupID = UUID().uuidString.lowercased()
+      try db.execute(
+        sql: #"INSERT INTO "accountGroups" ("id", "name", "position") VALUES (?, ?, ?)"#,
+        arguments: [groupID, name, position])
+      position += 1
+      for accountID in members[name] ?? [] {
+        try db.execute(
+          sql: #"UPDATE "accounts" SET "groupID" = ?, "position" = ? WHERE "id" = ?"#,
+          arguments: [groupID, position, accountID])
+        position += 1
+      }
+    }
+    for accountID in ungrouped {
+      try db.execute(sql: #"UPDATE "accounts" SET "position" = ? WHERE "id" = ?"#, arguments: [position, accountID])
+      position += 1
+    }
+  }
 
   /// Numbers the existing categories in their current order (see "v9: category createdAt");
   /// the text format is the one dates are stored in (`yyyy-MM-dd HH:mm:ss.SSS`, UTC).

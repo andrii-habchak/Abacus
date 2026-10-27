@@ -11,6 +11,7 @@ import Synchronization
 public final class ManagePreviewStore: Sendable {
   struct State: Sendable {
     var accounts: [Account]
+    var groups: [AccountGroup]
     var categories: [AbacusDomain.Category]
     var events: [Event]
     var txns: [TxnWithLines]
@@ -26,11 +27,11 @@ public final class ManagePreviewStore: Sendable {
   public init(
     accounts: [Account], categories: [AbacusDomain.Category], events: [Event] = [], txns: [Txn] = [],
     attachedRecords: [AttachedRecord] = [], plans: [BudgetPlan] = [], allocations: [BudgetAllocation] = [],
-    rules: [CategoryRule] = [], settings: [AppSetting] = []
+    rules: [CategoryRule] = [], settings: [AppSetting] = [], groups: [AccountGroup] = []
   ) {
     let lines = Dictionary(grouping: attachedRecords, by: \.txnID)
     state = Mutex(State(
-      accounts: accounts, categories: categories, events: events,
+      accounts: accounts, groups: groups, categories: categories, events: events,
       txns: txns.map { TxnWithLines(txn: $0, lines: (lines[$0.id] ?? []).sorted { $0.position < $1.position }) },
       plans: plans, allocations: allocations, rules: rules,
       settings: Dictionary(settings.map { ($0.id, $0.value) }, uniquingKeysWith: { _, last in last })))
@@ -41,7 +42,8 @@ public final class ManagePreviewStore: Sendable {
     ManagePreviewStore(
       accounts: PreviewData.accounts, categories: PreviewData.categories, events: PreviewData.events,
       txns: PreviewData.txns, attachedRecords: PreviewData.attachedRecords, plans: [PreviewData.budgetPlan],
-      allocations: PreviewData.budgetAllocations, settings: PreviewData.settings)
+      allocations: PreviewData.budgetAllocations, settings: PreviewData.settings,
+      groups: PreviewData.accountGroups)
   }
 
   /// `PreviewData` plus what the prototype shows and `PreviewData` lacks: categorisation rules,
@@ -51,7 +53,7 @@ public final class ManagePreviewStore: Sendable {
       accounts: PreviewData.accounts, categories: PreviewData.categories, events: ManageSample.events,
       txns: PreviewData.txns + ManageSample.extraTxns, attachedRecords: PreviewData.attachedRecords,
       plans: [PreviewData.budgetPlan], allocations: PreviewData.budgetAllocations, rules: ManageSample.rules,
-      settings: PreviewData.settings)
+      settings: PreviewData.settings, groups: PreviewData.accountGroups)
   }
 
   public var accountRepository: Accounts { Accounts(store: self) }
@@ -98,6 +100,32 @@ public final class ManagePreviewStore: Sendable {
         }
         state.accounts.removeAll { $0.id == id }
         state.rules.removeAll { $0.accountID == id || $0.transferAccountID == id }
+      }
+    }
+
+    public func groups() async throws -> [AccountGroup] {
+      store.state.withLock { state in
+        state.groups.sorted { ($0.position, $0.name) < ($1.position, $1.name) }
+      }
+    }
+
+    public func saveGroup(_ group: AccountGroup) async throws {
+      store.state.withLock { state in
+        if let index = state.groups.firstIndex(where: { $0.id == group.id }) {
+          state.groups[index] = group
+        } else {
+          state.groups.append(group)
+        }
+      }
+    }
+
+    public func deleteGroup(_ id: AccountGroup.ID) async throws {
+      try store.state.withLock { state in
+        guard state.groups.contains(where: { $0.id == id }) else { throw RepositoryError.notFound }
+        state.groups.removeAll { $0.id == id }
+        for index in state.accounts.indices where state.accounts[index].groupID == id {
+          state.accounts[index].groupID = nil
+        }
       }
     }
   }

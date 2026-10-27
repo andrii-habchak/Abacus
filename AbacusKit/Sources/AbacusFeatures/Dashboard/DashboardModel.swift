@@ -59,6 +59,8 @@ public final class DashboardModel {
     /// Debts (C14): `accounts` / `txns` above already include `DebtBook.reportLedger()`.
     var debts: DebtBook = .empty
     var hasDebts = false
+    /// Net worth breakdown by account group (R-HOME-1, R-MGMT-9).
+    var accountGroups: [AccountGroup] = []
   }
 
   struct PlanEntry {
@@ -104,6 +106,7 @@ public final class DashboardModel {
         loaded.debts = book
         loaded.hasDebts = true
       }
+      loaded.accountGroups = (try? await dependencies.accounts.groups()) ?? []
       // A layout that can't be read is the default one, never a failed dashboard.
       layout = DashboardLayout(stored: (try? await dependencies.settings.value(.dashboardLayout)) ?? nil)
       data = loaded
@@ -277,7 +280,7 @@ public final class DashboardModel {
     guard let data, let rates else { return }
     netWorth = DashboardNetWorth.make(
       accounts: data.accounts, txns: data.txns, currency: displayCurrency, converter: rates.converter,
-      today: today, format: format, debts: data.debts)
+      today: today, format: format, groups: data.accountGroups, debts: data.debts)
     debts =
       data.hasDebts
       ? DashboardDebts.make(book: data.debts, currency: displayCurrency, converter: rates.converter, format: format)

@@ -72,7 +72,7 @@ struct ImportFileBar: View {
             if model.targetAccountID == nil {
               Text("Choose account…").tag(Account.ID?.none)
             }
-            ForEach(model.targetOptions) { account in
+            AccountPickerItems(sections: model.targetSections) { account in
               Text("\(account.name) · \(account.currency.rawValue)").tag(Account.ID?.some(account.id))
             }
           }

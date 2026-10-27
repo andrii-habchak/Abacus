@@ -67,6 +67,7 @@ public final class DebtsModel {
   public private(set) var book: DebtBook = .empty
   /// Every account (names of legs on archived accounts too).
   public private(set) var accounts: [Account] = []
+  public private(set) var accountGroups: [AccountGroup] = []
   public var search = ""
   public var filter: Filter = .active
   /// The selected person (`Debt.personKey`).
@@ -96,6 +97,7 @@ public final class DebtsModel {
     do {
       book = try await dependencies.debts.book()
       accounts = try await dependencies.accounts.accounts(includeArchived: true)
+      accountGroups = (try? await dependencies.accounts.groups()) ?? []
       converter = await dependencies.converter()
       phase = .loaded
       if selectedPerson == nil || !people.contains(where: { $0.id == selectedPerson }) {
@@ -353,11 +355,11 @@ public final class DebtsModel {
     var originalCategoryID: AbacusDomain.Category.ID?
   }
 
-  /// Accounts offered for a record: not archived, A–Z (the leg's own account stays offered).
-  public var accountOptions: [Account] {
+  /// Accounts offered for a record: not archived (the leg's own account stays offered), under
+  /// their groups A–Z (R-MGMT-9).
+  public var accountSections: [AccountPickerSection] {
     let current = recordDraft?.accountID
-    return accounts.filter { !$0.isArchived || $0.id == current }
-      .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    return AccountOrder.pickerSections(accounts.filter { !$0.isArchived || $0.id == current }, groups: accountGroups)
   }
 
   public func newRecord(debtID: Debt.ID, kind: DebtRecordKind = .lent) {

@@ -158,6 +158,8 @@ public final class RulesModel {
   public private(set) var phase: ManagePhase = .idle
   public private(set) var rules: [CategoryRule] = []
   public private(set) var accounts: [Account] = []
+  /// Account groups: the account pickers list A–Z under them (R-MGMT-8).
+  public private(set) var accountGroups: [AccountGroup] = []
   public private(set) var categories: [AbacusDomain.Category] = []
   /// Page search (R-MGMT-11): the rule in words (condition and action).
   public var searchText = ""
@@ -198,6 +200,7 @@ public final class RulesModel {
     do {
       rules = try await dependencies.rules.rules()
       accounts = try await dependencies.accounts.accounts(includeArchived: true)
+      accountGroups = (try? await dependencies.accounts.groups()) ?? []
       categories = try await dependencies.categories.categories(kind: nil, includeArchived: true)
       if let selection, !rules.contains(where: { $0.id == selection }) { self.selection = nil }
       if let categoryFilter, !categories.contains(where: { $0.id == categoryFilter }) { self.categoryFilter = nil }
@@ -363,8 +366,12 @@ public final class RulesModel {
     categoriesAZ(including: Set(rules.compactMap(\.categoryID)))
   }
 
-  public var accountOptions: [Account] {
-    accounts.filter { !$0.isArchived }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+  /// Non-archived accounts A–Z under their groups (R-MGMT-8).
+  public var accountOptions: [Account] { accountSections.flatMap(\.accounts) }
+
+  /// `accountOptions` as picker sections: groups A–Z, then the accounts without a group.
+  public var accountSections: [AccountPickerSection] {
+    AccountOrder.pickerSections(accounts.filter { !$0.isArchived }, groups: accountGroups)
   }
 
   // MARK: Editor
