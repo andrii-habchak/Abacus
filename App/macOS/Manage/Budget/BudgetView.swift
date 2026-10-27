@@ -2,12 +2,15 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// The Budget screen (approved prototype group 4 as changed by TA v1.5, R-MGMT-3, R-BUD-1…3,
-/// D43): "Applies from <month>", per-category limits each with its own currency and a share bar,
-/// the total row (the limits summed in the display currency), add / remove limits; "Save budget"
-/// in the toolbar.
+/// The Budget screen (approved prototype group 4 as changed by TA v1.6, R-MGMT-3, R-MGMT-10,
+/// R-BUD-1…3, D43, D46): "Applies from <month>", the total limit with its currency, per-category
+/// limits each with its own currency, a share bar and a red trash button, the unallocated row
+/// and the total row in the display currency (the toolbar switch); Revert and Save at the
+/// bottom-right of the form.
 public struct BudgetView: View {
   @State private var model: BudgetEditorModel
+  /// The app's display currency (the toolbar switch); absent in bare previews.
+  @Environment(AppModel.self) private var app: AppModel?
 
   public init(model: BudgetEditorModel) {
     _model = State(initialValue: model)
@@ -20,22 +23,55 @@ public struct BudgetView: View {
   public var body: some View {
     ManagePhaseView(phase: model.phase, title: "Budget", retry: { await model.load() }) {
       ScrollView {
-        BudgetEditorContent(model: model)
-          .padding(20)
-          .frame(maxWidth: 760, alignment: .leading)
-          .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 16) {
+          BudgetEditorContent(model: model)
+          BudgetSaveBar(model: model)
+        }
+        .padding(20)
+        .frame(maxWidth: 760, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
     .navigationTitle("Monthly budget")
-    .toolbar {
-      ToolbarItem(placement: .primaryAction) {
-        Button("Save budget") { Task { await model.save() } }
+    .onChange(of: app?.displayCurrency, initial: true) { _, currency in
+      if let currency { model.setDisplayCurrency(currency) }
+    }
+    .task { if model.phase == .idle { await model.load() } }
+  }
+}
+
+/// Revert (left) and Save (right) at the bottom-right of the form (R-MGMT-10); the messages
+/// above them.
+struct BudgetSaveBar: View {
+  let model: BudgetEditorModel
+
+  var body: some View {
+    VStack(alignment: .trailing, spacing: 8) {
+      if let message = model.validationMessage, model.isDirty {
+        Text(message).font(.callout).foregroundStyle(ManagePalette.negative)
+      }
+      if let error = model.errorMessage {
+        Text(error).font(.callout).foregroundStyle(ManagePalette.negative)
+      }
+      HStack(spacing: 8) {
+        if model.isDirty {
+          Text("Unsaved changes").font(.callout).foregroundStyle(.secondary)
+        } else if let saved = model.savedMessage {
+          Label(saved, systemImage: "checkmark.circle.fill")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+        Spacer(minLength: 8)
+        Button("Revert") { Task { await model.revert() } }
+          .disabled(!model.isDirty)
+        Button("Save") { Task { await model.save() } }
           .buttonStyle(.borderedProminent)
           .disabled(!model.canSave)
           .keyboardShortcut("s", modifiers: .command)
       }
     }
-    .task { if model.phase == .idle { await model.load() } }
+    .frame(maxWidth: .infinity, alignment: .trailing)
+    .font(.system(size: 13))
   }
 }
 
@@ -52,6 +88,22 @@ struct BudgetEditorContent: View {
           .labelsHidden()
           .fixedSize()
         }
+        ManageField("Total limit") {
+          HStack(spacing: 6) {
+            TextField("No total", text: $model.totalLimit)
+              .labelsHidden()
+              .textFieldStyle(.roundedBorder)
+              .multilineTextAlignment(.trailing)
+              .monospacedDigit()
+              .frame(width: 120)
+              .accessibilityLabel("Total limit")
+            Picker("Total currency", selection: $model.totalCurrency) {
+              ForEach(Currency.displayOrder, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+          }
+        }
         Text(model.appliesNote)
           .font(.system(size: 12))
           .foregroundStyle(.secondary)
@@ -65,7 +117,7 @@ struct BudgetEditorContent: View {
       HStack(spacing: 8) {
         Picker("Category to add", selection: $model.categoryToAdd) {
           ForEach(model.addOptions) { category in
-            Text(category.parentID == nil ? category.name : "    \(category.name)").tag(Optional(category.id))
+            Text(model.addOptionTitle(category)).tag(Optional(category.id))
           }
         }
         .labelsHidden()
@@ -75,23 +127,12 @@ struct BudgetEditorContent: View {
           .disabled(model.addOptions.isEmpty)
       }
       .font(.system(size: 13))
-
-      if let message = model.validationMessage, model.isDirty {
-        Text(message).font(.callout).foregroundStyle(ManagePalette.negative)
-      }
-      if let error = model.errorMessage {
-        Text(error).font(.callout).foregroundStyle(ManagePalette.negative)
-      }
-      if let saved = model.savedMessage {
-        Label(saved, systemImage: "checkmark.circle.fill")
-          .font(.callout)
-          .foregroundStyle(.secondary)
-      }
     }
   }
 }
 
-/// Category | Monthly limit | Currency | Share | ✕, then the total row (R-BUD-1, D43).
+/// Category | Monthly limit | Currency | Share | trash, then the unallocated row and the total
+/// row in the display currency (R-BUD-1, D46).
 struct BudgetLimitsTable: View {
   let model: BudgetEditorModel
 
@@ -136,7 +177,7 @@ struct BudgetLimitsTable: View {
             "Currency for \(row.name)",
             selection: Binding(get: { model.currency(row.categoryID) }, set: { model.setCurrency($0, for: row.categoryID) })
           ) {
-            ForEach(Currency.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            ForEach(Currency.displayOrder, id: \.self) { Text($0.rawValue).tag($0) }
           }
           .labelsHidden()
           .fixedSize()
@@ -144,14 +185,36 @@ struct BudgetLimitsTable: View {
           Button {
             model.removeLimit(row.categoryID)
           } label: {
-            Image(systemName: "xmark").frame(width: 28, height: 28)
+            Image(systemName: "trash").frame(width: 28, height: 28)
           }
           .buttonStyle(.borderless)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.red)
           .accessibilityLabel("Remove \(row.name)")
           .help("Remove the limit")
         }
         .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+      }
+
+      if model.hasTotal {
+        Divider()
+        ManageColumns(columns: Self.columns) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Unallocated")
+            Text(model.unallocatedNote)
+              .font(.system(size: 11))
+              .foregroundStyle((model.unallocated?.minorUnits ?? 0) < 0 ? ManagePalette.negative : Color.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          Text(model.unallocatedText)
+            .monospacedDigit()
+            .foregroundStyle((model.unallocated?.minorUnits ?? 0) < 0 ? ManagePalette.negative : Color.primary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+          Text(model.displayCurrency.rawValue).foregroundStyle(.secondary)
+          ManageBar(fraction: model.unallocatedShare, color: .secondary)
+          Color.clear.frame(height: 1)
+        }
+        .padding(.vertical, 8)
         .padding(.horizontal, 12)
       }
 

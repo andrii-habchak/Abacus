@@ -19,18 +19,19 @@ public struct BudgetLimitRow: Identifiable, Equatable, Sendable {
   /// "incl. Taxi, Fuel"; empty for a category without children.
   public let covers: String
   public let currency: Currency
-  /// The limit's share of the total in the display currency, 0…1 (0 without a rate or when the
-  /// total is not positive).
+  /// The limit's share of the total (the sum of the limits without one) in the display
+  /// currency, 0…1 (0 without a rate or when the total is not positive).
   public let share: Double
   public let isValid: Bool
   public var id: AbacusDomain.Category.ID { categoryID }
 }
 
-/// The Budget screen (approved prototype group 4 as changed by TA v1.5, R-MGMT-3, R-BUD-1…3,
-/// D43): per-category limits, each in its own currency, with share bars; the total is the sum
-/// of the limits in the display currency at the latest rate (there is no total field and no
-/// "unallocated" remainder any more); "Applies from <month>": saving writes a plan effective
-/// from that month on; earlier months keep theirs (D29).
+/// The Budget screen (approved prototype group 4 as changed by TA v1.6, R-MGMT-3, R-BUD-1…3,
+/// D43, D46): a total limit in its own currency (optional: empty or 0 = the sum of the limits),
+/// per-category limits each in its own currency, share bars and the unallocated remainder
+/// (total − limits at the latest rate). Totals, unallocated and shares are shown in the display
+/// currency (the toolbar switch); inputs stay in their own currencies. "Applies from <month>":
+/// saving writes a plan effective from that month on; earlier months keep theirs (D29).
 @MainActor
 @Observable
 public final class BudgetEditorModel {
@@ -47,7 +48,12 @@ public final class BudgetEditorModel {
   public private(set) var savedMessage: String?
   /// The month a later plan starts (it is kept, so the saved budget stops there).
   public private(set) var laterPlanMonth: Month?
-  /// The total's currency (the app's display currency), read from the settings on load.
+  /// The total limit as typed; empty (or 0) = no total, the sum of the limits is the total.
+  public var totalLimit: String = ""
+  /// The total limit's currency.
+  public var totalCurrency: Currency = .UAH
+  /// The currency the page's sums are shown in (the toolbar switch, R-HOME-4); read from the
+  /// settings on the first load, then set by the app (`setDisplayCurrency`).
   public private(set) var displayCurrency: Currency = .UAH
   /// The currency a new limit starts in: the last one picked or loaded, else the display
   /// currency.
@@ -61,8 +67,13 @@ public final class BudgetEditorModel {
   /// The rates in memory when the screen loaded (the total uses the latest rate).
   private var converter: (any CurrencyConverter)?
 
+  /// Set once the app has pushed its display currency, so a reload does not reset it.
+  @ObservationIgnored private var displayCurrencyIsSet = false
+
   struct Snapshot: Equatable {
     var appliesFrom: Month
+    var totalLimit: String
+    var totalCurrency: Currency
     var limits: [BudgetLimitDraft]
   }
 
@@ -82,11 +93,20 @@ public final class BudgetEditorModel {
       categories = try await dependencies.categories.categories(kind: .expense, includeArchived: true)
       let month = dependencies.today().yearMonth
       let found = try await dependencies.budget.plan(for: month)
-      let display = try? await dependencies.settings.value(.displayCurrency)
-      displayCurrency = display.flatMap(Currency.init(rawValue:)) ?? .UAH
+      if !displayCurrencyIsSet {
+        let display = try? await dependencies.settings.value(.displayCurrency)
+        displayCurrency = display.flatMap(Currency.init(rawValue:)) ?? .UAH
+      }
       converter = await dependencies.converter()
       loadedPlan = found?.plan
       appliesFrom = month
+      if let total = found?.plan.total {
+        totalLimit = format.amountInput(total.minorUnits)
+        totalCurrency = total.currency
+      } else {
+        totalLimit = ""
+        totalCurrency = found?.plan.currency ?? displayCurrency
+      }
       let order = Dictionary(uniqueKeysWithValues: orderedCategories.enumerated().map { ($1.id, $0) })
       limits = (found?.allocations ?? [])
         .sorted { (order[$0.categoryID] ?? .max, $0.limitMinor) < (order[$1.categoryID] ?? .max, $1.limitMinor) }
@@ -108,8 +128,38 @@ public final class BudgetEditorModel {
     converter = await dependencies.converter()
   }
 
+  /// The screen is shown again, or data changed elsewhere: re-reads the budget unless there
+  /// are unsaved edits, which are kept (only the rates are re-read then).
+  public func reappeared() async {
+    if phase == .loaded, isDirty {
+      await refreshRates()
+    } else {
+      await load()
+    }
+  }
+
+  /// The toolbar's display currency switch (R-HOME-4, D46): totals, unallocated and shares
+  /// follow it; the inputs keep their own currencies.
+  public func setDisplayCurrency(_ currency: Currency) {
+    displayCurrencyIsSet = true
+    displayCurrency = currency
+  }
+
+  /// "Revert": back to what was loaded or last saved.
+  public func revert() async {
+    guard let baseline else { return }
+    appliesFrom = baseline.appliesFrom
+    totalLimit = baseline.totalLimit
+    totalCurrency = baseline.totalCurrency
+    limits = baseline.limits
+    categoryToAdd = addOptions.first?.id
+    errorMessage = nil
+    savedMessage = nil
+    await refreshLaterPlan()
+  }
+
   private var snapshot: Snapshot {
-    Snapshot(appliesFrom: appliesFrom, limits: limits)
+    Snapshot(appliesFrom: appliesFrom, totalLimit: totalLimit, totalCurrency: totalCurrency, limits: limits)
   }
 
   /// Finds a plan that starts after `appliesFrom` (the saved one runs until then).
@@ -199,10 +249,18 @@ public final class BudgetEditorModel {
   /// The currency of a limit added now: the last one used, else the display currency.
   public var newLimitCurrency: Currency { lastUsedCurrency ?? displayCurrency }
 
-  /// Expense categories without a limit yet, in tree order (children indented in the picker).
+  /// Expense categories without a limit yet, A–Z (R-MGMT-8); a subcategory is named
+  /// "Parent › Child" (`addOptionTitle`).
   public var addOptions: [AbacusDomain.Category] {
     let used = Set(limits.map(\.categoryID))
-    return orderedCategories.filter { !$0.isArchived && !used.contains($0.id) }
+    return categories.filter { !$0.isArchived && !used.contains($0.id) }
+      .sorted { addOptionTitle($0).localizedStandardCompare(addOptionTitle($1)) == .orderedAscending }
+  }
+
+  /// "Groceries", or "Transport › Taxi" for a subcategory.
+  public func addOptionTitle(_ category: AbacusDomain.Category) -> String {
+    guard let parent = category.parentID.flatMap({ tree.category($0) }) else { return category.name }
+    return "\(parent.name) › \(category.name)"
   }
 
   /// "Add category limit": adds the picked category with a limit of 0 in the last used currency.
@@ -219,27 +277,44 @@ public final class BudgetEditorModel {
     savedMessage = nil
   }
 
-  // MARK: Total (R-BUD-1, D43)
+  // MARK: Total and unallocated (R-BUD-1, D43, D46)
 
-  private func inDisplayCurrency(_ money: Money) -> Money? {
-    if money.currency == displayCurrency { return money }
-    return converter?.convertAtLatest(money, to: displayCurrency)
+  private func converted(_ money: Money, to currency: Currency) -> Money? {
+    if money.currency == currency { return money }
+    return converter?.convertAtLatest(money, to: currency)
   }
 
-  /// Limits whose currency has no rate to the display currency (left out of the total).
+  private func inDisplayCurrency(_ money: Money) -> Money? { converted(money, to: displayCurrency) }
+
+  /// The total limit typed; nil when the field is empty, 0 (no total) or not an amount.
+  public var total: Money? {
+    guard let minor = format.parseAmount(totalLimit), minor > 0 else { return nil }
+    return Money(minorUnits: minor, currency: totalCurrency)
+  }
+
+  /// Whether a total is set (a positive amount in the total field): the unallocated row shows.
+  public var hasTotal: Bool { total != nil }
+
+  private var totalFieldIsValid: Bool {
+    if totalLimit.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+    return (format.parseAmount(totalLimit) ?? -1) >= 0
+  }
+
+  /// Currencies (of the limits and the total) without a rate to the display currency or to the
+  /// total's; those amounts are left out of the sums and named, never counted at 1.
   public var currenciesWithoutRate: [Currency] {
+    let targets = [displayCurrency] + (total.map { [$0.currency] } ?? [])
     var seen: Set<Currency> = []
-    return limits.compactMap { limit -> Currency? in
-      guard limit.currency != displayCurrency, seen.insert(limit.currency).inserted,
-        inDisplayCurrency(Money(minorUnits: 100, currency: limit.currency)) == nil
-      else { return nil }
-      return limit.currency
+    return (limits.map(\.currency) + (total.map { [$0.currency] } ?? [])).filter { currency in
+      guard seen.insert(currency).inserted else { return false }
+      let probe = Money(minorUnits: 100, currency: currency)
+      return targets.contains { converted(probe, to: $0) == nil }
     }
   }
 
   /// The sum of the limits in the display currency at the latest rate; nil while an amount does
-  /// not parse. Limits without a rate are left out (`currenciesWithoutRate`), never counted at 1.
-  public var totalMinor: Int64? {
+  /// not parse. Limits without a rate are left out.
+  public var limitsSumMinor: Int64? {
     var sum: Int64 = 0
     for limit in limits {
       guard let minor = format.parseAmount(limit.limit) else { return nil }
@@ -250,29 +325,80 @@ public final class BudgetEditorModel {
     return sum
   }
 
+  /// The budget's total in the display currency (what the share bars divide): the total limit
+  /// at the latest rate, or the sum of the limits without one. nil while an amount does not
+  /// parse or the total has no rate.
+  public var totalMinor: Int64? {
+    guard totalFieldIsValid, limitsSumMinor != nil else { return nil }
+    if let total { return inDisplayCurrency(total)?.minorUnits }
+    return limitsSumMinor
+  }
+
   /// "₴101,700.00"; "—" while an amount does not parse.
   public var totalText: String {
     totalMinor.map { format.money(Money(minorUnits: $0, currency: displayCurrency)) } ?? "—"
   }
 
-  /// "Sum of the limits in UAH at the latest rate" / "No EUR→UAH rate: those limits are not
-  /// counted".
+  /// "Total limit €3,000.00 at the latest rate" / "No total set: the sum of the limits" / "No
+  /// EUR rate: those amounts are not counted".
   public var totalNote: String {
-    guard totalMinor != nil else { return "Check the amounts." }
+    guard totalFieldIsValid, limitsSumMinor != nil else { return "Check the amounts." }
     let missing = currenciesWithoutRate
     if !missing.isEmpty {
       let codes = missing.map(\.rawValue).joined(separator: ", ")
-      return "No \(codes)→\(displayCurrency.rawValue) rate: those limits are not counted"
+      return "No \(codes)→\(displayCurrency.rawValue) rate: those amounts are not counted"
     }
-    if limits.allSatisfy({ $0.currency == displayCurrency }) {
-      return "Sum of the limits"
+    if let total {
+      return total.currency == displayCurrency
+        ? "The total limit" : "Total limit \(format.money(total)) at the latest rate"
     }
-    return "Sum of the limits in \(displayCurrency.rawValue) at the latest rate"
+    return limits.allSatisfy { $0.currency == displayCurrency }
+      ? "No total set: the sum of the limits"
+      : "No total set: the sum of the limits at the latest rate"
+  }
+
+  /// Unallocated = total − the limits converted to the total's currency at the latest rate
+  /// (R-BUD-1, D46), in the total's currency. nil without a total or while an amount does not
+  /// parse; limits without a rate are left out.
+  public var unallocated: Money? {
+    guard let total else { return nil }
+    var allocated: Int64 = 0
+    for limit in limits {
+      guard let minor = format.parseAmount(limit.limit) else { return nil }
+      if let inTotal = converted(Money(minorUnits: minor, currency: limit.currency), to: total.currency) {
+        allocated += inTotal.minorUnits
+      }
+    }
+    return Money(minorUnits: total.minorUnits - allocated, currency: total.currency)
+  }
+
+  /// The unallocated remainder in the display currency.
+  public var unallocatedShown: Money? { unallocated.flatMap(inDisplayCurrency) }
+
+  /// "₴12,400.00" (negative when the limits exceed the total); "—" without a rate.
+  public var unallocatedText: String { unallocatedShown.map(format.money) ?? "—" }
+
+  /// The unallocated share of the total, 0…1.
+  public var unallocatedShare: Double {
+    guard let shown = unallocatedShown, let base = totalMinor, base > 0 else { return 0 }
+    return min(1, max(0, Double(shown.minorUnits) / Double(base)))
+  }
+
+  /// "Other categories and uncategorised spending" / "The limits exceed the total by €40.00".
+  public var unallocatedNote: String {
+    guard let unallocated else { return "" }
+    if unallocated.minorUnits < 0 {
+      return "The limits exceed the total by \(format.money(unallocated.negated))"
+    }
+    return "Other categories and uncategorised spending"
   }
 
   // MARK: Saving
 
   public var validationMessage: String? {
+    if !totalFieldIsValid {
+      return "The total limit is not a valid amount."
+    }
     if limits.contains(where: { (format.parseAmount($0.limit) ?? -1) < 0 }) {
       return "A category limit is not a valid amount."
     }
@@ -283,15 +409,15 @@ public final class BudgetEditorModel {
 
   public var canSave: Bool { validationMessage == nil && isDirty }
 
-  /// "Save budget": a plan effective from `appliesFrom` (R-BUD-3). A plan already starting that
-  /// month is replaced; earlier and later plans stay (D29). The plan's legacy total / currency
-  /// columns get 0 and the first limit's currency (unused, D43).
+  /// "Save": a plan effective from `appliesFrom` (R-BUD-3) with the total (0 = none) and each
+  /// limit in its own currency. A plan already starting that month is replaced; earlier and
+  /// later plans stay (D29).
   public func save() async {
     guard validationMessage == nil else { return }
     let month = appliesFrom.string
     let planID = loadedPlan?.effectiveMonth == month ? loadedPlan!.id : UUID()
     let plan = BudgetPlan(
-      id: planID, effectiveMonth: month, legacyCurrency: limits.first?.currency ?? newLimitCurrency)
+      id: planID, effectiveMonth: month, totalMinor: total?.minorUnits ?? 0, currency: totalCurrency)
     let allocations = limits.compactMap { limit in
       format.parseAmount(limit.limit).map {
         BudgetAllocation(planID: planID, categoryID: limit.categoryID, limitMinor: $0, currency: limit.currency)

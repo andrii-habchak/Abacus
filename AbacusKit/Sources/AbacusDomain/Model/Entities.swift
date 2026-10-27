@@ -246,32 +246,34 @@ public struct AttachedRecord: Hashable, Identifiable, Sendable {
 
 /// The monthly budget in effect from `effectiveMonth` until the next plan (R-BUD-3).
 ///
-/// Since TA v1.5 (D43) a plan has no total or currency of its own: each allocation carries its
-/// own currency and the budget's total is the sum of the limits in the display currency. The
-/// `totalMinor` / `currency` columns stay in the schema (migrations are append-only and
-/// CloudKit-safe) but nothing reads them any more; new plans write 0 and a limit's currency.
+/// TA v1.6 (D46): a total limit in its own currency plus per-category limits, each in its own
+/// currency (`BudgetAllocation.currency`); "unallocated" = total − limits at one rate.
+/// `totalMinor == 0` means no total is set (plans saved by 1.1.0, which had no total field): the
+/// budget's total is then the sum of the limits.
 @Table("budgetPlans")
 public struct BudgetPlan: Hashable, Identifiable, Sendable {
   public let id: UUID
   /// `YYYY-MM` (see `Month`).
   public var effectiveMonth: String
-  /// Unused since v5 (D43): the plan-level total of v1.0.
-  @Column("totalMinor") public var legacyTotalMinor: Int64
-  /// Unused since v5 (D43): the plan-level currency of v1.0 (the v5 migration copied it to the
-  /// plan's allocations).
-  @Column("currency") public var legacyCurrency: Currency
+  /// The total limit in `currency`; 0 = no total set.
+  public var totalMinor: Int64
+  /// The total's currency.
+  public var currency: Currency
 
-  public init(
-    id: UUID = UUID(), effectiveMonth: String, legacyTotalMinor: Int64 = 0, legacyCurrency: Currency = .PLN
-  ) {
+  public init(id: UUID = UUID(), effectiveMonth: String, totalMinor: Int64 = 0, currency: Currency = .PLN) {
     self.id = id
     self.effectiveMonth = effectiveMonth
-    self.legacyTotalMinor = legacyTotalMinor
-    self.legacyCurrency = legacyCurrency
+    self.totalMinor = totalMinor
+    self.currency = currency
+  }
+
+  /// The total limit; nil when none is set (`totalMinor` 0 or less).
+  public var total: Money? {
+    totalMinor > 0 ? Money(minorUnits: totalMinor, currency: currency) : nil
   }
 }
 
-/// A category's monthly limit in its own currency (R-BUD-1, D43). A parent's limit covers its
+/// A category's monthly limit in its own currency (R-BUD-1, D43, D46). A parent's limit covers its
 /// children unless a child has a limit of its own (D27).
 @Table("budgetAllocations")
 public struct BudgetAllocation: Hashable, Identifiable, Sendable {

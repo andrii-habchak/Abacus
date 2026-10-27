@@ -141,8 +141,9 @@ public enum PreviewData {
 
   // MARK: Budget
 
-  /// Limits in their own currencies (D43): Health in EUR, the rest in PLN.
-  public static let budgetPlan = BudgetPlan(id: id(601), effectiveMonth: "2026-01", legacyCurrency: .PLN)
+  /// A total of zł8,000 (D46) and limits in their own currencies (D43): Health in EUR, the rest
+  /// in PLN.
+  public static let budgetPlan = BudgetPlan(id: id(601), effectiveMonth: "2026-01", totalMinor: 8_000_00, currency: .PLN)
   public static let budgetAllocations: [BudgetAllocation] = [
     BudgetAllocation(id: id(611), planID: id(601), categoryID: id(205), limitMinor: 4_000_00, currency: .PLN),
     BudgetAllocation(id: id(612), planID: id(601), categoryID: id(202), limitMinor: 1_800_00, currency: .PLN),
