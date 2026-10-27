@@ -2,6 +2,31 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.2.1] — Unreleased
+
+Stability and the owner's review of 1.2.0. No database changes beyond 1.2.0.
+
+### Fixed
+
+- Crashes on Escape, on saving, cancelling or forgiving in Debts, and after drag and drop
+  (forms read a draft that had just been cleared).
+- A double Return could save a debt record twice.
+- Fee and split lines in the transaction editor could read a removed line.
+- Slow dashboard and lists: day/month comparisons no longer format strings (dashboard reload
+  about 5× faster); a drop refreshes only the order instead of reloading everything.
+- Budget showed "Unsaved changes" after a successful save.
+
+### Changed
+
+- Accounts and Categories use a native outline list: a line between rows reorders, a
+  highlighted row nests, auto-scroll while dragging. Dropping an account onto an ungrouped
+  account creates a group with both.
+- Creating and editing accounts, groups and categories happens in a pop-up sheet.
+- "New account" is a split button with "New account in <group>" and "New group…".
+- New transaction starts on the selected account (Accounts) or category (Categories).
+- Budget Save button: blue when there are edits, green "Saved" after saving.
+- Rules page: the "Try a description" row is removed.
+
 ## [1.2.0] — Unreleased
 
 Changes from the owner's review of 1.1.0. Opening this version updates the database (rule

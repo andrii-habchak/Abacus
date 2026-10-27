@@ -60,7 +60,7 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 | C12 Accounts | background agent | `wp/C12-accounts` | **merged** 2026-10-27 (account groups via migration v11, grouped pickers, net worth hierarchy; interpretations in `docs/status/C12.md`) |
 | S3 Budget/rules polish | background agent | `wp/S3-polish` | **merged** 2026-10-27 (Save button states, rules tester removed; notes `docs/status/S3.md`) |
 | S2 Lists | background agent | `wp/S2-lists` | **merged** 2026-10-27 (NSOutlineView lists, sheet editors, split New account; real mouse drag not tested; notes `docs/status/S2.md`) |
-| S1 Stability | background agent | `wp/S1-stability` | in progress |
+| S1 Stability | background agent | `wp/S1-stability` | **merged** 2026-10-27 (debts binding crash reproduced and fixed, safe bindings, Day/Month speed-up, soak + hang watch tools; timings in `docs/status/S1.md`) |
 | C14 Debts | background agent | `wp/C14-debts` | **merged** 2026-10-27 (debts separate from accounts, migration v10 converts debt accounts — real-data invariants hold; follow-up: dashboard opens scrolled when Debts is first; interpretations in `docs/status/C14.md`) |
 | C7 Rules | background agent | `wp/C7-rules` | **merged** 2026-10-27 (migration v6 rebuilds `categoryRules`; interpretations to confirm in `docs/status/C7.md`) |
 
@@ -142,6 +142,10 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
   default window is 1,018 pt on the owner's 1,117 pt-high screen for every section, not the
   860 pt in `.defaultSize`; that is the window default, not an Import leak.
 - ~~Release~~ → v1.0.0 tagged and pushed 2026-10-27 (DMG local only).
+- **1.2.1 (stability + owner review of 1.2.0, S1–S3)**: merged on `main`, version 1.2.1 (build 4), DMG
+  built locally for owner testing; not tagged. Soak run on a 5,000-transaction scratch database:
+  no crash; debug-build main-thread pauses of 120–600 ms remain around sheet open/close.
+  Real mouse drag and drop not yet tried by anyone but the owner.
 - **1.2.0 (owner review of 1.1.0, C8–C14)**: merged on `main`, version 1.2.0 (build 3), DMG
   built locally for owner testing; **not tagged** until the owner's OK. First launch runs
   migrations v8–v11 (rule applications, category createdAt, debts, account groups) on the real
