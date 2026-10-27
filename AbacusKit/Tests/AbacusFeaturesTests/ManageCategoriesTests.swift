@@ -63,12 +63,16 @@ struct ManageCategoriesTests {
     let pets = try #require(model.categories.first { $0.name == "Pets" })
     #expect(pets.kind == .expense)
     #expect(pets.parentID == nil)
-    #expect(pets.colorHex == "#7B4FCF")
+    #expect(pets.colorHex == ManageText.swatches[3])
     #expect(model.rows.last?.name == "Pets")
 
     model.select(transport)
     model.newSubcategory()
     #expect(model.inspectorTitle == "New subcategory")
+    // R-MGMT-7: a random palette colour apart from the parent's.
+    let picked = try #require(model.draft?.colorHex)
+    #expect(ColorPalette.colors.contains(picked))
+    #expect(picked != model.category(transport)?.colorHex)
     model.draft?.name = "Parking"
     await model.save()
     let parking = try #require(model.categories.first { $0.name == "Parking" })

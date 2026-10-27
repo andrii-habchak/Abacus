@@ -25,33 +25,33 @@ public enum PreviewData {
 
   public static let monobank = Account(
     id: id(101), name: "Monobank Black", currency: .UAH, kind: .card,
-    openingBalanceMinor: 52_000_00, openingDate: at("2026-01-01"), groupName: "Monobank", position: 0)
+    openingBalanceMinor: 52_000_00, openingDate: at("2026-01-01"), groupName: "Monobank", colorHex: "#2E9E4F", position: 0)
   public static let pkoPersonal = Account(
     id: id(102), name: "PKO Personal", currency: .PLN, kind: .bank,
     openingBalanceMinor: 19_800_00, openingDate: at("2026-01-01"), iban: "PL00000000000000000000000001",
-    groupName: "PKO", position: 1)
+    groupName: "PKO", colorHex: "#0A64D6", position: 1)
   public static let pkoUSD = Account(
     id: id(103), name: "PKO USD", currency: .USD, kind: .bank,
     openingBalanceMinor: 3_000_00, openingDate: at("2026-01-01"), iban: "PL00000000000000000000000002",
-    groupName: "PKO", position: 2)
+    groupName: "PKO", colorHex: "#7A9E1F", position: 2)
   public static let pkoCreditCard = Account(
     id: id(104), name: "PKO Credit Card", currency: .PLN, kind: .creditCard,
-    openingBalanceMinor: -1_030_00, openingDate: at("2026-01-01"), groupName: "PKO", position: 3)
+    openingBalanceMinor: -1_030_00, openingDate: at("2026-01-01"), groupName: "PKO", colorHex: "#E5484D", position: 3)
   public static let revolutEUR = Account(
     id: id(105), name: "Revolut EUR", currency: .EUR, kind: .card,
-    openingBalanceMinor: -886_00, openingDate: at("2026-01-01"), groupName: "Revolut", position: 4)
+    openingBalanceMinor: -886_00, openingDate: at("2026-01-01"), groupName: "Revolut", colorHex: "#4F5BD5", position: 4)
   public static let cashPLN = Account(
     id: id(106), name: "Cash PLN", currency: .PLN, kind: .cash,
-    openingBalanceMinor: 0, openingDate: at("2026-01-01"), position: 5)
+    openingBalanceMinor: 0, openingDate: at("2026-01-01"), colorHex: "#C99A00", position: 5)
   public static let eurDeposit = Account(
     id: id(107), name: "EUR Deposit", currency: .EUR, kind: .savings,
-    openingBalanceMinor: 5_000_00, openingDate: at("2026-01-01"), position: 6)
+    openingBalanceMinor: 5_000_00, openingDate: at("2026-01-01"), colorHex: "#0F96B0", position: 6)
   public static let loanFromFriend = Account(
     id: id(108), name: "Loan from friend", currency: .UAH, kind: .debt,
-    openingBalanceMinor: -8_000_00, openingDate: at("2026-01-01"), position: 7)
+    openingBalanceMinor: -8_000_00, openingDate: at("2026-01-01"), colorHex: "#B04BC4", position: 7)
   public static let oldCard = Account(
     id: id(109), name: "Old card", currency: .UAH, kind: .card,
-    openingBalanceMinor: 0, openingDate: at("2025-01-01"), position: 8, isArchived: true)
+    openingBalanceMinor: 0, openingDate: at("2025-01-01"), colorHex: "#A35A2A", position: 8, isArchived: true)
 
   public static let accounts = [
     monobank, pkoPersonal, pkoUSD, pkoCreditCard, revolutEUR, cashPLN, eurDeposit, loanFromFriend, oldCard,
@@ -65,28 +65,29 @@ public enum PreviewData {
 
   public static let categories: [AbacusDomain.Category] = [
     cat(201, "Food", color: "#E07B14"),
-    cat(202, "Groceries", parent: 201, color: "#E07B14"),
+    cat(202, "Groceries", parent: 201, color: "#7A9E1F"),
     cat(203, "Eating out", parent: 201, color: "#1E9E7E"),
     cat(204, "Housing", color: "#0A64D6"),
-    cat(205, "Rent", parent: 204, color: "#0A64D6"),
+    cat(205, "Rent", parent: 204, color: "#B04BC4"),
     cat(206, "Transport", color: "#7B4FCF"),
-    cat(207, "Taxi", parent: 206, color: "#7B4FCF"),
-    cat(208, "Fuel", parent: 206, color: "#7B4FCF"),
+    cat(207, "Taxi", parent: 206, color: "#C99A00"),
+    cat(208, "Fuel", parent: 206, color: "#E5484D"),
     cat(209, "Health", color: "#C93B6E"),
-    cat(210, "Bills", color: "#5C7B99"),
-    cat(211, "Mobile", parent: 210, color: "#5C7B99"),
+    cat(210, "Bills", color: "#0F96B0"),
+    cat(211, "Mobile", parent: 210, color: "#4F5BD5"),
     cat(212, "Clothing", color: "#A35A2A"),
-    cat(213, "Fees", color: "#8E8E93"),
-    cat(214, "Travel", color: "#C9A100"),
-    cat(251, "Salary", .income, color: "#1B8A4A"),
-    cat(252, "Cashback", .income, color: "#1B8A4A"),
-    cat(253, "Refunds", .income, color: "#1B8A4A"),
+    cat(213, "Fees", color: "#D4703C"),
+    cat(214, "Travel", color: "#C99A00"),
+    cat(251, "Salary", .income, color: "#2E9E4F"),
+    cat(252, "Cashback", .income, color: "#1E9E7E"),
+    cat(253, "Refunds", .income, color: "#0A64D6"),
   ]
 
   // MARK: Events
 
-  public static let lyonTrip = Event(id: id(301), name: "Lyon trip", startDay: "2026-10-01", endDay: "2026-10-19")
-  public static let relocation = Event(id: id(302), name: "Relocation")
+  public static let lyonTrip = Event(
+    id: id(301), name: "Lyon trip", startDay: "2026-10-01", endDay: "2026-10-19", colorHex: "#7B4FCF")
+  public static let relocation = Event(id: id(302), name: "Relocation", colorHex: "#1E9E7E")
   public static let events = [lyonTrip, relocation]
 
   // MARK: Transactions

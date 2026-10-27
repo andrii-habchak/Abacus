@@ -19,7 +19,8 @@ public final class TransactionsViewModel {
   /// The highlighted row.
   public var selection: Txn.ID?
 
-  public private(set) var reference = TransactionsReference()
+  /// Names and colours the rows show; a change rebuilds the rows at once (R-MGMT-7).
+  public private(set) var reference = TransactionsReference() { didSet { if oldValue != reference { rebuild() } } }
   /// Whether any expense or income has no category; the categories menu then offers
   /// "Uncategorised" (R-LIST-2, R-HOME-3). Checked on `load()`.
   public private(set) var hasUncategorised = false
@@ -76,6 +77,12 @@ public final class TransactionsViewModel {
   }
 
   @ObservationIgnored private var referenceLoaded = false
+
+  /// Accounts, categories or events changed on another screen (a colour, a name): re-reads
+  /// them and the rows if the list was shown before; otherwise its first load picks them up.
+  public func referenceChanged() async {
+    if referenceLoaded { await load() }
+  }
 
   /// Loads accounts, categories and events, then the rows.
   public func load() async {

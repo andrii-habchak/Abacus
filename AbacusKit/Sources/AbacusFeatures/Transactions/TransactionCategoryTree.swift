@@ -57,6 +57,12 @@ public struct TransactionCategoryTree: Equatable, Sendable {
 
   public func category(_ id: ID?) -> AbacusDomain.Category? { id.flatMap { byID[$0] } }
 
+  /// The category's colour, else its parent's (R-MGMT-7); nil without a category.
+  public func color(_ id: ID?) -> String? {
+    guard let category = category(id) else { return nil }
+    return category.colorHex ?? self.category(category.parentID)?.colorHex
+  }
+
   /// "Parent › Child", or the name of a top-level category.
   public func path(_ id: ID?) -> String? {
     guard let category = category(id) else { return nil }

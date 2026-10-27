@@ -19,6 +19,8 @@ public struct AccountRow: Identifiable, Equatable, Sendable {
   public let isNegative: Bool
   public let isLiability: Bool
   public let isArchived: Bool
+  /// The account's colour (R-MGMT-7); nil falls back to blue / red by kind.
+  public var colorHex: String? = nil
 }
 
 /// Accounts under one group name ("Monobank", "PKO", …; ungrouped ones under "Other").
@@ -40,6 +42,8 @@ public struct AccountDraft: Equatable, Sendable {
   public var openingDate: Date
   public var group: String
   public var iban: String
+  /// `#RRGGBB` (R-MGMT-7).
+  public var colorHex: String? = nil
 }
 
 /// The Accounts screen (approved prototype group 4, R-MGMT-1, R-ACC-1…5): accounts grouped with
@@ -63,6 +67,9 @@ public final class AccountsModel {
   public private(set) var errorMessage: String?
 
   @ObservationIgnored public let dependencies: ManageDependencies
+  /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
+  /// so the transaction list and the dashboard re-read it.
+  @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
   private var format: ManageFormat { dependencies.format }
 
   public init(dependencies: ManageDependencies) {
@@ -128,7 +135,8 @@ public final class AccountsModel {
     return AccountRow(
       id: account.id, name: account.name, detail: "\(ManageText.kindTitle(account.kind)) · \(account.currency.rawValue)",
       symbol: ManageText.symbol(account.currency), balanceText: format.money(balance),
-      isNegative: balance.minorUnits < 0, isLiability: account.kind.isLiability, isArchived: account.isArchived)
+      isNegative: balance.minorUnits < 0, isLiability: account.kind.isLiability, isArchived: account.isArchived,
+      colorHex: account.colorHex)
   }
 
   public func account(_ id: Account.ID) -> Account? { accounts.first { $0.id == id } }
@@ -157,7 +165,7 @@ public final class AccountsModel {
     AccountDraft(
       id: account.id, isNew: false, name: account.name, kind: account.kind, currency: account.currency,
       openingBalance: format.amountInput(account.openingBalanceMinor), openingDate: account.openingDate,
-      group: account.groupName ?? "", iban: account.iban ?? "")
+      group: account.groupName ?? "", iban: account.iban ?? "", colorHex: account.colorHex)
   }
 
   /// "New account": an empty form in the display currency, opening today.
@@ -166,7 +174,8 @@ public final class AccountsModel {
     errorMessage = nil
     draft = AccountDraft(
       id: UUID(), isNew: true, name: "", kind: .bank, currency: currency, openingBalance: format.amountInput(0),
-      openingDate: dependencies.today().date(calendar: format.calendar), group: "", iban: "")
+      openingDate: dependencies.today().date(calendar: format.calendar), group: "", iban: "",
+      colorHex: ColorPalette.pick(avoiding: accounts.map(\.colorHex)))
   }
 
   /// The account being edited (nil for a new one).
@@ -242,6 +251,7 @@ public final class AccountsModel {
     account.openingDate = draft.openingDate
     account.groupName = group.isEmpty ? nil : group
     account.iban = iban.isEmpty ? nil : iban
+    account.colorHex = draft.colorHex
     return account
   }
 
@@ -253,6 +263,7 @@ public final class AccountsModel {
     if isCurrencyLocked, let base { account.currency = base.currency }
     do {
       try await dependencies.accounts.save(account)
+      await onDataChange?()
       selection = account.id
       self.draft = nil
       await load()
@@ -315,6 +326,7 @@ public final class AccountsModel {
     case .deleteAccount(let id):
       do {
         try await dependencies.accounts.delete(id)
+        await onDataChange?()
         selection = nil
         draft = nil
         await load()
@@ -329,6 +341,7 @@ public final class AccountsModel {
   private func setArchived(_ id: Account.ID, _ archived: Bool) async {
     do {
       try await dependencies.accounts.setArchived(id, archived)
+      await onDataChange?()
       await load()
     } catch {
       errorMessage = ManageFailure.message(error, doing: archived ? "archive the account" : "unarchive the account")
