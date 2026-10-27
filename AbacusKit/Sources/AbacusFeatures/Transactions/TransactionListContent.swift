@@ -4,6 +4,8 @@ import Foundation
 /// Accounts, categories and events the list resolves names, currencies and colours from.
 public struct TransactionsReference: Equatable, Sendable {
   public var accounts: [Account]
+  /// Account groups: the accounts menu lists accounts A–Z under them (R-MGMT-8).
+  public var accountGroups: [AccountGroup]
   public var categories: TransactionCategoryTree
   public var events: [Event]
   public private(set) var accountsByID: [Account.ID: Account]
@@ -13,9 +15,10 @@ public struct TransactionsReference: Equatable, Sendable {
 
   public init(
     accounts: [Account] = [], categories: [AbacusDomain.Category] = [], events: [Event] = [],
-    uncategorisedColor: String = Uncategorised.defaultColorHex
+    uncategorisedColor: String = Uncategorised.defaultColorHex, accountGroups: [AccountGroup] = []
   ) {
     self.uncategorisedColor = uncategorisedColor
+    self.accountGroups = accountGroups
     self.accounts = accounts.sorted { ($0.position, $0.name) < ($1.position, $1.name) }
     self.categories = TransactionCategoryTree(categories)
     self.events = events

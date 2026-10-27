@@ -34,6 +34,7 @@ extension SampleData {
       return rule
     }
     try db.seed {
+      for group in PreviewData.accountGroups { group }
       for account in PreviewData.accounts { account }
       for category in categories { category }
       for event in PreviewData.events { event }

@@ -7,6 +7,7 @@ import Synchronization
 public final class DashboardPreviewStore: Sendable {
   struct State: Sendable {
     var accounts: [Account]
+    var groups: [AccountGroup] = []
     var categories: [AbacusDomain.Category]
     var txns: [TxnWithLines]
     var plans: [BudgetPlan]
@@ -18,11 +19,12 @@ public final class DashboardPreviewStore: Sendable {
 
   public init(
     accounts: [Account], categories: [AbacusDomain.Category], txns: [Txn], attachedRecords: [AttachedRecord] = [],
-    plans: [BudgetPlan] = [], allocations: [BudgetAllocation] = [], settings: [AppSetting] = []
+    plans: [BudgetPlan] = [], allocations: [BudgetAllocation] = [], settings: [AppSetting] = [],
+    groups: [AccountGroup] = []
   ) {
     let lines = Dictionary(grouping: attachedRecords, by: \.txnID)
     state = Mutex(State(
-      accounts: accounts, categories: categories,
+      accounts: accounts, groups: groups, categories: categories,
       txns: txns.map { TxnWithLines(txn: $0, lines: (lines[$0.id] ?? []).sorted { $0.position < $1.position }) },
       plans: plans, allocations: allocations,
       settings: Dictionary(settings.map { ($0.id, $0.value) }, uniquingKeysWith: { _, last in last })))
@@ -33,7 +35,8 @@ public final class DashboardPreviewStore: Sendable {
     DashboardPreviewStore(
       accounts: PreviewData.accounts, categories: PreviewData.categories, txns: PreviewData.txns,
       attachedRecords: PreviewData.attachedRecords, plans: [PreviewData.budgetPlan],
-      allocations: PreviewData.budgetAllocations, settings: PreviewData.settings)
+      allocations: PreviewData.budgetAllocations, settings: PreviewData.settings,
+      groups: PreviewData.accountGroups)
   }
 
   public var accountRepository: Accounts { Accounts(store: self) }
@@ -72,6 +75,10 @@ public final class DashboardPreviewStore: Sendable {
         }
         state.accounts.removeAll { $0.id == id }
       }
+    }
+
+    public func groups() async throws -> [AccountGroup] {
+      store.state.withLock { $0.groups }
     }
   }
 

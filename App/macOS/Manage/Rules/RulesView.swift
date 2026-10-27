@@ -155,7 +155,7 @@ struct RulesContent: View {
             .frame(width: 90)
           Picker("Account", selection: $model.probeAccountID) {
             Text("on any account").tag(Account.ID?.none)
-            ForEach(model.accountOptions) { Text("on \($0.name)").tag(Optional($0.id)) }
+            AccountPickerItems(sections: model.accountSections) { Text("on \($0.name)").tag(Optional($0.id)) }
           }
           .labelsHidden()
           .fixedSize()
@@ -416,7 +416,7 @@ struct RuleEditorSheet: View {
         Text("Account is")
         Picker("Account", selection: binding(\.accountID, nil)) {
           Text("Choose…").tag(Account.ID?.none)
-          ForEach(model.accountOptions) { Text($0.name).tag(Optional($0.id)) }
+          AccountPickerItems(sections: model.accountSections) { Text($0.name).tag(Optional($0.id)) }
         }
         .labelsHidden()
         .fixedSize()
@@ -534,7 +534,7 @@ struct RuleEditorSheet: View {
       case .transfer:
         Picker("Account", selection: binding(\.transferAccountID, nil)) {
           Text("Choose…").tag(Account.ID?.none)
-          ForEach(model.accountOptions) { Text($0.name).tag(Optional($0.id)) }
+          AccountPickerItems(sections: model.accountSections) { Text($0.name).tag(Optional($0.id)) }
         }
         .labelsHidden()
       }

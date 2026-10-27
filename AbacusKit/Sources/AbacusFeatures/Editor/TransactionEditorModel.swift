@@ -76,7 +76,9 @@ public final class TransactionEditorModel {
       let categories = try await dependencies.categories.categories(kind: nil, includeArchived: true)
       let events = try await dependencies.events.events(includeArchived: true)
       let rules = (try? await dependencies.rules.rules()) ?? []
-      reference = EditorReference(accounts: accounts, categories: categories, events: events, rules: rules)
+      let groups = (try? await dependencies.accounts.groups()) ?? []
+      reference = EditorReference(
+        accounts: accounts, categories: categories, events: events, rules: rules, accountGroups: groups)
     } catch {
       errorMessage = "Couldn't load accounts and categories."
       return
@@ -106,7 +108,8 @@ public final class TransactionEditorModel {
   /// R-EDIT-4/5: currency and account of the last transaction, From/To of the last transfer.
   /// Unknown or archived accounts fall back to the first active account.
   private func applyDefaults() async {
-    let active = reference.accountOptions()
+    // The fallback is the first active account in the custom order (the Accounts page's).
+    let active = reference.accounts.filter { !$0.isArchived }
     let lastAccount = await defaultAccount(.lastAccountID)
     let lastCode = (try? await dependencies.settings.value(.lastTxnCurrency))
       .map { $0.trimmingCharacters(in: .whitespaces).uppercased() }
@@ -369,6 +372,11 @@ public final class TransactionEditorModel {
 
   public var accountOptions: [Account] {
     reference.accountOptions(including: [draft.accountID, draft.fromID, draft.toID])
+  }
+
+  /// The account pickers: A–Z under their groups (R-MGMT-8).
+  public var accountSections: [AccountPickerSection] {
+    reference.accountSections(including: [draft.accountID, draft.fromID, draft.toID])
   }
 
   // Foreign currency (R-CUR-4, R-EDIT-4, D24)

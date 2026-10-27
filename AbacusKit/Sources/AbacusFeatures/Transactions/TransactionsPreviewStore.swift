@@ -13,11 +13,11 @@ public struct TransactionsPreviewStore: Sendable {
 
   public init(
     accounts: [Account], categories: [AbacusDomain.Category], events: [Event], txns: [Txn],
-    attachedRecords: [AttachedRecord], calendar: Calendar = .current
+    attachedRecords: [AttachedRecord], calendar: Calendar = .current, groups: [AccountGroup] = []
   ) {
     transactions = Transactions(
       txns: txns, attachedRecords: attachedRecords, categories: categories, calendar: calendar)
-    self.accounts = Accounts(accounts)
+    self.accounts = Accounts(accounts, groups: groups)
     self.categories = Categories(categories)
     self.events = Events(events)
   }
@@ -26,7 +26,8 @@ public struct TransactionsPreviewStore: Sendable {
   public static func preview(calendar: Calendar = .current) -> TransactionsPreviewStore {
     TransactionsPreviewStore(
       accounts: PreviewData.accounts, categories: PreviewData.categories, events: PreviewData.events,
-      txns: PreviewData.txns, attachedRecords: PreviewData.attachedRecords, calendar: calendar)
+      txns: PreviewData.txns, attachedRecords: PreviewData.attachedRecords, calendar: calendar,
+      groups: PreviewData.accountGroups)
   }
 
   public actor Transactions: TxnRepository {
@@ -69,8 +70,14 @@ public struct TransactionsPreviewStore: Sendable {
 
   public actor Accounts: AccountRepository {
     private var list: [Account]
+    private let groupList: [AccountGroup]
 
-    public init(_ accounts: [Account]) { list = accounts }
+    public init(_ accounts: [Account], groups: [AccountGroup] = []) {
+      list = accounts
+      groupList = groups
+    }
+
+    public func groups() async throws -> [AccountGroup] { groupList }
 
     public func accounts(includeArchived: Bool) async throws -> [Account] {
       list.filter { includeArchived || !$0.isArchived }

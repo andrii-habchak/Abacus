@@ -57,6 +57,29 @@ public struct SQLiteAccountRepository: AccountRepository {
     }
   }
 
+  // MARK: Groups (R-MGMT-9, D48)
+
+  public func groups() async throws -> [AccountGroup] {
+    try await database.read { db in
+      try AccountGroup.order { ($0.position, $0.name) }.fetchAll(db)
+    }
+  }
+
+  public func saveGroup(_ group: AccountGroup) async throws {
+    try await database.write { db in
+      try AccountGroup.upsert { AccountGroup.Draft(group) }.execute(db)
+    }
+  }
+
+  /// Its accounts move to the top level (explicitly, and by `ON DELETE SET NULL`).
+  public func deleteGroup(_ id: AccountGroup.ID) async throws {
+    try await database.write { db in
+      guard try AccountGroup.find(id).fetchCount(db) > 0 else { throw RepositoryError.notFound }
+      try Account.where { $0.groupID.eq(id) }.update { $0.groupID = #bind(nil) }.execute(db)
+      try AccountGroup.find(id).delete().execute(db)
+    }
+  }
+
   /// R-ACC-3: balance of every account at the end of `day` (opening balance + effects), in the
   /// account's currency.
   public func balances(asOf day: Day) async throws -> [Account.ID: Int64] {

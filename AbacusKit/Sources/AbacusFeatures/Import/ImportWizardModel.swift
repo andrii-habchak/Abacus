@@ -51,6 +51,8 @@ public final class ImportWizardModel {
   /// PKO: the account the statement goes into; nil until chosen when nothing is remembered.
   public private(set) var targetAccountID: Account.ID?
   public private(set) var accounts: [Account] = []
+  /// Account groups: account pickers list A–Z under them (R-MGMT-8).
+  public private(set) var accountGroups: [AccountGroup] = []
   public private(set) var categories: [AbacusDomain.Category] = []
   public var tab: Tab = .transactions
   /// The pressed summary card; nil = all rows.
@@ -95,6 +97,7 @@ public final class ImportWizardModel {
   private func reloadReference() async {
     do {
       accounts = try await pipeline.accounts.accounts(includeArchived: true)
+      accountGroups = (try? await pipeline.accounts.groups()) ?? []
       categories = try await pipeline.categories.categories(kind: nil, includeArchived: true)
     } catch {
       errorMessage = "Couldn't load accounts and categories."
@@ -162,7 +165,14 @@ public final class ImportWizardModel {
   /// Accounts a PKO statement can go into: active accounts in the statement's currency.
   public var targetOptions: [Account] {
     guard let file, file.source == .pko else { return [] }
-    return accounts.filter { !$0.isArchived && (file.currency == nil || $0.currency == file.currency) }
+    return AccountOrder.alphabetical(
+      accounts.filter { !$0.isArchived && (file.currency == nil || $0.currency == file.currency) },
+      groups: accountGroups)
+  }
+
+  /// `targetOptions` as picker sections: groups A–Z, then the accounts without a group.
+  public var targetSections: [AccountPickerSection] {
+    AccountOrder.pickerSections(targetOptions, groups: accountGroups)
   }
 
   /// PKO without a remembered or chosen account: the review step shows only the picker.
