@@ -118,6 +118,15 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
 - [x] **C3 Import window height** (merged 2026-10-27) — the choose-file paragraph's vertical
   `fixedSize` set a 2,251 pt minimum window height; removed. DEBUG `-AbacusImportFile <csv>`.
 
+### Phase 3c — Owner review of v1.0.0 (2026-10-27, TA v1.5, D42–D45)
+- [x] **C4 Navigation** (merged 2026-10-27) — click-only donut drill-down, budget edit button,
+  currency switch only on Dashboard/Transactions/Accounts/Events.
+- [ ] **C5 Colours** — random + manual colours for categories, accounts, events; category-coloured
+  transaction icons. Migration "v4: colours".
+- [ ] **C6 Budget currency** — per-category limit currency, no separate total. Migration "v5".
+- [ ] **C7 Rules** — Saldo-like conditions and category/transfer actions. Migration "v6: rules".
+- [ ] **Release 1.0.1** after C5–C7.
+
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
 Developer Program), backlog items from TA §7.

@@ -49,6 +49,10 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 | C2 Settings, data, defaults | background agent | `wp/C2-settings` | **merged** 2026-10-22 |
 | R1 Release prep | background agent | `wp/R1-release` | **merged** 2026-10-22 (icon, 1.0.0, `scripts/build-dmg.sh`, README, CHANGELOG) |
 | C3 Import window height | background agent | `wp/C3-import-height` | **merged** 2026-10-27 |
+| C4 Navigation | background agent | `wp/C4-navigation` | **merged** 2026-10-27 (click-only donut drill-down, budget edit button, currency switch per section) |
+| C5 Colours | background agent | `wp/C5-colours` | in progress (D45) |
+| C6 Budget currency | background agent | `wp/C6-budget-currency` | in progress (D43) |
+| C7 Rules | background agent | `wp/C7-rules` | in progress (D44) |
 
 ## Contract-change requests (orchestrator queue)
 
