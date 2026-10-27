@@ -327,7 +327,7 @@ struct AccountFields: View {
             ForEach(ManageText.assetKinds, id: \.self) { Text(ManageText.kindTitle($0)).tag($0) }
           }
           Section("Liabilities") {
-            ForEach(ManageText.liabilityKinds, id: \.self) { Text(ManageText.kindTitle($0)).tag($0) }
+            ForEach(ManageText.liabilityKinds(offeredFor: binding(\.kind, .bank).wrappedValue), id: \.self) { Text(ManageText.kindTitle($0)).tag($0) }
           }
         }
         .labelsHidden()

@@ -141,7 +141,7 @@ Wave 2:
 - [x] **C12 Accounts** (merged 2026-10-27; migration v11) — account groups (D48), drag/sort/search/currency filter, grouped pickers,
   net worth hierarchy.
 - [x] **C13 Dashboard widgets** (merged 2026-10-27) — income donut, income vs expenses, drag-reorder widgets.
-- [ ] **C14 Debts** — `R-DEBT` (TA v1.7, D51).
+- [x] **C14 Debts** (merged 2026-10-27; migration v10; widget scroll fix pending) — `R-DEBT` (TA v1.7, D51).
 - [ ] **Release 1.2.0**.
 
 ### Phase 4 — v2 (planned after v1)

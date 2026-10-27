@@ -113,6 +113,12 @@ public enum ManageText {
   public static let assetKinds: [AccountKind] = AccountKind.allCases.filter { !$0.isLiability }
   public static let liabilityKinds: [AccountKind] = AccountKind.allCases.filter(\.isLiability)
 
+  /// The liability kinds the account form offers: debts with people live on the Debts tab
+  /// (R-DEBT-1), so "Debt (person)" is offered only to an account that already has that kind.
+  public static func liabilityKinds(offeredFor current: AccountKind?) -> [AccountKind] {
+    liabilityKinds.filter { $0 != .debt || current == .debt }
+  }
+
   /// The symbol on an account's tile: "₴", "zł", "€", "$".
   public static func symbol(_ currency: Currency) -> String {
     switch currency {

@@ -60,6 +60,9 @@ struct ManageAccountsTests {
     #expect(rows.first { $0.id == PreviewData.loanFromFriend.id }?.detail == "Debt (person) · UAH")
     #expect(ManageText.assetKinds == [.cash, .bank, .card, .savings, .investment])
     #expect(ManageText.liabilityKinds == [.creditCard, .loan, .debt])
+    #expect(ManageText.liabilityKinds(offeredFor: .bank) == [.creditCard, .loan])
+    #expect(ManageText.liabilityKinds(offeredFor: nil) == [.creditCard, .loan])
+    #expect(ManageText.liabilityKinds(offeredFor: .debt) == [.creditCard, .loan, .debt])
   }
 
   @Test("R-ACC-4: archived accounts are listed only with “Show archived accounts”")
