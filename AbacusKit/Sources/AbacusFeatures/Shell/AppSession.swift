@@ -257,7 +257,7 @@ public final class AppSession {
   public func reloadManageScreens(all: Bool = false) async {
     if all || accounts.phase == .loaded { await accounts.load() }
     if all || categories.phase == .loaded { await categories.load() }
-    if all || budget.phase == .loaded { await budget.load() }
+    if all { await budget.load() } else if budget.phase == .loaded { await budget.reappeared() }
     if all || events.phase == .loaded { await events.load() }
     if all || rules.phase == .loaded { await rules.load() }
   }
@@ -270,7 +270,7 @@ public final class AppSession {
     case .transactions: await transactions.load()
     case .accounts: if accounts.phase == .loaded { await accounts.load() }
     case .categories: if categories.phase == .loaded { await categories.load() }
-    case .budget: if budget.phase == .loaded { await budget.load() }
+    case .budget: if budget.phase == .loaded { await budget.reappeared() }
     case .events: if events.phase == .loaded { await events.load() }
     case .rules: if rules.phase == .loaded { await rules.load() }
     case .rates: await app.rates.load()

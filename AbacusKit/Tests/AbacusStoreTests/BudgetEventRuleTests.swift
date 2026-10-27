@@ -32,6 +32,22 @@ struct BudgetRepositoryTests {
     ])
   }
 
+  @Test("R-BUD-1, D46: the plan's total and its currency round-trip; 0 = no total")
+  func total() async throws {
+    let f = try F()
+    try f.seedBasics()
+    let plan = BudgetPlan(effectiveMonth: "2026-01", totalMinor: 15_000_00, currency: .PLN)
+    try await f.budgets.save(plan, allocations: [
+      BudgetAllocation(planID: plan.id, categoryID: F.food.id, limitMinor: 400_00, currency: .EUR)
+    ])
+    let loaded = try #require(try await f.budgets.plan(for: Month(year: 2026, month: 3)))
+    #expect(loaded.plan.total == Money(minorUnits: 15_000_00, currency: .PLN))
+    #expect(loaded.allocations.map(\.limit) == [Money(minorUnits: 400_00, currency: .EUR)])
+    let none = BudgetPlan(id: plan.id, effectiveMonth: "2026-01", currency: .EUR)
+    try await f.budgets.save(none, allocations: [])
+    #expect(try await f.budgets.plan(for: Month(year: 2026, month: 1))?.plan.total == nil)
+  }
+
   @Test("R-BUD-3: a plan repeats until changed; a change applies from its month, past months keep theirs")
   func effectiveMonths() async throws {
     let f = try F()
@@ -92,8 +108,8 @@ struct BudgetRepositoryTests {
     #expect(january.allocations.map(\.limit) == [Money(minorUnits: 400_00, currency: .EUR)])
     let september = try #require(try await budgets.plan(for: Month(year: 2026, month: 10)))
     #expect(september.plan.id == F.id(101))
-    #expect(september.plan.legacyCurrency == .PLN)
-    #expect(september.plan.legacyTotalMinor == 10_000_00)
+    #expect(september.plan.currency == .PLN)
+    #expect(september.plan.total == Money(minorUnits: 10_000_00, currency: .PLN))
     #expect(Set(september.allocations.map(\.limit)) == [
       Money(minorUnits: 1_800_00, currency: .PLN), Money(minorUnits: 5_747_00, currency: .PLN),
     ])

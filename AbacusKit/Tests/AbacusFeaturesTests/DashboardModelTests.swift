@@ -120,7 +120,18 @@ struct DashboardModelTests {
 
   func eur(_ units: String) -> String { Self.format.money(money(units, .EUR)) }
 
-  @Test("R-HOME-2, D43: categories over, near and ok, each in its limit's currency; the badge counts the rows over")
+  /// The synthetic year with the plan saved without a total (as 1.1.0 saved plans): the
+  /// budget's total is the sum of the limits (D43 behaviour, D46 "0 = no total").
+  func sampleWithoutTotal(currency: Currency = .UAH, rates: RateTable? = nil) async throws -> DashboardModel {
+    let store = DashboardSample.store()
+    try await store.budgetRepository.save(
+      BudgetPlan(id: PreviewData.budgetPlan.id, effectiveMonth: PreviewData.budgetPlan.effectiveMonth),
+      allocations: PreviewData.budgetAllocations)
+    return await model(
+      .preview(store: store, rates: rates ?? DashboardSample.rateTable(), format: Self.format), currency: currency)
+  }
+
+  @Test("R-HOME-2, D43, D46: categories over, near and ok, each in its limit's currency; the badge counts the rows over")
   func overBudgetMonth() async throws {
     let model = await sample(currency: .PLN)
     await model.show(month: august)
@@ -132,8 +143,9 @@ struct DashboardModelTests {
     #expect(status["Eating out"] == .over)  // 720 of 600
     #expect(status["Transport"] == .ok)  // fuel + taxi under the parent's limit
     #expect(status["Health"] == .ok)  // zł120 on 14 Aug = €27.83 of €110
-    #expect(budget.overCount == 2)
-    #expect(budget.badgeText == "2 categories over")
+    #expect(budget.unallocated?.status == .over)
+    #expect(budget.overCount == 3)  // Groceries, Eating out and the unallocated remainder
+    #expect(budget.badgeText == "3 categories over")
     let groceries = try #require(budget.rows.first { $0.name == "Groceries" })
     #expect(groceries.noteText == "Over by \(pln("150"))")
     #expect(groceries.amountsText == "\(pln("1950")) / \(pln("1800"))")
@@ -146,18 +158,30 @@ struct DashboardModelTests {
     #expect(model.monthNote == "Closed month")
   }
 
-  @Test("R-HOME-2, D30, D43: the total sums the limits in the display currency at the month-end rate of a closed month")
+  @Test("R-BUD-1, R-HOME-2, D30, D46: the total in its own currency; unallocated = total − limits at the month-end rate")
   func closedMonthTotal() async throws {
     let model = await sample(currency: .PLN)
     await model.show(month: august)
     let budget = try #require(model.budget)
-    // €1 = 47.95 / 11.12 zł on 31 Aug: €110 = zł474.33, €27.83 = zł120.00.
-    #expect(budget.limit == money("7274.33", .PLN))
-    #expect(budget.spent == money("7030", .PLN))
-    #expect(budget.status == .near)
-    #expect(budget.remainingText == "\(pln("244.33")) left · 97% used")
-    #expect(budget.limitText == "of \(pln("7274.33"))")
-    #expect(budget.currencyNote == "Limits in PLN, EUR · total in PLN at the rate of Aug 31, 2026")
+    // Total zł8,000; every August expense counts (uncategorised too).
+    #expect(budget.limit == money("8000", .PLN))
+    #expect(budget.spent == money("9935", .PLN))
+    #expect(budget.status == .over)
+    #expect(budget.remainingText == "Over budget by \(pln("1935")) · 124% used")
+    #expect(budget.limitText == "of \(pln("8000"))")
+    #expect(budget.currencyNote == nil)  // all in PLN
+    // €1 = 47.95 / 11.12 zł on 31 Aug: €110 = zł474.33; 8,000 − 6,800 − 474.33.
+    let unallocated = try #require(budget.unallocated)
+    #expect(unallocated.name == "Unallocated")
+    #expect(unallocated.limit == money("725.67", .PLN))
+    #expect(unallocated.spent == money("2905", .PLN))
+    #expect(unallocated.status == .over)
+    let total = try #require(budget.total)
+    #expect(total.limit == money("8000", .PLN))
+    #expect(total.spent == budget.spent)
+    // The categories' and the unallocated spending add up to the total's.
+    let categories = budget.rows.filter { $0.limit.currency == .PLN }.map(\.spent.minorUnits).reduce(0, +)
+    #expect(categories + unallocated.spent.minorUnits + 120_00 == total.spent.minorUnits)  // Health: zł120
   }
 
   @Test("R-HOME-2: on track, remaining and % used, days left in the current month")
@@ -176,44 +200,83 @@ struct DashboardModelTests {
     #expect(rent.noteText == "\(pln("0")) left")
   }
 
-  @Test("R-BUD-1, D43: no unallocated row; the total is the sum of the limits at the latest rate")
-  func noUnallocated() async throws {
+  @Test("R-BUD-1, D46: unallocated uses the latest rate in the current month")
+  func unallocatedAtLatestRate() async throws {
     let budget = try #require(await sample(currency: .PLN).budget)
     #expect(budget.rows.map(\.name) == ["Groceries", "Eating out", "Rent", "Transport", "Health"])
+    let healthInPLN = try #require(DashboardSample.rateTable().convertAtLatest(money("110", .EUR), to: .PLN))
+    #expect(budget.unallocated?.limit == money("1200", .PLN) - healthInPLN)
+    #expect(budget.total?.limit == money("8000", .PLN))
+  }
+
+  @Test("R-BUD-1, D43, D46: a plan without a total (0) has no unallocated row; the total is the sum of the limits")
+  func noTotal() async throws {
+    let budget = try #require(try await sampleWithoutTotal(currency: .PLN).budget)
+    #expect(budget.unallocated == nil)
+    #expect(budget.total == nil)
     // zł6,800 + €110 at the latest rate (48.50 / 11.30).
     let healthInPLN = Money(Decimal(110) * Decimal(string: "48.50")! / Decimal(string: "11.30")!, .PLN)
     #expect(budget.limit == money("6800", .PLN) + healthInPLN)
+    #expect(budget.currencyNote == "No total set · limits in PLN, EUR summed in PLN at the latest rate")
   }
 
-  @Test("R-BUD-2, D43: statuses stay in each limit's currency; the total is shown in the display currency")
+  @Test("R-HOME-2, D30, D43: without a total the sums use the month-end rate of a closed month")
+  func closedMonthWithoutTotal() async throws {
+    let model = try await sampleWithoutTotal(currency: .PLN)
+    await model.show(month: august)
+    let budget = try #require(model.budget)
+    // €1 = 47.95 / 11.12 zł on 31 Aug: €110 = zł474.33, €27.83 = zł120.00.
+    #expect(budget.limit == money("7274.33", .PLN))
+    #expect(budget.spent == money("7030", .PLN))
+    #expect(budget.status == .near)
+    #expect(budget.overCount == 2)
+    #expect(budget.remainingText == "\(pln("244.33")) left · 97% used")
+    #expect(budget.currencyNote == "No total set · limits in PLN, EUR summed in PLN at the rate of Aug 31, 2026")
+  }
+
+  @Test("R-BUD-2, D30, D46: statuses stay in their own currencies; the headline follows the display currency")
   func budgetInDisplayCurrency() async throws {
     let model = await sample(currency: .UAH)
     let current = try #require(model.budget)
     #expect(current.currency == .UAH)
-    #expect(current.limit == money("82175", .UAH))  // zł6,800 × 11.30 + €110 × 48.50 (latest)
-    #expect(current.currencyNote == "Limits in PLN, EUR · total in UAH at the latest rate")
+    #expect(current.limit == money("90400", .UAH))  // zł8,000 × 11.30 (latest)
+    #expect(current.currencyNote == "Total in PLN · shown in UAH at the latest rate")
     #expect(current.rows.first { $0.name == "Rent" }?.limit == money("4000", .PLN))
+    #expect(current.total?.limit == money("8000", .PLN))
     await model.show(month: august)
     let closed = try #require(model.budget)
-    #expect(closed.limit == money("80890.50", .UAH))  // zł6,800 × 11.12 + €110 × 47.95 (31 Aug)
-    #expect(closed.overCount == 2)
-    #expect(closed.currencyNote == "Limits in PLN, EUR · total in UAH at the rate of Aug 31, 2026")
+    #expect(closed.limit == money("88960", .UAH))  // zł8,000 × 11.12 (31 Aug)
+    #expect(closed.overCount == 3)
+    #expect(closed.currencyNote == "Total in PLN · shown in UAH at the rate of Aug 31, 2026")
     let inPLN = await sample(currency: .PLN)
     await inPLN.show(month: august)
+    #expect(inPLN.budget?.status == closed.status)
     #expect(inPLN.budget?.rows.map(\.status) == closed.rows.map(\.status))
     #expect(inPLN.budget?.rows.map(\.amountsText) == closed.rows.map(\.amountsText))
+    #expect(inPLN.budget?.unallocated?.amountsText == closed.unallocated?.amountsText)
   }
 
   @Test("R-BUD-2, D27: a limit without a rate to the display currency is left out of the total and reported")
   func budgetWithoutDisplayRate() async throws {
     let rates = RateTable(rates: PreviewData.fxRates.filter { $0.base != .PLN }, today: today)
-    let model = await model(.preview(rates: rates, format: Self.format), currency: .UAH)
+    let model = try await sampleWithoutTotal(currency: .UAH, rates: rates)
     let budget = try #require(model.budget)
     #expect(budget.limit == money("5335", .UAH))  // only €110 × 48.50
     #expect(budget.rows.count == 5)
     #expect(budget.currencyNote == "No PLN→UAH rate: those limits are left out of the total")
     #expect(!budget.missing.isEmpty)
     #expect(model.missingRatesText != nil)
+  }
+
+  @Test("D27, D46: a total without a rate to the display currency is shown in its own currency")
+  func totalWithoutDisplayRate() async throws {
+    let rates = RateTable(rates: PreviewData.fxRates.filter { $0.base != .PLN }, today: today)
+    let model = await model(.preview(rates: rates, format: Self.format), currency: .UAH)
+    let budget = try #require(model.budget)
+    #expect(budget.currency == .PLN)
+    #expect(budget.limit == money("8000", .PLN))
+    #expect(budget.currencyNote?.hasPrefix("No ") == true)
+    #expect(!budget.missing.isEmpty)
   }
 
   @Test("R-BUD-3: no plan in effect → no budget widget")

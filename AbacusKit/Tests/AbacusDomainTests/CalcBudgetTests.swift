@@ -216,6 +216,64 @@ struct CalcBudgetTests {
     #expect(s.lines.map(\.limit) == [Money(minorUnits: 2_450_00, currency: .PLN)])
   }
 
+  // MARK: Total (D46)
+
+  func statusWithTotal(_ minor: Int64, _ currency: Currency, display: Currency = .PLN, month: String = "2026-10")
+    -> BudgetStatus?
+  {
+    let plan = BudgetPlan(id: planOct.id, effectiveMonth: "2026-10", totalMinor: minor, currency: currency)
+    return Calc.budgetStatus(
+      month: Month(month)!, plans: [plan, planJan], allocations: allocations, accounts: [pln, eur],
+      categories: categories, txns: octoberTxns, converter: converter, refundsReduceSpending: false,
+      currency: display, today: Day("2026-10-21")!, calendar: Fx.calendar)
+  }
+
+  @Test("R-BUD-1, D46: the total counts every expense in its currency; unallocated = total − limits at the latest rate")
+  func totalAndUnallocated() throws {
+    let s = try #require(statusWithTotal(3_500_00, .PLN))
+    let total = try #require(s.total)
+    // Limits: €40 at 4.50 = zł180, + zł2,000 + zł500 + zł100 + zł200 = zł2,980.
+    let unallocated = try #require(s.unallocated)
+    #expect(unallocated.limit == Money(minorUnits: 520_00, currency: .PLN))
+    // Spending no limit covers: the zł10 fee and the zł50 uncategorised expense.
+    #expect(unallocated.spent == Money(minorUnits: 60_00, currency: .PLN))
+    // Food 450 + Eating out 95 + Rent 2,000 + Transport (€10 at 4.00, €10 at 4.50, zł45) 130 + 60.
+    #expect(total.spent == Money(minorUnits: 2_735_00, currency: .PLN))
+    #expect(total.limit == Money(minorUnits: 3_500_00, currency: .PLN))
+    #expect(total.status == .ok)
+    #expect(s.status == .ok)
+    #expect(s.limit == total.limit)
+    #expect(s.spent == total.spent)
+    #expect(s.lines.count == 5)
+  }
+
+  @Test("D30, D46: the total's status is decided in its own currency; the headline converts it at one rate")
+  func totalInDisplayCurrency() throws {
+    let inPLN = try #require(statusWithTotal(2_800_00, .PLN))
+    #expect(inPLN.status == .near)  // 2,735 of 2,800
+    #expect(inPLN.unallocated?.limit == Money(minorUnits: -180_00, currency: .PLN))
+    #expect(inPLN.unallocated?.status == .over)
+    #expect(inPLN.overCount == 1)  // only the unallocated remainder
+    let inEUR = try #require(statusWithTotal(2_800_00, .PLN, display: .EUR))
+    #expect(inEUR.currency == .EUR)
+    #expect(inEUR.limit == Money(minorUnits: 622_22, currency: .EUR))  // zł2,800 / 4.50
+    #expect(inEUR.status == inPLN.status)
+    #expect(inEUR.total == inPLN.total)
+    // A total without a rate to the display currency stays in its own currency, reported.
+    let inUSD = try #require(statusWithTotal(2_800_00, .PLN, display: .USD))
+    #expect(inUSD.currency == .PLN)
+    #expect(inUSD.limit == Money(minorUnits: 2_800_00, currency: .PLN))
+    #expect(!inUSD.totalUnconverted.isEmpty)
+  }
+
+  @Test("R-BUD-1, D46: a plan with totalMinor 0 has no total; the headline sums the limits")
+  func zeroIsNoTotal() throws {
+    let s = try #require(statusWithTotal(0, .EUR))
+    #expect(s.total == nil)
+    #expect(s.unallocated == nil)
+    #expect(s.limit == Money(minorUnits: 2_980_00, currency: .PLN))
+  }
+
   // MARK: Events
 
   @Test("R-EVT-3: event spent in the display currency and by category")

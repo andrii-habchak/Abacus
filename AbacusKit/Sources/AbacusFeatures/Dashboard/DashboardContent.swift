@@ -234,13 +234,15 @@ public struct DashboardNetWorth: Sendable {
 
 // MARK: - Budget (R-HOME-2, R-BUD-1…3)
 
-/// The month's budget for the dashboard (R-HOME-2, D43): the total in the display currency, each
-/// category bar in its limit's own currency (the amounts the owner typed; the status is decided
-/// in that currency, so switching the display currency never changes it).
+/// The month's budget for the dashboard (R-HOME-2, D43, D46): the headline in the display
+/// currency; each category bar in its limit's own currency (the amounts the owner typed; the
+/// status is decided in that currency, so switching the display currency never changes it);
+/// with a total, the unallocated row and the total row in the total's own currency.
 public struct DashboardBudget: Sendable {
   public struct Row: Hashable, Sendable, Identifiable {
-    public let id: BudgetAllocation.ID
-    public let categoryID: AbacusDomain.Category.ID
+    public let id: String
+    /// nil for the unallocated and total rows.
+    public let categoryID: AbacusDomain.Category.ID?
     public let name: String
     /// In the limit's currency.
     public let spent: Money
@@ -256,19 +258,25 @@ public struct DashboardBudget: Sendable {
   }
 
   public let month: Month
-  /// The currency of the total (the display currency).
+  /// The currency of the headline (the display currency; the total's when it has no rate).
   public let currency: Currency
-  /// Sum of the categories' spending in `currency`.
+  /// The total's spending in `currency` (without a total: the categories' spending).
   public let spent: Money
-  /// Sum of the category limits in `currency`.
+  /// The total in `currency` (without a total: the sum of the category limits).
   public let limit: Money
+  /// The total's status, decided in the total's own currency (D46).
   public let status: LimitStatus
   public let barFraction: Double
-  /// Category rows over their limit.
+  /// Category rows over their limit (and the unallocated row when it is over).
   public let overCount: Int
   public let daysLeft: Int
   /// Category limits in category order.
   public let rows: [Row]
+  /// "Unallocated": total − limits, the spending no limit covers (total's currency); nil
+  /// without a total.
+  public let unallocated: Row?
+  /// "Total": the total limit in its own currency; nil without a total.
+  public let total: Row?
   public let missing: DashboardMissingRates
 
   public let spentText: String
@@ -278,8 +286,9 @@ public struct DashboardBudget: Sendable {
   public let remainingText: String
   /// "On track" / "1 category over" / "3 categories over".
   public let badgeText: String
-  /// "Limits in PLN, EUR · total in UAH at the latest rate"; nil when every limit is in the
-  /// display currency and nothing is missing.
+  /// "Total in PLN · shown in UAH at the latest rate", "No total set · limits in PLN, EUR summed
+  /// in UAH at the latest rate"; nil when everything is in the display currency and nothing is
+  /// missing.
   public let currencyNote: String?
 
   /// nil when no plan is in effect for `month`.
@@ -299,34 +308,52 @@ public struct DashboardBudget: Sendable {
     missing.add(status.unconverted)
     missing.add(status.totalUnconverted)
 
-    // The total: every limit converted at one rate, the latest for the current month, the
-    // month's last day for a closed one (D30).
+    // Every amount of the headline at one rate: the latest for the current month, the month's
+    // last day for a closed one (D30).
+    let rate =
+      switch status.totalRate {
+      case .latest: "the latest rate"
+      case .day(let day): "the rate of \(format.day(day))"
+      }
+    let missingPairs = status.totalUnconverted.missingRates.map { "\($0.from.rawValue)→\($0.to.rawValue)" }.sorted()
     var currencyNote: String?
-    let foreign = status.limitCurrencies.filter { $0 != displayCurrency }
-    if !status.totalUnconverted.isEmpty {
-      let pairs = status.totalUnconverted.missingRates.map(\.from.rawValue).sorted()
-      currencyNote = "No \(pairs.joined(separator: ", "))→\(displayCurrency.rawValue) rate: those limits are left out of the total"
-    } else if !foreign.isEmpty {
-      let rate =
-        switch status.totalRate {
-        case .latest: "the latest rate"
-        case .day(let day): "the rate of \(format.day(day))"
-        }
+    if let total = status.total {
+      if !missingPairs.isEmpty {
+        currencyNote = "No \(Set(missingPairs).sorted().joined(separator: ", ")) rate: those amounts are left out"
+      } else if total.currency != status.currency {
+        currencyNote = "Total in \(total.currency.rawValue) · shown in \(status.currency.rawValue) at \(rate)"
+      }
+    } else if !status.totalUnconverted.isEmpty {
+      let codes = Set(status.totalUnconverted.missingRates.map(\.from.rawValue)).sorted()
+      currencyNote = "No \(codes.joined(separator: ", "))→\(displayCurrency.rawValue) rate: those limits are left out of the total"
+    } else if status.limitCurrencies.contains(where: { $0 != displayCurrency }) {
       let currencies = status.limitCurrencies.map(\.rawValue).joined(separator: ", ")
-      currencyNote = "Limits in \(currencies) · total in \(displayCurrency.rawValue) at \(rate)"
+      currencyNote = "No total set · limits in \(currencies) summed in \(displayCurrency.rawValue) at \(rate)"
+    } else {
+      currencyNote = "No total set · the sum of the limits"
     }
 
     let names = Dictionary(categories.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-    func row(_ line: BudgetLine) -> Row {
+    func row(id: String, categoryID: AbacusDomain.Category.ID?, name: String, spent: Money, limit: Money, status: LimitStatus) -> Row {
       let note =
-        line.status == .over
-        ? "Over by \(format.magnitude(line.spent - line.limit))"
-        : "\(format.money(line.remaining)) left"
+        status == .over
+        ? "Over by \(format.magnitude(spent - limit))"
+        : "\(format.money(limit - spent)) left"
       return Row(
-        id: line.allocationID, categoryID: line.categoryID, name: names[line.categoryID] ?? "Unknown category",
-        spent: line.spent, limit: line.limit, status: line.status,
-        barFraction: barFraction(spent: line.spent, limit: line.limit),
-        amountsText: "\(format.money(line.spent)) / \(format.money(line.limit))", noteText: note)
+        id: id, categoryID: categoryID, name: name, spent: spent, limit: limit, status: status,
+        barFraction: barFraction(spent: spent, limit: limit),
+        amountsText: "\(format.money(spent)) / \(format.money(limit))", noteText: note)
+    }
+    let rows = status.lines.map { line in
+      row(
+        id: line.allocationID.uuidString, categoryID: line.categoryID,
+        name: names[line.categoryID] ?? "Unknown category", spent: line.spent, limit: line.limit, status: line.status)
+    }
+    let unallocated = status.unallocated.map {
+      row(id: "unallocated", categoryID: nil, name: "Unallocated", spent: $0.spent, limit: $0.limit, status: $0.status)
+    }
+    let totalRow = status.total.map {
+      row(id: "total", categoryID: nil, name: "Total", spent: $0.spent, limit: $0.limit, status: $0.status)
     }
 
     let used = status.fractionUsed.map { " · \(format.percent($0)) used" } ?? ""
@@ -339,9 +366,9 @@ public struct DashboardBudget: Sendable {
     let badge = over == 0 ? "On track" : over == 1 ? "1 category over" : "\(over) categories over"
 
     return DashboardBudget(
-      month: month, currency: displayCurrency, spent: status.spent, limit: status.limit, status: status.status,
+      month: month, currency: status.currency, spent: status.spent, limit: status.limit, status: status.status,
       barFraction: barFraction(spent: status.spent, limit: status.limit), overCount: over,
-      daysLeft: status.daysLeft, rows: status.lines.map(row), missing: missing,
+      daysLeft: status.daysLeft, rows: rows, unallocated: unallocated, total: totalRow, missing: missing,
       spentText: format.money(status.spent), limitText: "of \(format.money(status.limit))",
       remainingText: remainingText, badgeText: badge, currencyNote: currencyNote)
   }

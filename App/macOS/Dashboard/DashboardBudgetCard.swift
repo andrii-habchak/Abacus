@@ -2,9 +2,9 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// Monthly budget (R-HOME-2, R-BUD-1…3, D43): spent of total in the display currency, remaining
-/// and % used, a status badge, per-category bars in each limit's own currency (blue ok, amber
-/// ≥ 90 %, red over).
+/// Monthly budget (R-HOME-2, R-BUD-1…3, D43, D46): spent of total in the display currency,
+/// remaining and % used, a status badge, per-category bars in each limit's own currency (blue ok,
+/// amber ≥ 90 %, red over), then the unallocated row and the total row in the total's currency.
 struct DashboardBudgetCard: View {
   /// nil when no plan is in effect for the month.
   let budget: DashboardBudget?
@@ -33,6 +33,11 @@ struct DashboardBudgetCard: View {
         Divider()
         VStack(alignment: .leading, spacing: 10) {
           ForEach(budget.rows) { row in self.row(row) }
+          if let unallocated = budget.unallocated { row(unallocated, secondary: true) }
+        }
+        if let total = budget.total {
+          Divider()
+          row(total)
         }
       } else {
         Text("No budget for \(monthTitle).")
@@ -79,12 +84,14 @@ struct DashboardBudgetCard: View {
     }
   }
 
-  private func row(_ row: DashboardBudget.Row) -> some View {
+  /// A category, the unallocated remainder (`secondary`: its name in grey unless over) or the
+  /// total, each in its own currency.
+  private func row(_ row: DashboardBudget.Row, secondary: Bool = false) -> some View {
     VStack(alignment: .leading, spacing: 5) {
       HStack(alignment: .firstTextBaseline, spacing: 8) {
         Text(row.name)
           .fontWeight(.medium)
-          .foregroundStyle(row.status == .over ? Color.red : Color.primary)
+          .foregroundStyle(row.status == .over ? Color.red : secondary ? Color.secondary : Color.primary)
         Text(row.amountsText)
           .foregroundStyle(.secondary)
         Spacer(minLength: 8)

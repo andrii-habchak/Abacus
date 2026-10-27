@@ -19,23 +19,110 @@ struct ManageBudgetTests {
   }
 
   func uah(_ minor: Int64) -> String { ManageFixture.format.money(Money(minorUnits: minor, currency: .UAH)) }
+  func pln(_ minor: Int64) -> String { ManageFixture.format.money(Money(minorUnits: minor, currency: .PLN)) }
+  let rates = RateTable(rates: PreviewData.fxRates, today: PreviewData.today)
 
-  @Test("R-MGMT-3, R-BUD-1, D43: the editor loads each limit in its own currency; the total is their sum in the display currency")
-  func loadsPlan() async {
+  @Test("R-MGMT-3, R-BUD-1, D46: the editor loads the total and each limit in its own currency; sums in the display currency")
+  func loadsPlan() async throws {
     let model = await model()
     #expect(model.appliesFrom == october)
     #expect(model.displayCurrency == .UAH)
+    #expect(model.totalLimit == "8000.00")
+    #expect(model.totalCurrency == .PLN)
+    #expect(model.total == Money(minorUnits: 8_000_00, currency: .PLN))
     #expect(model.rows.map(\.name) == ["Groceries", "Eating out", "Rent", "Transport", "Health"])
     #expect(model.rows.map(\.currency) == [.PLN, .PLN, .PLN, .PLN, .EUR])
     #expect(model.rows.first { $0.name == "Transport" }?.covers == "incl. Taxi, Fuel")
     #expect(model.rows.first { $0.name == "Rent" }?.covers == "")
     // zł6,800 at 11.30 + €110 at 48.50 (the latest preview rates).
-    #expect(model.totalMinor == Int64(76_840_00 + 5_335_00))
-    #expect(model.totalText == uah(82_175_00))
-    #expect(model.totalNote == "Sum of the limits in UAH at the latest rate")
-    #expect(model.rows.first { $0.name == "Rent" }?.share == 45_200.0 / 82_175.0)
+    #expect(model.limitsSumMinor == Int64(76_840_00 + 5_335_00))
+    // The total: zł8,000 at 11.30.
+    #expect(model.totalMinor == 90_400_00)
+    #expect(model.totalText == uah(90_400_00))
+    #expect(model.totalNote == "Total limit \(pln(8_000_00)) at the latest rate")
+    #expect(model.rows.first { $0.name == "Rent" }?.share == 0.5)
+    // Unallocated = zł8,000 − zł6,800 − €110 in złoty at the latest rate.
+    let health = try #require(rates.convertAtLatest(Money(minorUnits: 110_00, currency: .EUR), to: .PLN))
+    #expect(model.unallocated == Money(minorUnits: 1_200_00 - health.minorUnits, currency: .PLN))
+    #expect(model.unallocatedShown == rates.convertAtLatest(model.unallocated!, to: .UAH))
+    #expect(model.unallocatedNote == "Other categories and uncategorised spending")
     #expect(model.currenciesWithoutRate.isEmpty)
     #expect(!model.canSave)
+  }
+
+  @Test("R-BUD-1, D46: the display currency switch converts the sums; inputs keep their currencies")
+  func displayCurrencySwitch() async {
+    let model = await model()
+    model.setDisplayCurrency(.PLN)
+    #expect(model.totalMinor == 8_000_00)
+    #expect(model.totalNote == "The total limit")
+    #expect(model.unallocatedShown == model.unallocated)
+    #expect(model.rows.first { $0.name == "Rent" }?.share == 0.5)
+    #expect(model.rows.map(\.currency) == [.PLN, .PLN, .PLN, .PLN, .EUR])
+    #expect(model.limitText(PreviewData.id(205)) == "4000.00")
+    #expect(!model.isDirty)
+    // A reload keeps the switched currency.
+    await model.load()
+    #expect(model.displayCurrency == .PLN)
+  }
+
+  @Test("R-BUD-1, D46: no total (empty or 0) = the sum of the limits; limits above the total show a negative unallocated")
+  func totalField() async {
+    let model = await model()
+    model.totalLimit = ""
+    #expect(model.total == nil)
+    #expect(!model.hasTotal)
+    #expect(model.unallocated == nil)
+    #expect(model.totalMinor == Int64(82_175_00))
+    #expect(model.totalNote == "No total set: the sum of the limits at the latest rate")
+    model.totalLimit = "0"
+    #expect(model.total == nil)
+    #expect(model.validationMessage == nil)
+    model.totalLimit = "1000"
+    model.totalCurrency = .EUR
+    #expect(model.total == Money(minorUnits: 1_000_00, currency: .EUR))
+    #expect(model.unallocated.map { $0.minorUnits < 0 } == true)
+    #expect(model.unallocatedNote.hasPrefix("The limits exceed the total by "))
+    model.totalLimit = "lots"
+    #expect(model.validationMessage == "The total limit is not a valid amount.")
+    #expect(!model.canSave)
+  }
+
+  @Test("R-MGMT-3, D46: saving writes the total and its currency; 0 when no total is set")
+  func savesTotal() async throws {
+    let model = await model()
+    model.totalLimit = "2500"
+    model.totalCurrency = .EUR
+    #expect(model.canSave)
+    await model.save()
+    let saved = try #require(try await store.budgetRepository.plan(for: october))
+    #expect(saved.plan.total == Money(minorUnits: 2_500_00, currency: .EUR))
+    await model.load()
+    #expect(model.totalLimit == "2500.00")
+    #expect(model.totalCurrency == .EUR)
+    model.totalLimit = ""
+    await model.save()
+    let cleared = try #require(try await store.budgetRepository.plan(for: october))
+    #expect(cleared.plan.totalMinor == 0)
+    #expect(cleared.plan.total == nil)
+  }
+
+  @Test("R-MGMT-10: Revert restores what was loaded; showing the screen again keeps unsaved edits")
+  func revertAndReappear() async {
+    let model = await model()
+    model.setCurrency(.EUR, for: PreviewData.id(205))
+    model.setLimit("4100", for: PreviewData.id(205))
+    model.totalLimit = "9000"
+    #expect(model.isDirty)
+    await model.reappeared()
+    #expect(model.isDirty)
+    #expect(model.currency(PreviewData.id(205)) == .EUR)
+    #expect(model.limitText(PreviewData.id(205)) == "4100")
+    await model.revert()
+    #expect(!model.isDirty)
+    #expect(model.currency(PreviewData.id(205)) == .PLN)
+    #expect(model.limitText(PreviewData.id(205)) == "4000.00")
+    #expect(model.totalLimit == "8000.00")
   }
 
   @Test("R-MGMT-3, D43: a limit's currency can be changed and becomes the default for the next limit")
@@ -63,7 +150,8 @@ struct ManageBudgetTests {
     #expect(model.newLimitCurrency == .UAH)
     model.addLimit()
     #expect(model.rows.first?.currency == .UAH)
-    #expect(model.totalNote == "Sum of the limits")
+    #expect(model.totalCurrency == .UAH)
+    #expect(model.totalNote == "No total set: the sum of the limits")
   }
 
   @Test("D27, D43: a limit without a rate to the display currency is left out of the total and named")
@@ -72,9 +160,11 @@ struct ManageBudgetTests {
       store: store, rates: RateTable(rates: [], today: PreviewData.today), format: ManageFixture.format)
     let model = BudgetEditorModel(dependencies: noRates)
     await model.load()
-    #expect(model.totalMinor == 0)
+    #expect(model.totalMinor == nil)  // the total (zł) has no rate either
+    #expect(model.totalText == "—")
+    #expect(model.limitsSumMinor == 0)
     #expect(model.currenciesWithoutRate == [.PLN, .EUR])
-    #expect(model.totalNote == "No PLN, EUR→UAH rate: those limits are not counted")
+    #expect(model.totalNote == "No PLN, EUR→UAH rate: those amounts are not counted")
     #expect(model.rows.allSatisfy { $0.share == 0 })
   }
 
@@ -85,21 +175,24 @@ struct ManageBudgetTests {
     dependencies.converter = { current.withLock { $0 } }
     let model = BudgetEditorModel(dependencies: dependencies)
     await model.load()
-    #expect(model.totalMinor == 0)
+    #expect(model.limitsSumMinor == 0)
     model.setLimit("4100", for: PreviewData.id(205))
     current.withLock { $0 = RateTable(rates: PreviewData.fxRates, today: PreviewData.today) }
     await model.refreshRates()
-    #expect(model.totalMinor == Int64(82_175_00 + 1_130_00))
+    #expect(model.limitsSumMinor == Int64(82_175_00 + 1_130_00))
+    #expect(model.totalMinor == 90_400_00)
     #expect(model.limitText(PreviewData.id(205)) == "4100")
   }
 
-  @Test("R-BUD-1: category limits can be added and removed; used and archived categories are not offered")
+  @Test("R-BUD-1, R-MGMT-8: category limits can be added and removed; the picker is A–Z without used or archived categories")
   func addRemove() async throws {
     let model = await model()
     let options = model.addOptions.map(\.name)
     #expect(!options.contains("Rent"))
     #expect(options.contains("Food"))
-    #expect(options.first == "Food")
+    let titles = model.addOptions.map(model.addOptionTitle)
+    #expect(titles == titles.sorted { $0.localizedStandardCompare($1) == .orderedAscending })
+    #expect(titles.contains { $0.contains(" › ") })
     model.categoryToAdd = PreviewData.id(212)
     model.addLimit()
     #expect(model.rows.last?.name == "Clothing")
@@ -107,7 +200,8 @@ struct ManageBudgetTests {
     #expect(!model.addOptions.contains { $0.name == "Clothing" })
     model.removeLimit(PreviewData.id(209))
     #expect(!model.rows.contains { $0.name == "Health" })
-    #expect(model.totalMinor == Int64(82_175_00 - 5_335_00))  // €110 at 48.50
+    #expect(model.limitsSumMinor == Int64(82_175_00 - 5_335_00))  // €110 at 48.50
+    #expect(model.totalMinor == 90_400_00)  // the total stays
   }
 
   @Test("R-BUD-3: saving applies from the chosen month on; earlier months keep their budget")
