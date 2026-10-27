@@ -27,14 +27,16 @@ struct ShellToolbar: ViewModifier {
         }
       }
 
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          app.requestNewTransaction()
-        } label: {
-          Label("New transaction", systemImage: "plus")
-            .labelStyle(.titleAndIcon)
+      if (app.section ?? .dashboard).offersNewTransaction {
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            app.requestNewTransaction()
+          } label: {
+            Label("New transaction", systemImage: "plus")
+              .labelStyle(.titleAndIcon)
+          }
+          .help("New transaction (⌘N)")
         }
-        .help("New transaction (⌘N)")
       }
     }
   }
@@ -59,7 +61,7 @@ struct RatesAsOfLabel: View {
   }
 }
 
-/// UAH / PLN / EUR / USD for every widget and total; remembered (R-HOME-4).
+/// EUR / USD / PLN / UAH for every widget and total; remembered (R-HOME-4).
 struct DisplayCurrencyPicker: View {
   @Environment(AppModel.self) private var app
 
@@ -68,7 +70,7 @@ struct DisplayCurrencyPicker: View {
       "Display currency",
       selection: Binding(get: { app.displayCurrency }, set: { app.setDisplayCurrency($0) })
     ) {
-      ForEach(Currency.allCases, id: \.self) { currency in
+      ForEach(Currency.displayOrder, id: \.self) { currency in
         Text(currency.rawValue).tag(currency)
       }
     }

@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.5 — agreed** (2026-10-27). All open questions closed (§9). Changes after this point
+_Status: **v1.6 — agreed** (2026-10-27). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -87,10 +87,11 @@ accounts, with as little manual entry as possible (bank and Saldo imports).
 - `R-TX-7` Edit, delete (with confirmation), duplicate.
 
 ### 3.5 Budget — `R-BUD`
-- `R-BUD-1` A **monthly budget**: per-category monthly limits, **each in its own currency** (e.g.
-  Groceries 400 EUR, Home 5 747 PLN). There is no separate total: the budget's total is the sum
-  of the limits converted to the display currency (v1.5; replaces the single-currency total and
-  the "unallocated" remainder).
+- `R-BUD-1` A **monthly budget**: a **total limit in a chosen currency** plus per-category
+  limits, **each in its own currency** (e.g. total 15 000 PLN; Groceries 400 EUR, Home 5 747 PLN).
+  "Unallocated" = total − category limits converted at the latest rate. The Budget page and the
+  dashboard widget show amounts in the display currency (switcher on both); category statuses are
+  decided in each limit's own currency (v1.6, D46).
 - `R-BUD-2` Spent per category = that month's expenses (attached expense records included;
   refunds subtracted only when `R-SET-3` is on) converted to that category limit's currency at each transaction's date rate. A parent
   category's limit covers its subcategories.
@@ -139,7 +140,11 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
   Only a click navigates; hovering never switches screens (the app never changes section without
   a user action).
 - `R-HOME-4` **Display currency** switch (UAH / PLN / EUR / USD) for all widgets; remembered.
-  The switch is shown only on screens it affects: Dashboard, Transactions, Accounts, Events.
+  The switch is shown only on screens it affects: Dashboard, Transactions, Accounts, Events,
+  Budget; order EUR, USD, PLN, UAH. "New transaction" is not shown on Budget and Rules.
+- `R-HOME-6` (v1.6) **Monthly income** donut (like expenses) and an **income vs expenses**
+  widget (last 12 months, bars per month with the net). Widgets can be **reordered by drag and
+  drop**; full-width and half-width widgets keep their width; the order is remembered.
 - `R-HOME-5` Month selector (← →) for the budget and donut widgets.
 
 ### 4.2 Transaction list — `R-LIST`
@@ -165,14 +170,31 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
 - `R-MGMT-1` Accounts: grouped list with balances, CRUD, archive (`R-ACC-4`).
 - `R-MGMT-2` Categories: income / expense tabs, tree with subcategories, CRUD, reorder,
   reassign-on-delete.
-- `R-MGMT-3` Budget editor: per-category limits, each with its own currency.
+- `R-MGMT-3` Budget editor: total + currency, per-category limits each with its own currency,
+  unallocated row; a red trash button removes a category limit.
 - `R-MGMT-4` Events: CRUD, archive.
 - `R-MGMT-5` Exchange rates (`R-FX-5`).
 - `R-MGMT-6` Rules: list, edit (conditions + action, Saldo-style), delete, "Update existing
   transactions" on save (`R-IMP-8`).
+- `R-MGMT-8` Lists (v1.6): category and account pickers everywhere are A–Z (accounts grouped
+  by account group). The Categories page has a sort selector — Name A–Z, Name Z–A, Custom order
+  (drag and drop), Newest first, Oldest first — and search. Drag a row between rows to reorder
+  (Custom order), onto a row to make it a subcategory (one level), like Reminders. Only a "New
+  category" button. With a category selected, "New transaction" starts with that category.
+  "Uncategorised" is one built-in entry pinned at the top of Categories with an editable colour;
+  transactions without a category, the donut and filters use it, one spelling (D47).
+- `R-MGMT-9` Accounts (v1.6, D48): **account groups** as folders (no money of their own; sum of
+  their accounts in the display currency); drag onto a group to move in, between rows to
+  reorder; search; sort Name A–Z / Z–A / Custom; currency filter; net worth widget shows the same
+  hierarchy.
+- `R-MGMT-10` Forms: the primary action (Save / Save & apply / Confirm) is at the **bottom-right**
+  of every form, inspector and sheet, Revert/Cancel left of it; never in the window toolbar.
+- `R-MGMT-11` Search: a full-width search field above the filters on Transactions, Events,
+  Accounts, Categories and Rules (no toolbar search). Rules filter by category (not account).
 - `R-MGMT-7` Colours: categories, accounts and events get a random distinct colour when created
   (and existing grey/uncoloured ones once); the colour can be changed manually. Transaction icons
-  use their category's colour everywhere and follow a colour change immediately.
+  use their category's colour everywhere and follow a colour change immediately. A category has
+  the same colour on every screen (donut, budget, lists).
 
 ### 4.5 Import — `R-IMP`
 Common pipeline for all sources: **parse → normalise → match/dedupe → preview → commit**.
@@ -206,6 +228,9 @@ Common pipeline for all sources: **parse → normalise → match/dedupe → prev
   the user's choices in the import preview (learned rules are *contains*), apply to later imports
   and to the editor's suggestion; saving a rule with "Update existing transactions" applies it to
   matching past transactions. Text matching folds case, diacritics and whitespace.
+  v1.6: a rule needs at least one condition — a description condition, an amount condition, or
+  both (at most one of each). An applied rule can be **rolled back** from the rule editor
+  (restores the transactions it changed).
 
 #### Saldo CSV — `R-IMP-SALDO` (details: `docs/import/saldo-format.md`)
 - `R-IMP-SALDO-1` Double-entry rows grouped by Transaction ID; leg types (BANK_ACCOUNTS, CASH,
@@ -323,6 +348,7 @@ No open questions.
 |---------|------|--------|
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
+| 1.6 | 2026-10-27 | Owner review of 1.1.0: budget total + currency back with unallocated (`R-BUD-1`, `R-MGMT-3`); built-in Uncategorised, sorting/search/drag-to-nest for categories (`R-MGMT-8`); account groups (`R-MGMT-9`); form button placement (`R-MGMT-10`); page search (`R-MGMT-11`); rules: amount-only condition, rollback; income donut, income vs expenses, widget reorder (`R-HOME-6`); currency switch order and Budget page; debts: design pending (owner interview). |
 | 1.5 | 2026-10-27 | Owner review of v1.0.0: per-category budget currencies, no separate total (`R-BUD-1/2`, `R-MGMT-3`); Saldo-like rules with amount conditions and a transfer action (`R-IMP-8`, `R-MGMT-6`); colours for categories, accounts, events (`R-MGMT-7`, `R-EVT-1`); click-only drill-down (`R-HOME-3`); budget edit button (`R-HOME-2`); currency switch only where it applies (`R-HOME-4`). |
 | 1.4 | 2026-10-21 | Q23: no second Saldo pairing pass; cross-currency halves go to Needs review. |
 | 1.3 | 2026-10-21 | Q22: PKO rows dated by the purchase day, booking day kept (`R-IMP-PKO-2`, new `R-IMP-PKO-4`). |

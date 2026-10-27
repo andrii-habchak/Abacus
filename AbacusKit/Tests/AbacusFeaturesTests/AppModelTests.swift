@@ -103,10 +103,18 @@ struct AppModelTests {
     #expect(app.pendingTransactionFilters == nil)
   }
 
-  @Test("R-HOME-4 the display-currency switch shows only on Dashboard, Transactions, Accounts, Events")
+  @Test("R-HOME-4 the display-currency switch shows on Dashboard, Transactions, Accounts, Events, Budget")
   func displayCurrencySections() {
     let shown = AppSection.allCases.filter(\.usesDisplayCurrency)
-    #expect(Set(shown) == [.dashboard, .transactions, .accounts, .events])
+    #expect(Set(shown) == [.dashboard, .transactions, .accounts, .events, .budget])
+  }
+
+  @Test("TA v1.6: no New transaction button on Budget and Rules; switch order EUR, USD, PLN, UAH")
+  func newTransactionSectionsAndCurrencyOrder() {
+    let hidden = AppSection.allCases.filter { !$0.offersNewTransaction }
+    #expect(Set(hidden) == [.budget, .rules])
+    #expect(Currency.displayOrder == [.EUR, .USD, .PLN, .UAH])
+    #expect(Set(Currency.displayOrder) == Set(Currency.allCases))
   }
 
   @Test("Sidebar order: Overview then Manage, nine sections for ⌘1…⌘9")

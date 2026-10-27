@@ -91,11 +91,20 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
   }
 
   /// Whether the screen shows amounts in the display currency, so the toolbar offers the
-  /// currency switch there (R-HOME-4): Dashboard, Transactions, Accounts, Events.
+  /// currency switch there (R-HOME-4): Dashboard, Transactions, Accounts, Events, Budget.
   public var usesDisplayCurrency: Bool {
     switch self {
-    case .dashboard, .transactions, .accounts, .events: true
-    case .categories, .budget, .importFiles, .rates, .rules: false
+    case .dashboard, .transactions, .accounts, .events, .budget: true
+    case .categories, .importFiles, .rates, .rules: false
+    }
+  }
+
+  /// Whether the toolbar offers "New transaction" (⌘N still works everywhere): not on Budget
+  /// and Rules, where it has nothing to do with the screen (R-SHELL, TA v1.6).
+  public var offersNewTransaction: Bool {
+    switch self {
+    case .budget, .rules: false
+    case .dashboard, .transactions, .events, .accounts, .categories, .importFiles, .rates: true
     }
   }
 

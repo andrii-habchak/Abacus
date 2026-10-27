@@ -6,6 +6,9 @@ import SQLiteData
 public enum Currency: String, CaseIterable, Codable, Hashable, Sendable, QueryBindable {
   case UAH, PLN, EUR, USD
 
+  /// The order of the display-currency switch (owner, TA v1.6): EUR, USD, PLN, UAH.
+  public static let displayOrder: [Currency] = [.EUR, .USD, .PLN, .UAH]
+
   /// All four currencies have 2 decimal places.
   public static let minorUnitsPerUnit: Int64 = 100
 }

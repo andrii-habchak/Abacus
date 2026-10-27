@@ -125,7 +125,24 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   transaction icons. Migration "v4: colours".
 - [x] **C6 Budget currency** (merged 2026-10-27) — per-category limit currency, no separate total. Migration "v5".
 - [x] **C7 Rules** (merged 2026-10-27) — Saldo-like conditions and category/transfer actions. Migration "v6: rules".
-- [ ] **Release 1.1.0** — DMG built for owner testing; tag after the owner's OK.
+- [ ] **Release 1.1.0** — DMG built for owner testing; superseded by the 1.2.0 round below.
+
+### Phase 3d — Owner review of 1.1.0 (2026-10-27, TA v1.6, D46–D50)
+Wave 1 (parallel):
+- [ ] **C8 Budget** — widget bug (wrong limit currency), total + currency + unallocated (D46),
+  switcher on Budget page, red trash, Save bottom-right.
+- [ ] **C9 Rules** — apply-to-existing bug, rollback, amount-only condition, category filter,
+  page search.
+- [ ] **C10 Categories** — built-in Uncategorised (D47), same colour everywhere, A–Z pickers,
+  sort selector, search, drag-to-nest, New transaction preselects the category.
+- [ ] **C11 Transactions, events, shell** — page search on Transactions/Events, event inspector
+  layout + read-only archived event, type filter layout, Save bottom-right in event inspector.
+Wave 2:
+- [ ] **C12 Accounts** — account groups (D48), drag/sort/search/currency filter, grouped pickers,
+  net worth hierarchy.
+- [ ] **C13 Dashboard widgets** — income donut, income vs expenses, drag-reorder widgets.
+- [ ] **Debts** — owner interview → TA → lane (D49).
+- [ ] **Release 1.2.0**.
 
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
