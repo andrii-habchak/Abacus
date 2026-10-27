@@ -1,19 +1,29 @@
 # Status
 
-_Last updated: 2026-10-27 (orchestrator)_
+_Last updated: 2026-10-27 (orchestrator, late)_
 
 ## Now
 
-_Updated 2026-10-22 (orchestrator)._ **v1 is feature-complete and merged** (P0, D1, A1–A6,
-B1–B6, C1, C2, R1). 534 tests pass locally (incl. real-data tests); the app builds; GitHub CI
-is not used (D37). The owner's real Saldo history and PKO statement are in the app database.
+_Updated 2026-10-27 (orchestrator)._ **1.2.1 is on `main`** (version 1.2.1, build 4) and is the
+build the owner is testing; it is **not tagged**. Released so far: only `v1.0.0` (tag, 2026-10-27).
+1.1.0 and 1.2.0 were test builds and are folded into 1.2.1 (see CHANGELOG).
 
-_Updated 2026-10-27:_ C3 merged — the Import section no longer grows the window (root cause:
-a vertical `fixedSize` on the choose-file paragraph; see `docs/status/C3.md`). Every section now
-opens at the same default window height. **v1.0.0 released 2026-10-27**: tag `v1.0.0`, DMG built
-locally with `scripts/build-dmg.sh` (`dist/Abacus-1.0.0.dmg`, not committed; `hdiutil verify`
-valid, app codesign valid). Remaining: owner review of the app on real data and of the C2
-interpretations (D40); deferred small items on request.
+- Done since v1.0.0 (all merged, gate green, 695 tests incl. real-data tests):
+  - Phase 3c, owner review of 1.0.0: C3 import window height, C4 navigation, C5 colours,
+    C6 budget currency, C7 rules.
+  - Phase 3d, owner review of 1.1.0: C8 budget total, C9 rules rollback, C10 categories,
+    C11 transactions/events, C12 account groups, C13 dashboard widgets, C14 debts.
+  - Phase 3e, stability: S1 crashes and speed, S2 native outline lists and sheet editors,
+    S3 budget Save states and the rules tester removed.
+- Database: migrations v4–v11 run on the owner's real database at the first launch of 1.1.0+.
+  The debts conversion (v10) was checked on the real Saldo export in memory (balances and net
+  worth unchanged). The owner backs up `abacus.sqlite` before installing.
+- README rewritten for 1.2.1 with new screenshots (sample data only, 2026-10-27).
+- `build.noindex/` is the build output folder (Spotlight skips it); the old `build/` can be deleted.
+
+**Waiting on the owner**: test 1.2.1 (`dist/Abacus-1.2.1.dmg`), especially real mouse drag and
+drop, then the OK to tag `v1.2.1`; confirm the lane interpretations in `docs/status/C6.md` to
+`C14.md` and `S1.md`–`S3.md`.
 
 ## Done
 
@@ -26,8 +36,16 @@ interpretations (D40); deferred small items on request.
 
 ## Next
 
-See "Open items" at the end: Import window height, then the v1.0.0 DMG and tag. The hand-off for
-a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints and copies it).
+1. Owner tests 1.2.1; fix what they report on a lane, rebuild the DMG.
+2. On the owner's OK: set the CHANGELOG date for 1.2.1, commit, tag `v1.2.1`, push the tag,
+   attach `dist/Abacus-1.2.1.dmg` (+ `.sha256`) to a GitHub release (text drafted in the session:
+   fixed / changed / install / back up first).
+3. Deferred, only on request: merge the "card" and "bank account" kinds (they behave the same);
+   SQL aggregates for balances/usage counts beyond ~20k transactions (S1); combine the save
+   cascade's per-screen reloads (S1).
+
+The hand-off for a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints
+and copies it).
 
 ## In flight
 
@@ -136,29 +154,24 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 - Contracts on `main` for Phase 3 lanes: `TxnQuery.includeUncategorised`, `TxnQuery.importBatchIDs`,
   `SettingKey.lastBackupExport`.
 
-## Open items (2026-10-22)
+## Open items (2026-10-27)
 
-- ~~Import window height~~ → fixed in C3 (2026-10-27). Note: the in-app snapshot of the
-  default window is 1,018 pt on the owner's 1,117 pt-high screen for every section, not the
-  860 pt in `.defaultSize`; that is the window default, not an Import leak.
-- ~~Release~~ → v1.0.0 tagged and pushed 2026-10-27 (DMG local only).
-- **1.2.1 (stability + owner review of 1.2.0, S1–S3)**: merged on `main`, version 1.2.1 (build 4), DMG
-  built locally for owner testing; not tagged. Soak run on a 5,000-transaction scratch database:
-  no crash; debug-build main-thread pauses of 120–600 ms remain around sheet open/close.
-  Real mouse drag and drop not yet tried by anyone but the owner.
-- **1.2.0 (owner review of 1.1.0, C8–C14)**: merged on `main`, version 1.2.0 (build 3), DMG
-  built locally for owner testing; **not tagged** until the owner's OK. First launch runs
-  migrations v8–v11 (rule applications, category createdAt, debts, account groups) on the real
-  database; owner backs up `abacus.sqlite` first. Lane interpretations to confirm are in
-  `docs/status/C8.md` … `C14.md`.
-- **1.1.0 (owner review of 1.0.0, C4–C7)**: merged on `main`, version 1.1.0 (build 2), DMG built
-  locally for owner testing; **not tagged** until the owner has tested it. First launch runs
-  migrations v4–v6 on the real database (tested only on synthetic pre-change databases) — owner
-  backs up `abacus.sqlite` first. Owner to confirm the C6 and C7 interpretations (status notes).
-- **Deferred, small**: an open editor doesn't pick up rates fetched by other screens until its own
-  request returns (C2); per-protocol count/balance queries for very large data (B5/C1 notes).
-- **Owner checks**: real-data look of every screen; 281 "Uncategorised" rows to review (Import /
-  Transactions › Categories › Uncategorised); C2 choices (D40).
+- ~~Import window height~~ → fixed in C3.
+- ~~Release v1.0.0~~ → tagged and pushed 2026-10-27.
+- ~~1.1.0 / 1.2.0 test builds~~ → superseded by 1.2.1.
+- **1.2.1**: owner testing; tag after the OK. Known: debug-build main-thread pauses of
+  120–600 ms around sheet open/close (AppKit animation, S1); real mouse drag and drop on the new
+  outline lists not yet tried by anyone but the owner (no Accessibility permission for
+  synthetic events here).
+- **Owner checks**: lane interpretations (C6–C14, S1–S3 status notes); "Uncategorised" rows to
+  review; C2 choice D40 (data folder move deletes the old file after a verified copy).
+- **Deferred, small**: an open editor doesn't pick up rates fetched by other screens until its
+  own request returns (C2); card vs bank account merge; very-large-data SQL aggregates.
+
+Debug tools for checks (DEBUG builds, scratch databases only): `-AbacusLoadLargeSampleData YES`,
+`-AbacusSoak YES`, `-AbacusHangWatch YES`, `-AbacusOpenSheet …`, `-AbacusDashboardScrollTo …`,
+`-AbacusBudgetDemo edited|saved`, `-AbacusWindowWidth/-AbacusWindowHeight` (see the S1, S2, S3,
+C11, C13, C14 status notes).
 
 ## How to check the UI safely (never on the owner's real data)
 

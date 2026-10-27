@@ -125,7 +125,7 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   transaction icons. Migration "v4: colours".
 - [x] **C6 Budget currency** (merged 2026-10-27) — per-category limit currency, no separate total. Migration "v5".
 - [x] **C7 Rules** (merged 2026-10-27) — Saldo-like conditions and category/transfer actions. Migration "v6: rules".
-- [ ] **Release 1.1.0** — DMG built for owner testing; superseded by the 1.2.0 round below.
+- [x] **Release 1.1.0** — test build only; superseded by 1.2.1.
 
 ### Phase 3d — Owner review of 1.1.0 (2026-10-27, TA v1.6, D46–D50)
 Wave 1 (parallel):
@@ -142,13 +142,13 @@ Wave 2:
   net worth hierarchy.
 - [x] **C13 Dashboard widgets** (merged 2026-10-27) — income donut, income vs expenses, drag-reorder widgets.
 - [x] **C14 Debts** (merged 2026-10-27; migration v10; widget scroll fix pending) — `R-DEBT` (TA v1.7, D51).
-- [ ] **Release 1.2.0** — DMG built for owner testing; superseded by 1.2.1 below.
+- [x] **Release 1.2.0** — test build only; superseded by 1.2.1.
 
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
 - [x] **S1 Stability and performance** (merged 2026-10-27) — crashes (binding force-unwrap, Escape), hangs, reload storms, timing on owner-size data.
 - [x] **S2 Accounts and categories lists** (merged 2026-10-27) — native outline drag and drop, sheet editors, split New account button, new-tx prefill for accounts.
 - [x] **S3 Budget and rules polish** (merged 2026-10-27) — Save button states, remove the rules tester row.
-- [ ] **Release 1.2.1**.
+- [ ] **Release 1.2.1** — DMG built 2026-10-27, owner testing; tag after the OK.
 
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
