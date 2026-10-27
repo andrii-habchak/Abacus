@@ -4,13 +4,21 @@ import Foundation
 /// What the editor sheet is opened for.
 public enum TransactionEditorMode: Hashable, Sendable, Identifiable {
   case new
+  /// A new transaction starting with this category (and its kind's type): "New transaction"
+  /// while a category is selected on the Categories page (R-MGMT-8).
+  case newInCategory(AbacusDomain.Category.ID)
   case edit(Txn.ID)
 
   public var id: String {
     switch self {
     case .new: "new"
+    case .newInCategory(let id): "new-\(id.uuidString)"
     case .edit(let id): "edit-\(id.uuidString)"
     }
+  }
+
+  public var isNew: Bool {
+    if case .edit = self { false } else { true }
   }
 }
 

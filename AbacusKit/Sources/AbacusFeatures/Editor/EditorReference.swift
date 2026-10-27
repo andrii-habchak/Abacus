@@ -60,25 +60,15 @@ public struct EditorReference: Sendable {
     "\(account.name) · \(account.currency.rawValue)"
   }
 
-  /// Categories of `kind`, parents by position each followed by its children; archived ones
-  /// are left out unless `selected`.
+  /// Categories of `kind`, parents A–Z each followed by its children A–Z (R-MGMT-8); archived
+  /// ones are left out unless `selected`.
   public func categoryOptions(kind: CategoryKind, including selected: CategoryID? = nil) -> [CategoryOption] {
-    let order: (AbacusDomain.Category, AbacusDomain.Category) -> Bool = {
-      ($0.position, $0.name) < ($1.position, $1.name)
-    }
     let live = categories.filter { $0.kind == kind && (!$0.isArchived || $0.id == selected) }
     let liveIDs = Set(live.map(\.id))
-    let children = Dictionary(grouping: live.filter { $0.parentID.map(liveIDs.contains) ?? false }) {
-      $0.parentID!
+    return CategoryOrder.alphabetical(live).map { category in
+      CategoryOption(
+        id: category.id, name: category.name, kind: kind, isChild: category.parentID.map(liveIDs.contains) ?? false)
     }
-    var options: [CategoryOption] = []
-    for parent in live.filter({ $0.parentID.map { !liveIDs.contains($0) } ?? true }).sorted(by: order) {
-      options.append(CategoryOption(id: parent.id, name: parent.name, kind: kind, isChild: false))
-      for child in (children[parent.id] ?? []).sorted(by: order) {
-        options.append(CategoryOption(id: child.id, name: child.name, kind: kind, isChild: true))
-      }
-    }
-    return options
   }
 
   /// "Groceries", or "Food › Groceries" for a child.

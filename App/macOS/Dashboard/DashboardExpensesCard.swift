@@ -43,8 +43,10 @@ struct DashboardExpensesCard: View {
         outerRadius: .ratio(slice.id == selected || slice.id == hovered ? 1 : 0.9),
         angularInset: expenses.slices.count > 1 ? 1 : 0
       )
+      // Full colour always: dimming the other slices after a pick (a drill-down leaves the
+      // pick set) made them lighter than the legend and the Categories page (R-MGMT-7). The
+      // picked or hovered slice stands out by its larger radius instead.
       .foregroundStyle(DashboardStyle.color(hex: slice.colorHex))
-      .opacity(selected == nil || slice.id == selected || slice.id == hovered ? 1 : 0.6)
       .accessibilityLabel(slice.name)
       .accessibilityValue("\(slice.amountText), \(slice.percentText)")
     }

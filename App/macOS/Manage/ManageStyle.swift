@@ -29,12 +29,7 @@ enum ManagePalette {
   }
 
   /// A category colour (`#RRGGBB`), grey when missing or invalid.
-  static func hex(_ hex: String?) -> Color {
-    guard let hex, hex.hasPrefix("#"), let value = Int(hex.dropFirst(), radix: 16) else {
-      return Color(nsColor: NSColor(manageRGB: 0x8E8E93))
-    }
-    return Color(nsColor: NSColor(manageRGB: value))
-  }
+  static func hex(_ hex: String?) -> Color { CategoryColor.color(hex) }
 
   static func dynamic(light: Int, dark: Int) -> Color {
     Color(

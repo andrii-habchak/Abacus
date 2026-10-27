@@ -21,15 +21,15 @@ public struct TransactionCategoryTree: Equatable, Sendable {
   }
 
   public private(set) var byID: [ID: AbacusDomain.Category]
-  /// Menu order: expense parents, then income parents (by position), each followed by its
-  /// children. Archived categories are left out.
+  /// Menu order: expense parents, then income parents (A–Z, R-MGMT-8), each followed by its
+  /// children A–Z. Archived categories are left out.
   public private(set) var options: [Option]
   private var childrenByParent: [ID: [ID]]
 
   public init(_ categories: [AbacusDomain.Category]) {
     byID = Dictionary(categories.map { ($0.id, $0) }) { first, _ in first }
     let order: (AbacusDomain.Category, AbacusDomain.Category) -> Bool = {
-      ($0.kind == .expense ? 0 : 1, $0.position, $0.name) < ($1.kind == .expense ? 0 : 1, $1.position, $1.name)
+      $0.kind != $1.kind ? $0.kind == .expense : CategoryOrder.byName($0, $1)
     }
     let live = categories.filter { !$0.isArchived }
     var children: [ID: [AbacusDomain.Category]] = [:]

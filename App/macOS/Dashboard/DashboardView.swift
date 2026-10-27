@@ -6,7 +6,7 @@ import SwiftUI
 /// chart, then the month selector shared by the budget and the expenses donut.
 ///
 /// The shell passes the display currency (R-HOME-4) and handles a donut drill-down by opening
-/// Transactions filtered to the category (nil: "Uncategorized") and month (`DashboardDrillDown.query`).
+/// Transactions filtered to the category (nil: "Uncategorised") and month (`DashboardDrillDown.query`).
 struct DashboardView: View {
   let displayCurrency: Currency
   let onDrillDown: (AbacusDomain.Category.ID?, Month) -> Void
@@ -169,14 +169,8 @@ enum DashboardStyle {
     }
   }
 
-  /// "#RRGGBB" → a colour; grey when it does not parse.
-  static func color(hex: String) -> Color {
-    let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-    guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return .gray }
-    return Color(
-      red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255,
-      blue: Double(value & 0xFF) / 255)
-  }
+  /// "#RRGGBB" → a colour, the same mapping as every other screen (`CategoryColor`).
+  static func color(hex: String) -> Color { CategoryColor.color(hex) }
 }
 
 struct DashboardCardModifier: ViewModifier {

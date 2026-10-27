@@ -64,8 +64,34 @@ extension AbacusDatabase {
         try db.execute(sql: statement)
       }
     }
+    // R-MGMT-8: categories sort by creation ("Newest first" / "Oldest first"). Existing rows
+    // get stable values one second apart from 2000-01-01 in their current order (kind,
+    // position, name), so "Oldest first" starts out as that order and every category created
+    // later is newer. The default only applies to rows written without the column.
+    migrator.registerMigration("v9: category createdAt") { db in
+      if try !db.columns(in: "categories").contains(where: { $0.name == "createdAt" }) {
+        try db.execute(
+          sql: #"ALTER TABLE "categories" ADD COLUMN "createdAt" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT '2000-01-01 00:00:00.000'"#
+        )
+      }
+      try db.execute(sql: categoryCreatedAtV9)
+    }
     return migrator
   }
+
+  /// Numbers the existing categories in their current order (see "v9: category createdAt");
+  /// the text format is the one dates are stored in (`yyyy-MM-dd HH:mm:ss.SSS`, UTC).
+  static let categoryCreatedAtV9 = #"""
+    UPDATE "categories"
+    SET "createdAt" = (
+      SELECT strftime('%Y-%m-%d %H:%M:%f', '2000-01-01 00:00:00', '+' || "ranked"."rank" || ' seconds')
+      FROM (
+        SELECT "id", ROW_NUMBER() OVER (ORDER BY "kind", "position", "name", "id") - 1 AS "rank"
+        FROM "categories"
+      ) AS "ranked"
+      WHERE "ranked"."id" = "categories"."id"
+    )
+    """#
 
   /// Saldo-like rules (R-IMP-8, D44): match kind, amount condition, action and transfer account;
   /// `categoryID` becomes nullable (transfer rules), which SQLite only allows by rebuilding the

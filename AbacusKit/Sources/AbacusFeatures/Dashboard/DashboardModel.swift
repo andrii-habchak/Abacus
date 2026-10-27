@@ -43,6 +43,8 @@ public final class DashboardModel {
     var categories: [AbacusDomain.Category]
     var txns: [TxnWithLines]
     var refundsReduceSpending: Bool
+    /// The built-in "Uncategorised" colour (D47).
+    var uncategorisedColor: String = Uncategorised.defaultColorHex
   }
 
   struct PlanEntry {
@@ -75,8 +77,9 @@ public final class DashboardModel {
       async let categories = dependencies.categories.categories(kind: nil, includeArchived: true)
       async let txns = dependencies.txns.transactions(matching: TxnQuery(toDay: today, newestFirst: false))
       async let refunds = dependencies.settings.value(.refundsReduceSpending)
-      let loaded = try await LoadedData(
+      var loaded = try await LoadedData(
         accounts: accounts, categories: categories, txns: txns, refundsReduceSpending: refunds == "true")
+      loaded.uncategorisedColor = await dependencies.settings.uncategorisedColor()
       data = loaded
       plans = [:]
       _ = try await planEntry(for: month)
@@ -157,7 +160,7 @@ public final class DashboardModel {
   }
 
   /// Picks a donut slice or legend row (R-HOME-3) and returns where to drill down: the
-  /// category (nil for "Uncategorized": expenses without a category) and the month, or nil
+  /// category (nil for "Uncategorised": expenses without a category) and the month, or nil
   /// for a slice with nothing to filter by ("Refunds").
   @discardableResult
   public func select(_ slice: DashboardExpenses.Slice) -> (categoryID: AbacusDomain.Category.ID?, month: Month)? {
@@ -227,6 +230,6 @@ public final class DashboardModel {
     expenses = DashboardExpenses.make(
       month: month, accounts: data.accounts, categories: data.categories, txns: data.txns,
       currency: displayCurrency, converter: rates.converter, refundsReduceSpending: data.refundsReduceSpending,
-      format: format)
+      format: format, uncategorisedColor: data.uncategorisedColor)
   }
 }

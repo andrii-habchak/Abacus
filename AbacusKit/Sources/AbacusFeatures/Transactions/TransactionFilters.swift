@@ -91,7 +91,7 @@ public struct TransactionFilters: Hashable, Sendable {
   public static let `default` = TransactionFilters()
 
   /// Dashboard drill-down (R-HOME-3): one category in one month; a nil category is the
-  /// "Uncategorized" slice of the expenses donut (expenses without a category).
+  /// "Uncategorised" slice of the expenses donut (expenses without a category).
   public static func drillDown(
     category: AbacusDomain.Category.ID?, month: Month, calendar: Calendar = .current
   ) -> TransactionFilters {

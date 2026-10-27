@@ -82,12 +82,18 @@ public struct Category: Hashable, Identifiable, Sendable {
   public var isArchived: Bool
   /// The import that created this category; undoing it removes the category if unused.
   public var importBatchID: ImportBatch.ID?
+  /// When the category was created: the Categories page's "Newest first" / "Oldest first"
+  /// (R-MGMT-8), in whole seconds. Categories older than migration v9 got stable values in
+  /// their order then.
+  public var createdAt: Date
 
   public init(
     id: UUID = UUID(), name: String, kind: CategoryKind, parentID: Category.ID? = nil,
     icon: String? = nil, colorHex: String? = nil, position: Int = 0, isArchived: Bool = false,
-    importBatchID: ImportBatch.ID? = nil
+    importBatchID: ImportBatch.ID? = nil, createdAt: Date = Date()
   ) {
+    // Whole seconds: the value reads back from the database exactly as it was saved.
+    self.createdAt = Date(timeIntervalSince1970: createdAt.timeIntervalSince1970.rounded(.down))
     self.id = id
     self.name = name
     self.kind = kind
@@ -650,6 +656,10 @@ public enum SettingKey: String, CaseIterable, Sendable {
   case lastTransferToID
   /// `YYYY-MM-DD` of the last backup export (R-SET-2, Settings › Data).
   case lastBackupExport
+  /// `#RRGGBB` of the built-in "Uncategorised" entry (D47); default `Uncategorised.defaultColorHex`.
+  case uncategorisedColor
+  /// The Categories page sort (`CategorySort.rawValue`); default custom order (R-MGMT-8).
+  case categorySort
 }
 
 @Table("appSettings")

@@ -8,10 +8,14 @@ public struct TransactionsReference: Equatable, Sendable {
   public var events: [Event]
   public private(set) var accountsByID: [Account.ID: Account]
   public private(set) var eventsByID: [Event.ID: Event]
+  /// `#RRGGBB` of the built-in "Uncategorised" (D47): tiles of rows without a category.
+  public var uncategorisedColor: String
 
   public init(
-    accounts: [Account] = [], categories: [AbacusDomain.Category] = [], events: [Event] = []
+    accounts: [Account] = [], categories: [AbacusDomain.Category] = [], events: [Event] = [],
+    uncategorisedColor: String = Uncategorised.defaultColorHex
   ) {
+    self.uncategorisedColor = uncategorisedColor
     self.accounts = accounts.sorted { ($0.position, $0.name) < ($1.position, $1.name) }
     self.categories = TransactionCategoryTree(categories)
     self.events = events
@@ -209,7 +213,7 @@ public struct TransactionListContent: Equatable, Sendable {
     let subtitle = note.isEmpty ? clock : "\(note) · \(clock)"
 
     let lines = item.lines.sorted { $0.position < $1.position }.map { line in
-      let category = tree.path(line.categoryID) ?? "Uncategorised"
+      let category = tree.path(line.categoryID) ?? Uncategorised.title
       let inflow = line.kind == .income
       let note = line.note.trimmingCharacters(in: .whitespacesAndNewlines)
       return Line(
@@ -248,9 +252,11 @@ public struct TransactionListContent: Equatable, Sendable {
       }
       return Row(
         id: txn.id, type: txn.type,
-        icon: Icon(symbol: category.map { String($0.name.prefix(1)) } ?? "?", colorHex: tree.color(txn.categoryID)),
+        icon: Icon(
+          symbol: category.map { String($0.name.prefix(1)) } ?? "?",
+          colorHex: category == nil ? reference.uncategorisedColor : tree.color(txn.categoryID)),
         title: txn.payee.isEmpty ? (category?.name ?? "No description") : txn.payee,
-        badges: badges, subtitle: subtitle, category: tree.path(txn.categoryID) ?? "Uncategorised",
+        badges: badges, subtitle: subtitle, category: tree.path(txn.categoryID) ?? Uncategorised.title,
         account: accountName,
         amount: format.string(minor: inflow ? txn.amountMinor : -txn.amountMinor, code: code, sign: .always),
         tone: inflow ? .inflow : .outflow, amountDetail: detail, lines: lines)

@@ -116,10 +116,10 @@ struct TransactionFiltersTests {
 
   var tree: TransactionCategoryTree { TransactionCategoryTree(PreviewData.categories) }
 
-  @Test("R-LIST-2: menu lists parents “(all)” with their children, expense before income")
+  @Test("R-LIST-2, R-MGMT-8: menu lists parents “(all)” A–Z with their children A–Z, expense before income")
   func menuOrder() {
     let labels = tree.options.map(\.label)
-    #expect(Array(labels.prefix(5)) == ["Food (all)", "Groceries", "Eating out", "Housing (all)", "Rent"])
+    #expect(Array(labels.prefix(5)) == ["Bills (all)", "Mobile", "Clothing", "Fees", "Food (all)"])
     #expect(labels.firstIndex(of: "Salary")! > labels.firstIndex(of: "Travel")!)
     #expect(tree.options.first { $0.name == "Groceries" }?.isChild == true)
     #expect(tree.path(eatingOut) == "Food › Eating out")
