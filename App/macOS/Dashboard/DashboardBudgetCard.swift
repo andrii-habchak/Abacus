@@ -2,8 +2,9 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// Monthly budget (R-HOME-2, R-BUD-1…3): spent of total, remaining and % used, a status badge,
-/// per-category bars (blue ok, amber ≥ 90 %, red over) and the unallocated row.
+/// Monthly budget (R-HOME-2, R-BUD-1…3, D43): spent of total in the display currency, remaining
+/// and % used, a status badge, per-category bars in each limit's own currency (blue ok, amber
+/// ≥ 90 %, red over).
 struct DashboardBudgetCard: View {
   /// nil when no plan is in effect for the month.
   let budget: DashboardBudget?
@@ -36,7 +37,7 @@ struct DashboardBudgetCard: View {
       } else {
         Text("No budget for \(monthTitle).")
           .foregroundStyle(.secondary)
-        Text("Set a monthly total and category limits in Budget.")
+        Text("Set category limits in Budget.")
           .font(.caption)
           .foregroundStyle(.secondary)
       }

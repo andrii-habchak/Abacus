@@ -234,38 +234,40 @@ public struct DashboardNetWorth: Sendable {
 
 // MARK: - Budget (R-HOME-2, R-BUD-1…3)
 
+/// The month's budget for the dashboard (R-HOME-2, D43): the total in the display currency, each
+/// category bar in its limit's own currency (the amounts the owner typed; the status is decided
+/// in that currency, so switching the display currency never changes it).
 public struct DashboardBudget: Sendable {
   public struct Row: Hashable, Sendable, Identifiable {
-    public let id: String
-    /// nil for "Unallocated (other categories)".
-    public let categoryID: AbacusDomain.Category.ID?
+    public let id: BudgetAllocation.ID
+    public let categoryID: AbacusDomain.Category.ID
     public let name: String
+    /// In the limit's currency.
     public let spent: Money
+    /// In the limit's currency.
     public let limit: Money
     public let status: LimitStatus
     /// 0…1 for the bar (full when over).
     public let barFraction: Double
-    /// "₴2,040 / ₴1,800".
+    /// "€320 / €400".
     public let amountsText: String
-    /// "Over by ₴240" / "₴560 left".
+    /// "Over by €40" / "€80 left".
     public let noteText: String
-
-    public var isUnallocated: Bool { categoryID == nil }
   }
 
   public let month: Month
-  /// The plan's currency: status (ok / near / over) is decided in it (R-BUD-2).
-  public let planCurrency: Currency
-  /// The currency the amounts are shown in: the display currency, or the plan's when no rate.
-  public let shownCurrency: Currency
+  /// The currency of the total (the display currency).
+  public let currency: Currency
+  /// Sum of the categories' spending in `currency`.
   public let spent: Money
+  /// Sum of the category limits in `currency`.
   public let limit: Money
   public let status: LimitStatus
   public let barFraction: Double
-  /// Category rows over their limit, unallocated included.
+  /// Category rows over their limit.
   public let overCount: Int
   public let daysLeft: Int
-  /// Allocations in category order, then the unallocated row.
+  /// Category limits in category order.
   public let rows: [Row]
   public let missing: DashboardMissingRates
 
@@ -276,7 +278,8 @@ public struct DashboardBudget: Sendable {
   public let remainingText: String
   /// "On track" / "1 category over" / "3 categories over".
   public let badgeText: String
-  /// "Budget in PLN, shown in UAH at the rate of 30 Sep 2026"; nil when the currencies match.
+  /// "Limits in PLN, EUR · total in UAH at the latest rate"; nil when every limit is in the
+  /// display currency and nothing is missing.
   public let currencyNote: String?
 
   /// nil when no plan is in effect for `month`.
@@ -288,74 +291,59 @@ public struct DashboardBudget: Sendable {
     guard let plan,
       let status = Calc.budgetStatus(
         month: month, plans: [plan], allocations: allocations, accounts: accounts, categories: categories,
-        txns: txns, converter: converter, refundsReduceSpending: refundsReduceSpending, today: today,
-        calendar: format.calendar)
+        txns: txns, converter: converter, refundsReduceSpending: refundsReduceSpending, currency: displayCurrency,
+        today: today, calendar: format.calendar)
     else { return nil }
 
     var missing = DashboardMissingRates()
     missing.add(status.unconverted)
+    missing.add(status.totalUnconverted)
 
-    // Shown in the display currency at one rate: the latest for the current month, the month's
-    // last day for a closed one. Without that rate everything stays in the plan's currency.
-    let rateDay: Day? = month >= today.yearMonth ? nil : month.lastDay(calendar: format.calendar)
-    let rate: Decimal?
-    if plan.currency == displayCurrency {
-      rate = 1
-    } else if let rateDay {
-      rate = converter.rate(from: plan.currency, to: displayCurrency, on: rateDay)
-    } else {
-      rate = converter.latestRate(from: plan.currency, to: displayCurrency)
-    }
-    let shown = rate == nil ? plan.currency : displayCurrency
-    func show(_ money: Money) -> Money {
-      guard let rate, money.currency != shown else { return money }
-      return Money(money.decimal * rate, shown)
-    }
+    // The total: every limit converted at one rate, the latest for the current month, the
+    // month's last day for a closed one (D30).
     var currencyNote: String?
-    if plan.currency != displayCurrency {
-      if rate == nil {
-        missing.add(MissingRate(from: plan.currency, to: displayCurrency, day: rateDay))
-        currencyNote = "No \(plan.currency.rawValue)→\(displayCurrency.rawValue) rate: amounts in \(plan.currency.rawValue)"
-      } else if let rateDay {
-        currencyNote = "Budget in \(plan.currency.rawValue), shown in \(displayCurrency.rawValue) at the rate of \(format.day(rateDay))"
-      } else {
-        currencyNote = "Budget in \(plan.currency.rawValue), shown in \(displayCurrency.rawValue) at the latest rate"
-      }
+    let foreign = status.limitCurrencies.filter { $0 != displayCurrency }
+    if !status.totalUnconverted.isEmpty {
+      let pairs = status.totalUnconverted.missingRates.map(\.from.rawValue).sorted()
+      currencyNote = "No \(pairs.joined(separator: ", "))→\(displayCurrency.rawValue) rate: those limits are left out of the total"
+    } else if !foreign.isEmpty {
+      let rate =
+        switch status.totalRate {
+        case .latest: "the latest rate"
+        case .day(let day): "the rate of \(format.day(day))"
+        }
+      let currencies = status.limitCurrencies.map(\.rawValue).joined(separator: ", ")
+      currencyNote = "Limits in \(currencies) · total in \(displayCurrency.rawValue) at \(rate)"
     }
 
     let names = Dictionary(categories.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
     func row(_ line: BudgetLine) -> Row {
-      let spent = show(line.spent)
-      let limit = show(line.limit)
       let note =
         line.status == .over
-        ? "Over by \(format.magnitude(show(line.spent - line.limit)))"
-        : "\(format.money(show(line.remaining))) left"
+        ? "Over by \(format.magnitude(line.spent - line.limit))"
+        : "\(format.money(line.remaining)) left"
       return Row(
-        id: line.id, categoryID: line.categoryID,
-        name: line.categoryID.map { names[$0] ?? "Unknown category" } ?? "Unallocated (other categories)",
-        spent: spent, limit: limit, status: line.status,
+        id: line.allocationID, categoryID: line.categoryID, name: names[line.categoryID] ?? "Unknown category",
+        spent: line.spent, limit: line.limit, status: line.status,
         barFraction: barFraction(spent: line.spent, limit: line.limit),
-        amountsText: "\(format.money(spent)) / \(format.money(limit))", noteText: note)
+        amountsText: "\(format.money(line.spent)) / \(format.money(line.limit))", noteText: note)
     }
 
-    let spent = show(status.spent)
-    let limit = show(status.limit)
     let used = status.fractionUsed.map { " · \(format.percent($0)) used" } ?? ""
     let remaining = status.remaining
     let remainingText =
       remaining.minorUnits >= 0
-      ? "\(format.money(show(remaining))) left\(used)"
-      : "Over budget by \(format.magnitude(show(remaining)))\(used)"
+      ? "\(format.money(remaining)) left\(used)"
+      : "Over budget by \(format.magnitude(remaining))\(used)"
     let over = status.overCount
     let badge = over == 0 ? "On track" : over == 1 ? "1 category over" : "\(over) categories over"
 
     return DashboardBudget(
-      month: month, planCurrency: plan.currency, shownCurrency: shown, spent: spent, limit: limit,
-      status: status.status, barFraction: barFraction(spent: status.spent, limit: status.limit), overCount: over,
-      daysLeft: status.daysLeft, rows: status.lines.map(row) + [row(status.unallocated)], missing: missing,
-      spentText: format.money(spent), limitText: "of \(format.money(limit))", remainingText: remainingText,
-      badgeText: badge, currencyNote: currencyNote)
+      month: month, currency: displayCurrency, spent: status.spent, limit: status.limit, status: status.status,
+      barFraction: barFraction(spent: status.spent, limit: status.limit), overCount: over,
+      daysLeft: status.daysLeft, rows: status.lines.map(row), missing: missing,
+      spentText: format.money(status.spent), limitText: "of \(format.money(status.limit))",
+      remainingText: remainingText, badgeText: badge, currencyNote: currencyNote)
   }
 
   static func barFraction(spent: Money, limit: Money) -> Double {

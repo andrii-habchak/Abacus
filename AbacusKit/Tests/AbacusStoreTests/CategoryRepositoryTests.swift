@@ -67,10 +67,16 @@ struct CategoryRepositoryTests {
     try await f.insert(
       F.expense(100, "2026-03-02", 10_00, F.transport),
       lines: [AttachedRecord(txnID: F.id(100), categoryID: F.transport.id, amountMinor: 1_00)])
-    let plan = BudgetPlan(id: F.id(200), effectiveMonth: "2026-01", totalMinor: 1_000_00, currency: .PLN)
+    let plan = BudgetPlan(id: F.id(200), effectiveMonth: "2026-01")
     try await f.budgets.save(plan, allocations: [
-      BudgetAllocation(planID: plan.id, categoryID: F.transport.id, limitMinor: 100_00),
-      BudgetAllocation(planID: plan.id, categoryID: F.fees.id, limitMinor: 50_00),
+      BudgetAllocation(planID: plan.id, categoryID: F.transport.id, limitMinor: 100_00, currency: .PLN),
+      BudgetAllocation(planID: plan.id, categoryID: F.fees.id, limitMinor: 50_00, currency: .PLN),
+    ])
+    // Another plan whose limits are in different currencies: the target keeps its own (D43).
+    let later = BudgetPlan(id: F.id(201), effectiveMonth: "2026-06")
+    try await f.budgets.save(later, allocations: [
+      BudgetAllocation(planID: later.id, categoryID: F.transport.id, limitMinor: 100_00, currency: .EUR),
+      BudgetAllocation(planID: later.id, categoryID: F.fees.id, limitMinor: 50_00, currency: .PLN),
     ])
     let rule = CategoryRule(pattern: "uber", categoryID: F.transport.id)
     try await f.rules.save(rule)
@@ -88,7 +94,9 @@ struct CategoryRepositoryTests {
     let allocations = try #require(try await f.budgets.plan(for: Month(year: 2026, month: 3))).allocations
     #expect(allocations.count == 1)
     #expect(allocations.first?.categoryID == F.fees.id)
-    #expect(allocations.first?.limitMinor == 150_00)
+    #expect(allocations.first?.limit == Money(minorUnits: 150_00, currency: .PLN))
+    let laterAllocations = try #require(try await f.budgets.plan(for: Month(year: 2026, month: 6))).allocations
+    #expect(laterAllocations.map(\.limit) == [Money(minorUnits: 50_00, currency: .PLN)])
     #expect(try await f.rules.rules().map(\.categoryID) == [F.fees.id])
     #expect(try await f.imports.mappings(source: .saldo).map(\.targetID) == [F.fees.id])
   }

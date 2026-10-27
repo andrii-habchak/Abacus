@@ -245,36 +245,54 @@ public struct AttachedRecord: Hashable, Identifiable, Sendable {
 // MARK: - Budget (R-BUD)
 
 /// The monthly budget in effect from `effectiveMonth` until the next plan (R-BUD-3).
+///
+/// Since TA v1.5 (D43) a plan has no total or currency of its own: each allocation carries its
+/// own currency and the budget's total is the sum of the limits in the display currency. The
+/// `totalMinor` / `currency` columns stay in the schema (migrations are append-only and
+/// CloudKit-safe) but nothing reads them any more; new plans write 0 and a limit's currency.
 @Table("budgetPlans")
 public struct BudgetPlan: Hashable, Identifiable, Sendable {
   public let id: UUID
   /// `YYYY-MM` (see `Month`).
   public var effectiveMonth: String
-  public var totalMinor: Int64
-  public var currency: Currency
+  /// Unused since v5 (D43): the plan-level total of v1.0.
+  @Column("totalMinor") public var legacyTotalMinor: Int64
+  /// Unused since v5 (D43): the plan-level currency of v1.0 (the v5 migration copied it to the
+  /// plan's allocations).
+  @Column("currency") public var legacyCurrency: Currency
 
-  public init(id: UUID = UUID(), effectiveMonth: String, totalMinor: Int64, currency: Currency) {
+  public init(
+    id: UUID = UUID(), effectiveMonth: String, legacyTotalMinor: Int64 = 0, legacyCurrency: Currency = .PLN
+  ) {
     self.id = id
     self.effectiveMonth = effectiveMonth
-    self.totalMinor = totalMinor
-    self.currency = currency
+    self.legacyTotalMinor = legacyTotalMinor
+    self.legacyCurrency = legacyCurrency
   }
 }
 
-/// A category's share of a plan's total (R-BUD-1). A parent's limit covers its children.
+/// A category's monthly limit in its own currency (R-BUD-1, D43). A parent's limit covers its
+/// children unless a child has a limit of its own (D27).
 @Table("budgetAllocations")
 public struct BudgetAllocation: Hashable, Identifiable, Sendable {
   public let id: UUID
   public var planID: BudgetPlan.ID
   public var categoryID: Category.ID
   public var limitMinor: Int64
+  /// The limit's currency: the category's spending is converted to it (R-BUD-2).
+  public var currency: Currency
 
-  public init(id: UUID = UUID(), planID: BudgetPlan.ID, categoryID: Category.ID, limitMinor: Int64) {
+  public init(
+    id: UUID = UUID(), planID: BudgetPlan.ID, categoryID: Category.ID, limitMinor: Int64, currency: Currency
+  ) {
     self.id = id
     self.planID = planID
     self.categoryID = categoryID
     self.limitMinor = limitMinor
+    self.currency = currency
   }
+
+  public var limit: Money { Money(minorUnits: limitMinor, currency: currency) }
 }
 
 // MARK: - Exchange rates (R-FX)

@@ -141,13 +141,14 @@ public enum PreviewData {
 
   // MARK: Budget
 
-  public static let budgetPlan = BudgetPlan(id: id(601), effectiveMonth: "2026-01", totalMinor: 9_000_00, currency: .PLN)
+  /// Limits in their own currencies (D43): Health in EUR, the rest in PLN.
+  public static let budgetPlan = BudgetPlan(id: id(601), effectiveMonth: "2026-01", legacyCurrency: .PLN)
   public static let budgetAllocations: [BudgetAllocation] = [
-    BudgetAllocation(id: id(611), planID: id(601), categoryID: id(205), limitMinor: 4_000_00),
-    BudgetAllocation(id: id(612), planID: id(601), categoryID: id(202), limitMinor: 1_800_00),
-    BudgetAllocation(id: id(613), planID: id(601), categoryID: id(203), limitMinor: 600_00),
-    BudgetAllocation(id: id(614), planID: id(601), categoryID: id(206), limitMinor: 400_00),
-    BudgetAllocation(id: id(615), planID: id(601), categoryID: id(209), limitMinor: 500_00),
+    BudgetAllocation(id: id(611), planID: id(601), categoryID: id(205), limitMinor: 4_000_00, currency: .PLN),
+    BudgetAllocation(id: id(612), planID: id(601), categoryID: id(202), limitMinor: 1_800_00, currency: .PLN),
+    BudgetAllocation(id: id(613), planID: id(601), categoryID: id(203), limitMinor: 600_00, currency: .PLN),
+    BudgetAllocation(id: id(614), planID: id(601), categoryID: id(206), limitMinor: 400_00, currency: .PLN),
+    BudgetAllocation(id: id(615), planID: id(601), categoryID: id(209), limitMinor: 110_00, currency: .EUR),
   ]
 
   // MARK: Rates (UAH per unit, NBU)

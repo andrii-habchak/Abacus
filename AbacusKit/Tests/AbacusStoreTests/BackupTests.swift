@@ -33,8 +33,9 @@ struct BackupTests {
       F.expense(100, "2026-03-02", 10_00, F.groceries, event: F.trip),
       lines: [AttachedRecord(txnID: F.id(100), categoryID: F.fees.id, amountMinor: 1_00)])
     try await f.imports.commit(ImportStoreTests.saldoCommit())
-    let plan = BudgetPlan(effectiveMonth: "2026-01", totalMinor: 1_000_00, currency: .PLN)
-    try await f.budgets.save(plan, allocations: [BudgetAllocation(planID: plan.id, categoryID: F.food.id, limitMinor: 500_00)])
+    let plan = BudgetPlan(effectiveMonth: "2026-01")
+    try await f.budgets.save(
+      plan, allocations: [BudgetAllocation(planID: plan.id, categoryID: F.food.id, limitMinor: 500_00, currency: .EUR)])
     try await f.rates.save([FXRate(day: "2026-03-02", base: .EUR, quote: .PLN, rateE8: 425_000_000, provider: "NBU")])
     try await f.rates.save(FXOverride(base: .EUR, quote: .PLN, rateE8: 430_000_000, fromDay: "2026-03-01"))
     try await f.settings.set(.displayCurrency, "PLN")
@@ -67,6 +68,23 @@ struct BackupTests {
     #expect(try await target.settings.displayCurrency() == .PLN)
     #expect(try await target.settings.refundsReduceSpending() == false)
     #expect(try await target.imports.existingFingerprints(["saldo:1"]).count == 1)
+    #expect(try await target.budgets.plan(for: Month(year: 2026, month: 3))?.allocations.map(\.limit) == [
+      Money(minorUnits: 500_00, currency: .EUR)
+    ])
+  }
+
+  @Test("R-SET-2, D43: a backup from before per-limit currencies restores with each limit in its plan's currency")
+  func restorePreCurrencyBackup() async throws {
+    let url = Self.temporaryURL("v1.0.abacus")
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    try BudgetRepositoryTests.preCurrencyDatabase(at: url)
+    let target = try F()
+    try await SQLiteBackup(database: target.database).restore(from: url)
+    #expect(try await target.budgets.plan(for: Month(year: 2026, month: 2))?.allocations.map(\.limit) == [
+      Money(minorUnits: 400_00, currency: .EUR)
+    ])
+    #expect(try await target.budgets.plan(for: Month(year: 2026, month: 9))?.allocations.map(\.currency) == [.PLN, .PLN])
   }
 
   @Test("R-SET-2: a file that is not a backup is rejected and nothing changes")

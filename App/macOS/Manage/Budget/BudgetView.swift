@@ -2,9 +2,10 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// The Budget screen (approved prototype group 4, R-MGMT-3, R-BUD-1…3): total + currency,
-/// "Applies from <month>", per-category limits with share bars, the unallocated row (red when
-/// the limits exceed the total), add / remove limits; "Save budget" in the toolbar.
+/// The Budget screen (approved prototype group 4 as changed by TA v1.5, R-MGMT-3, R-BUD-1…3,
+/// D43): "Applies from <month>", per-category limits each with its own currency and a share bar,
+/// the total row (the limits summed in the display currency), add / remove limits; "Save budget"
+/// in the toolbar.
 public struct BudgetView: View {
   @State private var model: BudgetEditorModel
 
@@ -44,22 +45,6 @@ struct BudgetEditorContent: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .bottom, spacing: 16) {
-        ManageField("Total monthly budget") {
-          HStack(spacing: 6) {
-            TextField("Total monthly budget", text: $model.total)
-              .labelsHidden()
-              .textFieldStyle(.roundedBorder)
-              .font(.system(size: 15, weight: .semibold))
-              .multilineTextAlignment(.trailing)
-              .monospacedDigit()
-              .frame(width: 130)
-            Picker("Budget currency", selection: $model.currency) {
-              ForEach(Currency.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .labelsHidden()
-            .fixedSize()
-          }
-        }
         ManageField("Applies from") {
           Picker("Applies from", selection: Binding(get: { model.appliesFrom }, set: { month in Task { await model.setAppliesFrom(month) } })) {
             ForEach(model.monthOptions, id: \.self) { Text(model.monthTitle($0)).tag($0) }
@@ -106,17 +91,18 @@ struct BudgetEditorContent: View {
   }
 }
 
-/// Category | Monthly limit | Share | ✕, then the Unallocated row (R-BUD-1).
+/// Category | Monthly limit | Currency | Share | ✕, then the total row (R-BUD-1, D43).
 struct BudgetLimitsTable: View {
   let model: BudgetEditorModel
 
-  static let columns: [ManageColumns.Column] = [.flex(2), .fixed(140), .flex(1), .fixed(28)]
+  static let columns: [ManageColumns.Column] = [.flex(2), .fixed(120), .fixed(76), .flex(1), .fixed(28)]
 
   var body: some View {
     VStack(spacing: 0) {
       ManageColumns(columns: Self.columns) {
         Text("Category")
         Text("Monthly limit").frame(maxWidth: .infinity, alignment: .trailing)
+        Text("Currency")
         Text("Share")
         Color.clear.frame(height: 1)
       }
@@ -146,6 +132,14 @@ struct BudgetLimitsTable: View {
           .monospacedDigit()
           .overlay(
             RoundedRectangle(cornerRadius: 5).strokeBorder(ManagePalette.negative).opacity(row.isValid ? 0 : 1))
+          Picker(
+            "Currency for \(row.name)",
+            selection: Binding(get: { model.currency(row.categoryID) }, set: { model.setCurrency($0, for: row.categoryID) })
+          ) {
+            ForEach(Currency.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+          }
+          .labelsHidden()
+          .fixedSize()
           ManageBar(fraction: row.share, color: ManagePalette.hex(row.colorHex))
           Button {
             model.removeLimit(row.categoryID)
@@ -163,15 +157,16 @@ struct BudgetLimitsTable: View {
 
       Divider()
       ManageColumns(columns: Self.columns) {
-        Text("Unallocated (other categories)").foregroundStyle(.secondary)
-        Text(model.unallocatedText)
+        Text("Total in \(model.displayCurrency.rawValue)").fontWeight(.medium)
+        Text(model.totalText)
           .fontWeight(.semibold)
           .monospacedDigit()
-          .foregroundStyle(model.isOverAllocated ? ManagePalette.destructive : Color.primary)
           .frame(maxWidth: .infinity, alignment: .trailing)
-        Text(model.unallocatedNote)
+        Color.clear.frame(height: 1)
+        Text(model.totalNote)
           .font(.system(size: 12))
-          .foregroundStyle(model.isOverAllocated ? ManagePalette.destructive : Color.secondary)
+          .foregroundStyle(model.currenciesWithoutRate.isEmpty ? Color.secondary : ManagePalette.negative)
+          .fixedSize(horizontal: false, vertical: true)
         Color.clear.frame(height: 1)
       }
       .padding(.vertical, 10)

@@ -109,7 +109,9 @@ public struct SQLiteCategoryRepository: CategoryRepository {
       .where { $0.kind.eq(MappingKind.category) && $0.targetID.eq(id) }
       .update { $0.targetID = target }
       .execute(db)
-    // A plan holds at most one allocation per category: add the limits up.
+    // A plan holds at most one allocation per category: add the limits up when they share a
+    // currency. In different currencies the target keeps its own limit (there is no rate here
+    // to add them up with; D43).
     let moving = try BudgetAllocation.where { $0.categoryID.eq(id) }.fetchAll(db)
     for allocation in moving {
       let planID = allocation.planID
@@ -117,8 +119,10 @@ public struct SQLiteCategoryRepository: CategoryRepository {
         .where({ $0.planID.eq(planID) && $0.categoryID.eq(target) })
         .fetchOne(db)
       {
-        let limit = existing.limitMinor + allocation.limitMinor
-        try BudgetAllocation.find(existing.id).update { $0.limitMinor = limit }.execute(db)
+        if existing.currency == allocation.currency {
+          let limit = existing.limitMinor + allocation.limitMinor
+          try BudgetAllocation.find(existing.id).update { $0.limitMinor = limit }.execute(db)
+        }
         try BudgetAllocation.find(allocation.id).delete().execute(db)
       } else {
         try BudgetAllocation.find(allocation.id).update { $0.categoryID = #bind(target) }.execute(db)

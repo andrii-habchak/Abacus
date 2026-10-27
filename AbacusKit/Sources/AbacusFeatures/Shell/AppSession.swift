@@ -208,6 +208,7 @@ public final class AppSession {
     editorDependencies.converter = snapshot.table
     if dashboard.phase == .loaded { await dashboard.refreshRates() }
     if events.phase == .loaded { await events.refreshRates() }
+    if budget.phase == .loaded { await budget.refreshRates() }
     await app.rates.load()
   }
 
