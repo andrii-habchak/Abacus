@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-10-21 (orchestrator)_
+_Last updated: 2026-10-27 (orchestrator)_
 
 ## Now
 
@@ -8,11 +8,10 @@ _Updated 2026-10-22 (orchestrator)._ **v1 is feature-complete and merged** (P0, 
 B1–B6, C1, C2, R1). 534 tests pass locally (incl. real-data tests); the app builds; GitHub CI
 is not used (D37). The owner's real Saldo history and PKO statement are in the app database.
 
-**Left before tagging v1.0.0** (see "Open items" below):
-1. Import screen still makes the window ~1,018 pt tall instead of 860 pt (partial fix in 2cf555b).
-2. Rebuild the DMG on the final `main` with `scripts/build-dmg.sh`, check it opens, then tag
-   `v1.0.0` (update the CHANGELOG date if not 2026-10-22).
-3. Owner review of the app on real data, and of the C2 interpretations (D40).
+_Updated 2026-10-27:_ C3 merged — the Import section no longer grows the window (root cause:
+a vertical `fixedSize` on the choose-file paragraph; see `docs/status/C3.md`). Every section now
+opens at the same default window height. Remaining: the v1.0.0 DMG and tag, then owner review of
+the app on real data and of the C2 interpretations (D40).
 
 ## Done
 
@@ -47,6 +46,7 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 | C1 List filters | background agent | `wp/C1-filters` | **merged** 2026-10-22 |
 | C2 Settings, data, defaults | background agent | `wp/C2-settings` | **merged** 2026-10-22 |
 | R1 Release prep | background agent | `wp/R1-release` | **merged** 2026-10-22 (icon, 1.0.0, `scripts/build-dmg.sh`, README, CHANGELOG) |
+| C3 Import window height | background agent | `wp/C3-import-height` | **merged** 2026-10-27 |
 
 ## Contract-change requests (orchestrator queue)
 
@@ -122,10 +122,9 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 
 ## Open items (2026-10-22)
 
-- **Import window height**: on a sample database the Import section grew the window to 2,251 pt;
-  after 2cf555b it is ~1,018 pt vs the 860 pt default. Find the view whose ideal height leaks
-  (step bar? `ImportReviewStep`/`ImportRowsTab` ScrollViews?) — reproduce with the in-app
-  snapshot on a temporary database (see "How to check the UI safely" below).
+- ~~Import window height~~ → fixed in C3 (2026-10-27). Note: the in-app snapshot of the
+  default window is 1,018 pt on the owner's 1,117 pt-high screen for every section, not the
+  860 pt in `.defaultSize`; that is the window default, not an Import leak.
 - **Release**: `scripts/build-dmg.sh` on final `main`; `hdiutil verify`; tag `v1.0.0`; push tag.
 - **Deferred, small**: an open editor doesn't pick up rates fetched by other screens until its own
   request returns (C2); per-protocol count/balance queries for very large data (B5/C1 notes).
@@ -136,7 +135,8 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 
 The app reads launch options before opening a database (C2): `-AbacusDatabasePath <tmp file>`,
 `-AbacusLoadSampleData YES`, `-AbacusPreviewData YES`, `-AbacusSection <section>`,
-`-AbacusOpenSettings general|rates|data`, `-AbacusDark YES`, snapshot `-AbacusSnapshotDir <dir>
+`-AbacusOpenSettings general|rates|data`, `-AbacusDark YES`, `-AbacusImportFile <csv>` (DEBUG:
+opens Import's review step on that file), snapshot `-AbacusSnapshotDir <dir>
 -AbacusSnapshotName <name> [-AbacusSnapshotDelay <s>]` (`App/macOS/Shell/WindowSnapshot.swift`).
 Also set `CFFIXED_USER_HOME=<scratch dir>` so saved window sizes and preferences don't touch the
 owner's. The terminal has no Screen Recording permission; use the in-app snapshot. Never take

@@ -115,6 +115,8 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   default categories on first launch, editor fetches rates for old days.
 - [x] **R1 Release prep** (merged 2026-10-22; DMG build + tag still open) — app icon, version 1.0.0, `scripts/build-dmg.sh`, README with
   sample-data screenshots, CHANGELOG. Orchestrator then builds the DMG and tags `v1.0.0`.
+- [x] **C3 Import window height** (merged 2026-10-27) — the choose-file paragraph's vertical
+  `fixedSize` set a 2,251 pt minimum window height; removed. DEBUG `-AbacusImportFile <csv>`.
 
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
