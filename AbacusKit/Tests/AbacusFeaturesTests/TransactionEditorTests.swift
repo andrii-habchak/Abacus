@@ -437,6 +437,26 @@ struct EditorSuggestionTests {
     #expect(model.categoryID == salary)
   }
 
+  @Test("R-EDIT-3, D44: amount and exact-match conditions apply; transfer rules never suggest")
+  func saldoLikeConditions() async {
+    let rules = [
+      CategoryRule(pattern: "shop", action: .transfer, transferAccountID: PreviewData.loanFromFriend.id, position: 0),
+      CategoryRule(pattern: "shop", amountComparison: .biggerThan, amountMinor: 100_00, categoryID: fees, position: 1),
+      CategoryRule(pattern: "corner shop", matchKind: .exactly, categoryID: taxi, position: 2),
+    ]
+    let h = await EditorHarness.loaded(rules: rules)
+    let model = h.model
+    model.payee = "Corner  SHOP"
+    #expect(model.categoryID == taxi)
+    model.amountText = "150"
+    #expect(model.categoryID == fees)
+    model.amountText = "50"
+    #expect(model.categoryID == taxi)
+    model.payee = "Corner shop 12"
+    #expect(model.suggestion == nil)
+    #expect(model.type == .expense)
+  }
+
   @Test("R-IMP-8: saving with a suggested category counts a rule hit")
   func recordsHit() async {
     let h = await EditorHarness.loaded()

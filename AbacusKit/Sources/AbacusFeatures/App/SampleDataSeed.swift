@@ -28,6 +28,11 @@ extension SampleData {
       allocation.categoryID = mapped(allocation.categoryID) ?? allocation.categoryID
       return allocation
     }
+    let rules = ManageSample.rules.map { rule in
+      var rule = rule
+      rule.categoryID = mapped(rule.categoryID)
+      return rule
+    }
     try db.seed {
       for account in PreviewData.accounts { account }
       for category in categories { category }
@@ -36,6 +41,7 @@ extension SampleData {
       for record in records { record }
       PreviewData.budgetPlan
       for allocation in allocations { allocation }
+      for rule in rules { rule }
     }
   }
 

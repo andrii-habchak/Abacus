@@ -455,7 +455,7 @@ public final class TransactionEditorModel {
   /// The matching rule while the user has not picked a category.
   public var suggestion: EditorReference.Suggestion? {
     guard !isTransfer, !draft.categoryChosen else { return nil }
-    return reference.suggestion(for: draft.payee, accountID: draft.accountID, kind: categoryKind)
+    return reference.suggestion(for: draft.payee, accountID: draft.accountID, kind: categoryKind, amountMinor: chargedMinor)
   }
 
   /// "Suggested by rule “lidl” → Groceries".

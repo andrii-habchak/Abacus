@@ -288,18 +288,138 @@ struct ManageRulesTests {
     #expect(model.match?.pattern == "orlen")
   }
 
-  @Test("R-MGMT-6: rows show account, category path, origin and hit count in evaluation order")
+  @Test("R-MGMT-6, D44: rows show each rule in words, origin and hit count in evaluation order")
   func rows() async {
     let model = await model()
-    #expect(model.rows.map(\.pattern) == ["biedronka", "lidl", "bolt.eu", "orlen", "orange", "farmacja"])
+    #expect(model.rows.map(\.pattern) == [
+      "biedronka", "lidl", "bolt.eu", "orlen", "orange", "farmacja", "zalando", "pizzeria napoli", "friend",
+    ])
     let orlen = model.rows[3]
-    #expect(orlen.account == "PKO Credit Card")
-    #expect(orlen.category == "Transport › Fuel")
+    #expect(orlen.summary == "Description contains “orlen” on PKO Credit Card → Transport › Fuel")
     #expect(orlen.origin == "Manual")
     #expect(orlen.hits == 9)
-    #expect(model.rows[0].account == "Any account")
+    #expect(model.rows[0].summary == "Description contains “biedronka” → Food › Groceries")
     #expect(model.rows[0].origin == "Learned from an import")
-    #expect(model.rows[5].category == "Health")
+    #expect(model.rows[5].action == "Health")
+    #expect(model.rows[6].summary == "Description contains “zalando” and amount bigger than 100.00 → Clothing")
+    #expect(model.rows[7].condition == "Description is exactly “pizzeria napoli” on Monobank Black")
+    #expect(model.rows[8].summary == "Description contains “friend” → Transfer to/from Loan from friend")
+  }
+
+  @Test("R-IMP-8, D44: the tester uses the amount and shows transfer actions")
+  func testerAmountAndTransfer() async {
+    let model = await model(probe: "ZALANDO SE")
+    #expect(model.match == nil)
+    model.probeAmountText = "120"
+    #expect(model.match?.pattern == "zalando")
+    model.probeAmountText = "80"
+    #expect(model.match == nil)
+    model.probe = "Pizzeria  Napoli"
+    model.probeAmountText = ""
+    #expect(model.match?.pattern == "pizzeria napoli")
+    model.probe = "Pizzeria Napoli Lyon"
+    #expect(model.match == nil)
+    model.probe = "Payback to a friend"
+    #expect(model.probeResult == "Matches “friend” → Transfer to/from Loan from friend")
+    model.probeAccountID = PreviewData.loanFromFriend.id
+    #expect(model.match == nil)
+  }
+
+  @Test("R-MGMT-6, D44: the editor adds AND conditions, validates and saves a transfer rule")
+  func editorConditionsAndTransfer() async throws {
+    let model = await model()
+    model.newRule()
+    model.editor?.pattern = "Rent"
+    model.editor?.matchKind = .exactly
+    model.editor?.hasAmountCondition = true
+    #expect(model.editorValidation == "Enter the amount.")
+    model.editor?.amountText = "1 000,50"
+    model.editor?.amountComparison = .smallerThan
+    model.editor?.hasAccountCondition = true
+    #expect(model.editorValidation == "Choose the account.")
+    model.editor?.accountID = PreviewData.pkoPersonal.id
+    #expect(model.editor?.canAddCondition == false)
+    model.editor?.action = .transfer
+    #expect(model.editorValidation == "Choose the account to transfer to or from.")
+    model.editor?.transferAccountID = PreviewData.pkoPersonal.id
+    #expect(model.editorValidation == "The transfer account must differ from the account in the condition.")
+    model.editor?.transferAccountID = PreviewData.cashPLN.id
+    #expect(model.editorValidation == nil)
+    await model.saveEditor()
+    let saved = try #require(model.rules.last)
+    #expect(saved.matchKind == .exactly)
+    #expect(saved.amountComparison == .smallerThan)
+    #expect(saved.amountMinor == 1_000_50)
+    #expect(saved.accountID == PreviewData.pkoPersonal.id)
+    #expect(saved.action == .transfer)
+    #expect(saved.categoryID == nil)
+    #expect(saved.transferAccountID == PreviewData.cashPLN.id)
+    #expect(model.rows.last?.summary == "Description is exactly “Rent” and amount smaller than 1000.50 on PKO Personal → Transfer to/from Cash PLN")
+
+    // Editing it back to a category rule drops the transfer account; removing a condition drops it.
+    model.edit(saved.id)
+    #expect(model.editor?.amountText == "1000.50")
+    model.editor?.hasAmountCondition = false
+    model.editor?.action = .category
+    model.editor?.categoryID = PreviewData.id(205)
+    await model.saveEditor()
+    let edited = try #require(model.rules.first { $0.id == saved.id })
+    #expect(edited.amountComparison == nil && edited.amountMinor == nil)
+    #expect(edited.transferAccountID == nil)
+    #expect(edited.categoryID == PreviewData.id(205))
+  }
+
+  @Test("R-MGMT-6: Save & apply shows how many transactions change, applies after confirmation and can be undone")
+  func applyToExisting() async throws {
+    let model = await model()
+    model.newRule()
+    model.editor?.pattern = "auchan"
+    model.editor?.action = .transfer
+    model.editor?.transferAccountID = PreviewData.cashPLN.id
+    model.editor?.updateExisting = true
+    await model.loadEditorTransactions()
+    #expect(model.editorChangesText == "1 transaction will change")
+    await model.saveEditor()
+    let confirmation = try #require(model.confirmation)
+    #expect(confirmation.title == "Update 1 transaction?")
+    #expect(model.editor != nil)
+    // Nothing is written before the confirmation.
+    #expect(try await store.txnRepository.transaction(PreviewData.id(416))?.txn.type == .expense)
+
+    await model.confirmApply()
+    #expect(model.editor == nil)
+    let auchan = try #require(try await store.txnRepository.transaction(PreviewData.id(416))?.txn)
+    #expect(auchan.type == .transfer)
+    #expect(auchan.accountID == PreviewData.pkoPersonal.id)
+    #expect(auchan.toAccountID == PreviewData.cashPLN.id)
+    #expect(auchan.toAmountMinor == 142_30)
+    #expect(auchan.categoryID == nil)
+    #expect(model.rules.last?.pattern == "auchan")
+    #expect(model.lastApply?.message == "1 transaction updated by the rule.")
+
+    await model.undoLastApply()
+    let restored = try #require(try await store.txnRepository.transaction(PreviewData.id(416))?.txn)
+    #expect(restored.type == .expense)
+    #expect(restored.categoryID == PreviewData.id(202))
+    #expect(!model.rules.contains { $0.pattern == "auchan" })
+    #expect(model.lastApply == nil)
+  }
+
+  @Test("R-MGMT-6: a category rule applied to existing transactions leaves transfers alone")
+  func applyCategoryKeepsTransfers() async throws {
+    let model = await model()
+    model.newRule()
+    model.editor?.pattern = "a"
+    model.editor?.categoryID = PreviewData.id(213)
+    model.editor?.updateExisting = true
+    await model.loadEditorTransactions()
+    let changes = try #require(model.editorChanges)
+    #expect(!changes.isEmpty)
+    #expect(changes.allSatisfy { $0.type == .expense && $0.categoryID == PreviewData.id(213) })
+    // "ATM withdrawal", "Currency exchange" and "To EUR card" are transfers: untouched.
+    #expect(!changes.contains { [PreviewData.id(403), PreviewData.id(406), PreviewData.id(415)].contains($0.id) })
+    model.cancelEditor()
+    #expect(model.editor == nil && model.confirmation == nil)
   }
 
   @Test("R-MGMT-6: dragging a rule changes the order and so which rule wins")
@@ -317,6 +437,8 @@ struct ManageRulesTests {
     model.newRule()
     #expect(model.editor?.pattern == "spotify ab")
     #expect(model.editorValidation == "Choose a category.")
+    model.editor?.pattern = " "
+    #expect(model.editorValidation == "Enter the description text.")
     model.editor?.pattern = "spotify"
     model.editor?.categoryID = PreviewData.id(211)
     await model.saveEditor()
@@ -327,10 +449,11 @@ struct ManageRulesTests {
     #expect(model.probeResult == "Matches “spotify” → Bills › Mobile")
 
     model.edit(created.id)
+    model.editor?.hasAccountCondition = true
     model.editor?.accountID = PreviewData.revolutEUR.id
     await model.saveEditor()
     #expect(model.rules.first { $0.id == created.id }?.accountID == PreviewData.revolutEUR.id)
-    #expect(model.rows.last?.account == "Revolut EUR")
+    #expect(model.rows.last?.condition == "Description contains “spotify” on Revolut EUR")
 
     model.requestDelete(created.id)
     #expect(model.dialog?.title == "Delete the rule “spotify”?")

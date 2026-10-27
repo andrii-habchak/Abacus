@@ -192,6 +192,9 @@ struct FakeRules: RuleRepository {
       db.rules.append(rule)
     }
   }
+  func save(_ rule: CategoryRule?, updating txns: [Txn]) async throws {
+    if let rule { try await save(rule) }
+  }
   func delete(_ id: CategoryRule.ID) async throws {}
   func recordHit(_ id: CategoryRule.ID) async throws {}
 }

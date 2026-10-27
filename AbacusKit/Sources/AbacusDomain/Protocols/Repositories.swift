@@ -118,6 +118,11 @@ public protocol EventRepository: Sendable {
 public protocol RuleRepository: Sendable {
   func rules() async throws -> [CategoryRule]
   func save(_ rule: CategoryRule) async throws
+  /// Saves the rule and replaces the given existing transactions (the rule applied to them,
+  /// "Update existing transactions", R-MGMT-6) in one database transaction; attached records
+  /// are kept. Throws `notFound` (and writes nothing) when one of them no longer exists.
+  /// `rule == nil` only replaces the transactions (undo).
+  func save(_ rule: CategoryRule?, updating txns: [Txn]) async throws
   func delete(_ id: CategoryRule.ID) async throws
   func recordHit(_ id: CategoryRule.ID) async throws
 }

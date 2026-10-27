@@ -120,13 +120,17 @@ public struct EditorReference: Sendable {
 
   // MARK: Rules and events
 
-  /// R-EDIT-3 / R-IMP-8: the first enabled rule whose pattern is contained in the description
-  /// (case-insensitive) and whose account, when set, is `accountID`; its category must exist,
-  /// be active and of `kind`.
-  public func suggestion(for description: String, accountID: Account.ID?, kind: CategoryKind) -> Suggestion? {
+  /// R-EDIT-3 / R-IMP-8: the first enabled *category* rule whose conditions hold — description
+  /// contains / exactly matches, amount (in the account's currency; nil = not typed yet, so
+  /// amount rules do not match) and account; its category must exist, be active and of `kind`.
+  /// Transfer rules are skipped here: the editor only suggests a category and never changes the
+  /// transaction type on its own (they apply on import and "Update existing transactions").
+  public func suggestion(
+    for description: String, accountID: Account.ID?, kind: CategoryKind, amountMinor: Int64? = nil
+  ) -> Suggestion? {
     // Same matching as imports and the rules tester (AbacusImport.RuleMatcher).
     let matcher = RuleMatcher(rules: rules, categories: Array(categoriesByID.values))
-    guard let rule = matcher.match(description: description, accountID: accountID, kind: kind),
+    guard let rule = matcher.match(description: description, accountID: accountID, kind: kind, amountMinor: amountMinor),
       let category = category(rule.categoryID)
     else { return nil }
     return Suggestion(rule: rule, category: category)

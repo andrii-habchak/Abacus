@@ -96,7 +96,7 @@ public final class ManagePreviewStore: Sendable {
           throw RepositoryError.accountHasTransactions
         }
         state.accounts.removeAll { $0.id == id }
-        state.rules.removeAll { $0.accountID == id }
+        state.rules.removeAll { $0.accountID == id || $0.transferAccountID == id }
       }
     }
   }
@@ -305,6 +305,22 @@ public final class ManagePreviewStore: Sendable {
 
     public func save(_ rule: CategoryRule) async throws {
       store.state.withLock { state in
+        if let index = state.rules.firstIndex(where: { $0.id == rule.id }) {
+          state.rules[index] = rule
+        } else {
+          state.rules.append(rule)
+        }
+      }
+    }
+
+    public func save(_ rule: CategoryRule?, updating txns: [Txn]) async throws {
+      try store.state.withLock { state in
+        let indices = try txns.map { txn in
+          guard let index = state.txns.firstIndex(where: { $0.txn.id == txn.id }) else { throw RepositoryError.notFound }
+          return index
+        }
+        for (index, txn) in zip(indices, txns) { state.txns[index].txn = txn }
+        guard let rule else { return }
         if let index = state.rules.firstIndex(where: { $0.id == rule.id }) {
           state.rules[index] = rule
         } else {
