@@ -359,7 +359,7 @@ public struct DashboardBudget: Sendable {
 public struct DashboardExpenses: Sendable {
   public struct Slice: Hashable, Sendable, Identifiable {
     public let id: CategoryKey
-    /// nil for "Uncategorized" (drills down to expenses without a category).
+    /// nil for "Uncategorised" (drills down to expenses without a category).
     public let categoryID: AbacusDomain.Category.ID?
     public let name: String
     /// "#RRGGBB".
@@ -373,7 +373,7 @@ public struct DashboardExpenses: Sendable {
     /// Subcategories with spending, largest first (R-HOME-3 "expandable to subcategories").
     public let children: [Slice]
 
-    /// Picking it opens Transactions: a category or "Uncategorized", not "Refunds".
+    /// Picking it opens Transactions: a category or "Uncategorised", not "Refunds".
     public var drillsDown: Bool {
       if case .refunds = id { false } else { true }
     }
@@ -390,11 +390,13 @@ public struct DashboardExpenses: Sendable {
 
   public var isEmpty: Bool { slices.isEmpty }
 
-  public static let uncategorizedColor = "#9A9AA0"
+  /// "Refunds" and a category without a valid colour: the neutral grey of every screen.
+  public static let neutralColor = "#8E8E93"
 
   static func make(
     month: Month, accounts: [Account], categories: [AbacusDomain.Category], txns: [TxnWithLines],
-    currency: Currency, converter: any CurrencyConverter, refundsReduceSpending: Bool, format: DashboardFormat
+    currency: Currency, converter: any CurrencyConverter, refundsReduceSpending: Bool, format: DashboardFormat,
+    uncategorisedColor: String = Uncategorised.defaultColorHex
   ) -> DashboardExpenses {
     let breakdown = Calc.expensesByCategory(
       month: month, accounts: accounts, categories: categories, txns: txns, currency: currency,
@@ -403,11 +405,16 @@ public struct DashboardExpenses: Sendable {
     func slice(_ item: CategoryTotal, parentColor: String?) -> Slice {
       let category: AbacusDomain.Category? =
         if case .category(let id) = item.key { tree.category(id) } else { nil }
-      let color = category?.colorHex ?? parentColor ?? uncategorizedColor
+      // The same colour the Categories page shows (R-MGMT-7): the category's own, a child
+      // without one takes its parent's; no category is the built-in Uncategorised (D47).
+      let color =
+        if case .uncategorized = item.key { uncategorisedColor } else {
+          ColorPalette.normalized(category?.colorHex) ?? parentColor ?? neutralColor
+        }
       let name =
         switch item.key {
         case .category: category?.name ?? "Unknown category"
-        case .uncategorized: "Uncategorized"
+        case .uncategorized: Uncategorised.title
         case .refunds: "Refunds"
         }
       return Slice(

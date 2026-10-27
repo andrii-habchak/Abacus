@@ -57,6 +57,13 @@ public final class AppSession {
     self.database = database
     self.refresher = refresher
     app.data.onRestore = { [weak self] in await self?.dataChanged() }
+    // "New transaction" on the Categories page starts with the selected category (R-MGMT-8).
+    app.newTransactionCategory = { [weak self] in
+      guard let self, self.app.section == .categories, let category = self.categories.selectedCategory,
+        !category.isArchived
+      else { return nil }
+      return category.id
+    }
     // A category, account or event edited (colour, name, archive): the list and the dashboard
     // follow at once (R-MGMT-7), without waiting for this screen.
     let referenceChanged: @MainActor () async -> Void = { [weak self] in
@@ -103,7 +110,8 @@ public final class AppSession {
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), converter: RateTable(),
-      calendar: calendar, today: { Day(now(), calendar: calendar) })
+      calendar: calendar, today: { Day(now(), calendar: calendar) },
+      settings: SQLiteSettingsRepository(database: database))
     var editor = TransactionEditorDependencies(
       transactions: SQLiteTxnRepository(database: database, calendar: calendar),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),

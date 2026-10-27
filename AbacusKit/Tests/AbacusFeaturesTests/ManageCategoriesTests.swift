@@ -66,13 +66,13 @@ struct ManageCategoriesTests {
     #expect(pets.colorHex == ManageText.swatches[3])
     #expect(model.rows.last?.name == "Pets")
 
+    // R-MGMT-8: only "New category"; a subcategory takes a parent in the inspector.
     model.select(transport)
-    model.newSubcategory()
-    #expect(model.inspectorTitle == "New subcategory")
-    // R-MGMT-7: a random palette colour apart from the parent's.
+    model.newCategory()
+    #expect(model.inspectorTitle == "New category")
     let picked = try #require(model.draft?.colorHex)
     #expect(ColorPalette.colors.contains(picked))
-    #expect(picked != model.category(transport)?.colorHex)
+    model.draft?.parentID = transport
     model.draft?.name = "Parking"
     await model.save()
     let parking = try #require(model.categories.first { $0.name == "Parking" })
@@ -93,24 +93,19 @@ struct ManageCategoriesTests {
     #expect(!model.canChangeParent)
   }
 
-  @Test("R-MGMT-2: dragging a parent moves it with its children")
+  @Test("R-MGMT-2, R-MGMT-8: dragging a parent between rows moves it with its children")
   func reorderParent() async {
     let model = await model()
-    let rows = model.rows
-    let transportIndex = rows.firstIndex { $0.id == transport }!
-    // Drop Transport at the very top.
-    await model.move(fromOffsets: [transportIndex], toOffset: 0)
+    // Drop Transport above Food (the very top).
+    await model.drop(transport, on: food, position: .before)
     #expect(Array(model.rows.prefix(5).map(\.name)) == ["Transport", "Taxi", "Fuel", "Food", "Groceries"])
   }
 
-  @Test("R-MGMT-2: dragging a subcategory under another parent moves it there")
+  @Test("R-MGMT-2, R-MGMT-8: dragging a subcategory next to another parent's subcategory moves it there")
   func reorderChild() async throws {
     let model = await model()
-    let rows = model.rows
-    let taxiIndex = rows.firstIndex { $0.id == taxi }!
-    let groceriesIndex = rows.firstIndex { $0.id == groceries }!
     // Drop Taxi right below Groceries.
-    await model.move(fromOffsets: [taxiIndex], toOffset: groceriesIndex + 1)
+    await model.drop(taxi, on: groceries, position: .after)
     #expect(Array(model.rows.prefix(4).map(\.name)) == ["Food", "Groceries", "Taxi", "Eating out"])
     #expect(model.category(taxi)?.parentID == food)
     let saved = try await store.categoryRepository.categories(kind: .expense, includeArchived: true)

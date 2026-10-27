@@ -33,6 +33,8 @@ public final class TransactionsViewModel {
   @ObservationIgnored private let accounts: any AccountRepository
   @ObservationIgnored private let categories: any CategoryRepository
   @ObservationIgnored private let events: any EventRepository
+  /// Where the built-in "Uncategorised" colour is read (D47); nil uses the default.
+  @ObservationIgnored private let settings: (any SettingsRepository)?
   @ObservationIgnored private let today: @Sendable () -> Day
   @ObservationIgnored private let calendar: Calendar
   @ObservationIgnored private var generation = 0
@@ -42,8 +44,10 @@ public final class TransactionsViewModel {
     categories: any CategoryRepository, events: any EventRepository,
     converter: any CurrencyConverter, displayCurrency: Currency = .UAH,
     refundsReduceSpending: Bool = false, filters: TransactionFilters = .default,
-    calendar: Calendar = .current, today: @escaping @Sendable () -> Day = { Day(Date()) }
+    calendar: Calendar = .current, today: @escaping @Sendable () -> Day = { Day(Date()) },
+    settings: (any SettingsRepository)? = nil
   ) {
+    self.settings = settings
     self.transactions = transactions
     self.accounts = accounts
     self.categories = categories
@@ -91,7 +95,9 @@ public final class TransactionsViewModel {
       let accountList = try await accounts.accounts(includeArchived: true)
       let categoryList = try await categories.categories(kind: nil, includeArchived: true)
       let eventList = try await events.events(includeArchived: true)
-      reference = TransactionsReference(accounts: accountList, categories: categoryList, events: eventList)
+      let uncategorisedColor = await settings?.uncategorisedColor() ?? Uncategorised.defaultColorHex
+      reference = TransactionsReference(
+        accounts: accountList, categories: categoryList, events: eventList, uncategorisedColor: uncategorisedColor)
     } catch {
       errorMessage = "Couldn't load accounts and categories."
     }
@@ -169,7 +175,7 @@ public final class TransactionsViewModel {
     return filters.categoryIDs.isEmpty ? Self.uncategorisedTitle : "\(filters.categoryIDs.count + 1) categories"
   }
 
-  public static let uncategorisedTitle = "Uncategorised"
+  public static let uncategorisedTitle = Uncategorised.title
 
   /// The categories menu offers "Uncategorised" when such transactions exist or it is ticked.
   public var showsUncategorisedOption: Bool { hasUncategorised || filters.includeUncategorised }

@@ -438,7 +438,8 @@ extension ImportWizardModel {
   /// Active categories of `kind` as "Parent › Child", parents first.
   func categoryOptions(_ kind: CategoryKind) -> [ImportCategoryOption] {
     let live = categories.filter { $0.kind == kind && !$0.isArchived }
-    let order: (AbacusDomain.Category, AbacusDomain.Category) -> Bool = { ($0.position, $0.name) < ($1.position, $1.name) }
+    // A–Z, subcategories under their parent (R-MGMT-8).
+    let order = CategoryOrder.byName
     var options: [ImportCategoryOption] = []
     for parent in live.filter({ $0.parentID == nil }).sorted(by: order) {
       options.append(ImportCategoryOption(choice: .existing(parent.id), label: parent.name, isChild: false))
@@ -532,8 +533,7 @@ extension ImportWizardModel {
       let name = external.parentName.map { "\($0) › \(external.name)" } ?? external.name
       let kind = external.kind == .income ? "Income" : "Expense"
       var options = [ImportMappingOption(choice: .create, label: "Create “\(external.name)”")]
-      options += preview.categoryOptions(for: mapping.id)
-        .filter { !$0.isArchived }
+      options += CategoryOrder.alphabetical(preview.categoryOptions(for: mapping.id).filter { !$0.isArchived })
         .map { ImportMappingOption(choice: .existing($0.id), label: categoryPath($0.id)) }
       let selection: ImportMappingChoice = switch mapping.target {
       case .create: .create

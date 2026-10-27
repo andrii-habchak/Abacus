@@ -74,6 +74,8 @@ public final class EventsModel {
     var txns: [TxnWithLines]
     var converter: any CurrencyConverter
     var refundsReduceSpending: Bool
+    /// The built-in "Uncategorised" colour (D47).
+    var uncategorisedColor = Uncategorised.defaultColorHex
   }
 
   private var format: ManageFormat { dependencies.format }
@@ -93,7 +95,8 @@ public final class EventsModel {
         accounts: try await dependencies.accounts.accounts(includeArchived: true),
         categories: try await dependencies.categories.categories(kind: nil, includeArchived: true),
         txns: try await dependencies.allTransactions(), converter: await dependencies.converter(),
-        refundsReduceSpending: await dependencies.refundsReduceSpending())
+        refundsReduceSpending: await dependencies.refundsReduceSpending(),
+        uncategorisedColor: await dependencies.settings.uncategorisedColor())
       recompute()
       phase = .loaded
     } catch {
@@ -276,8 +279,8 @@ public final class EventsModel {
         name = tree.category(id)?.name ?? "Unknown category"
         color = tree.category(id)?.colorHex
       case .uncategorized:
-        name = "Uncategorized"
-        color = nil
+        name = Uncategorised.title
+        color = loaded.uncategorisedColor
       case .refunds:
         name = "Refunds"
         color = nil

@@ -255,12 +255,12 @@ struct EditorFormTests {
     #expect(options.count == 8)
   }
 
-  @Test("R-CAT-2: the category picker lists parents with their children indented")
+  @Test("R-CAT-2, R-MGMT-8: the category picker lists parents A–Z with their children A–Z indented")
   func categories() async {
     let h = await EditorHarness.loaded()
     let options = h.model.categoryOptions
-    #expect(options.prefix(3).map(\.name) == ["Food", "Groceries", "Eating out"])
-    #expect(options.prefix(3).map(\.isChild) == [false, true, true])
+    #expect(options.prefix(4).map(\.name) == ["Bills", "Mobile", "Clothing", "Fees"])
+    #expect(options.prefix(4).map(\.isChild) == [false, true, false, false])
     #expect(h.model.reference.categoryPath(groceries) == "Food › Groceries")
   }
 }

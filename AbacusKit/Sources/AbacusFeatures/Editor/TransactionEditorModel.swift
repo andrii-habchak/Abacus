@@ -84,6 +84,9 @@ public final class TransactionEditorModel {
     switch mode {
     case .new:
       await applyDefaults()
+    case .newInCategory(let id):
+      await applyDefaults()
+      preselect(category: id)
     case .edit(let id):
       do {
         guard let row = try await dependencies.transaction(id) else {
@@ -119,6 +122,16 @@ public final class TransactionEditorModel {
     draft.fromID = from?.id ?? start?.id
     draft.toID = to?.id ?? active.first { $0.id != draft.fromID }?.id
     usedTransferDefaults = from != nil && to != nil
+  }
+
+  /// R-MGMT-8: the category picked on the Categories page, with the type of its kind. An
+  /// unknown or archived category leaves the form as it is.
+  private func preselect(category id: AbacusDomain.Category.ID) {
+    guard let category = reference.category(id), !category.isArchived else { return }
+    draft.type = category.kind == .income ? .income : .expense
+    draft.isRefund = false
+    draft.categoryID = category.id
+    draft.categoryChosen = true
   }
 
   /// An active account stored under `key`.
@@ -298,7 +311,7 @@ public final class TransactionEditorModel {
   // MARK: Derived state
 
   public var isTransfer: Bool { draft.type == .transfer }
-  public var isNew: Bool { mode == .new }
+  public var isNew: Bool { mode.isNew }
   public var title: String { isNew ? "New transaction" : "Edit transaction" }
 
   /// "Imported from PKO · 5 Oct 2026" / "Entered manually · 5 Oct 2026" (edit only).

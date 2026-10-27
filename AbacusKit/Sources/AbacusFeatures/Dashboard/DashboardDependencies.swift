@@ -86,7 +86,7 @@ extension DashboardDependencies {
 }
 
 /// Builds the Transactions query a donut drill-down opens: one category (its children
-/// included, R-LIST-2) over one month (R-HOME-3). A nil category is the "Uncategorized"
+/// included, R-LIST-2) over one month (R-HOME-3). A nil category is the "Uncategorised"
 /// slice: expenses without a category.
 public enum DashboardDrillDown {
   public static func query(

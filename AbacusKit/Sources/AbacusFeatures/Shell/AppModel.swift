@@ -146,9 +146,14 @@ public final class AppModel {
 
   // MARK: Hooks
 
-  /// Toolbar "New transaction" and ⌘N.
+  /// The category "New transaction" starts with (R-MGMT-8): the session answers with the
+  /// category selected on the Categories page, nil elsewhere.
+  @ObservationIgnored public var newTransactionCategory: (@MainActor () -> AbacusDomain.Category.ID?)?
+
+  /// Toolbar "New transaction" and ⌘N; with a category selected on the Categories page the
+  /// editor starts with it.
   public func requestNewTransaction() {
-    editor = .new
+    editor = newTransactionCategory?().map(TransactionEditorMode.newInCategory) ?? .new
   }
 
   /// A transaction opened from a list (double-click / Return).
