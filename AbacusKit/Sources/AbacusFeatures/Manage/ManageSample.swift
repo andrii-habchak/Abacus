@@ -19,7 +19,7 @@ public enum ManageSample {
     return event
   }()
 
-  public static let car = Event(id: id(901), name: "Car")
+  public static let car = Event(id: id(901), name: "Car", colorHex: "#E07B14")
   public static let events = [lyonTrip, PreviewData.relocation, car]
 
   public static let extraTxns: [Txn] = [

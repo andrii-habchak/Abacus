@@ -8,6 +8,8 @@ struct DashboardBudgetCard: View {
   /// nil when no plan is in effect for the month.
   let budget: DashboardBudget?
   let monthTitle: String
+  /// The header's pencil: opens Budget management (R-HOME-2).
+  var onEdit: () -> Void = {}
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -16,6 +18,14 @@ struct DashboardBudgetCard: View {
           .accessibilityAddTraits(.isHeader)
         Spacer()
         if let budget { badge(budget) }
+        Button(action: onEdit) {
+          Image(systemName: "pencil")
+            .frame(width: 16, height: 16)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .help("Edit budget")
+        .accessibilityLabel("Edit budget")
       }
       if let budget {
         summary(budget)

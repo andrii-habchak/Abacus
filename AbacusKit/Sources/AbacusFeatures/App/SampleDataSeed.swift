@@ -43,6 +43,7 @@ extension SampleData {
       for allocation in allocations { allocation }
       for rule in rules { rule }
     }
+    try ColorFill.fillAll(db)
   }
 
   /// The sample categories still to insert, and every sample id → the id used in the database.

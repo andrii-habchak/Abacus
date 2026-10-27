@@ -90,7 +90,7 @@ struct AccountRowView: View {
         .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(.white)
         .frame(width: 30, height: 30)
-        .background(row.isLiability ? ManagePalette.liability : ManagePalette.asset, in: .rect(cornerRadius: 8))
+        .background(tileColor, in: .rect(cornerRadius: 8))
         .opacity(row.isArchived ? 0.45 : 1)
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
@@ -116,6 +116,12 @@ struct AccountRowView: View {
     .font(.system(size: 13))
     .padding(.vertical, 5)
     .accessibilityElement(children: .combine)
+  }
+
+  /// The account's colour (R-MGMT-7); without one, blue for assets and red for liabilities.
+  private var tileColor: Color {
+    if ColorPalette.rgb(row.colorHex) != nil { return ManagePalette.hex(row.colorHex) }
+    return row.isLiability ? ManagePalette.liability : ManagePalette.asset
   }
 }
 
@@ -183,6 +189,9 @@ struct AccountInspectorView: View {
           TextField("Group", text: binding(\.group, ""), prompt: Text("e.g. Monobank, PKO"))
             .labelsHidden()
             .textFieldStyle(.roundedBorder)
+        }
+        ManageField("Colour") {
+          ManageColorField(hex: binding(\.colorHex, nil))
         }
         ManageField("Bank account number (IBAN)") {
           TextField("IBAN", text: binding(\.iban, ""), prompt: Text("Used to recognise transfers in bank imports"))

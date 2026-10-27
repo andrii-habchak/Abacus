@@ -23,6 +23,8 @@ public struct SQLiteEventRepository: EventRepository {
   public func save(_ event: Event) async throws {
     try await database.write { db in
       try Event.upsert { Event.Draft(event) }.execute(db)
+      // R-MGMT-7: an event saved without a colour gets one apart from the other events'.
+      if ColorPalette.rgb(event.colorHex) == nil { try ColorFill.fillEvents(db) }
     }
   }
 

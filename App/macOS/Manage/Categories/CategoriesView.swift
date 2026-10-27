@@ -150,24 +150,7 @@ struct CategoryInspectorView: View {
           }
         }
         ManageField("Colour") {
-          HStack(spacing: 6) {
-            ForEach(ManageText.swatches, id: \.self) { hex in
-              Button {
-                model.draft?.colorHex = hex
-              } label: {
-                ManageDot(hex: hex, size: 22)
-                  .overlay(
-                    Circle()
-                      .strokeBorder(ManagePalette.hex(hex), lineWidth: 2)
-                      .padding(-4)
-                      .opacity(draft.colorHex == hex ? 1 : 0))
-                  .padding(4)
-              }
-              .buttonStyle(.plain)
-              .accessibilityLabel("Colour \(hex)")
-              .accessibilityAddTraits(draft.colorHex == hex ? .isSelected : [])
-            }
-          }
+          ManageColorField(hex: binding(\.colorHex, nil))
         }
         if !draft.isNew {
           ManageCard {
