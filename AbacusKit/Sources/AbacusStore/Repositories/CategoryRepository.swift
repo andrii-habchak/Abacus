@@ -36,6 +36,8 @@ public struct SQLiteCategoryRepository: CategoryRepository {
         throw RepositoryError.kindMismatch
       }
       try AbacusDomain.Category.upsert { AbacusDomain.Category.Draft(category) }.execute(db)
+      // R-MGMT-7: a category saved without a colour gets a palette colour apart from its siblings.
+      if ColorPalette.rgb(category.colorHex) == nil { try ColorFill.fillCategories(db) }
     }
   }
 

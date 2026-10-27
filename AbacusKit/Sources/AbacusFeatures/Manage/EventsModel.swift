@@ -13,6 +13,8 @@ public struct EventRow: Identifiable, Equatable, Sendable {
   public let budgetText: String
   public let status: LimitStatus?
   public let isArchived: Bool
+  /// The event's colour (R-EVT-1).
+  public var colorHex: String? = nil
 }
 
 /// One category bar of an event's spending (R-EVT-3, R-EVT-4).
@@ -37,6 +39,8 @@ public struct EventDraft: Equatable, Sendable {
   /// Empty = no budget.
   public var budget: String
   public var budgetCurrency: Currency
+  /// `#RRGGBB` (R-EVT-1, R-MGMT-7).
+  public var colorHex: String? = nil
 }
 
 /// The Events screen (approved prototype group 4, R-MGMT-4, R-EVT-1…4): the list with dates and
@@ -59,6 +63,9 @@ public final class EventsModel {
   public private(set) var displayCurrency: Currency
 
   @ObservationIgnored public let dependencies: ManageDependencies
+  /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
+  /// so the transaction list and the dashboard re-read it.
+  @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
   @ObservationIgnored private var loaded: Loaded?
 
   struct Loaded {
@@ -142,7 +149,7 @@ public final class EventsModel {
         id: event.id, name: event.name, dates: dates(event), spentText: totals.map { format.money($0.spent) } ?? "—",
         budgetText: event.budgetMinor.map { "of \(format.money(Money(minorUnits: $0, currency: currency(of: event)))) budget" }
           ?? "no budget",
-        status: totals?.budgetStatus, isArchived: event.isArchived)
+        status: totals?.budgetStatus, isArchived: event.isArchived, colorHex: event.colorHex)
     }
   }
 
@@ -170,7 +177,7 @@ public final class EventsModel {
     return EventDraft(
       id: event.id, isNew: false, name: event.name, hasStart: start != nil, start: start ?? end ?? today,
       hasEnd: end != nil, end: end ?? start ?? today, budget: event.budgetMinor.map(format.amountInput) ?? "",
-      budgetCurrency: event.budgetCurrency ?? displayCurrency)
+      budgetCurrency: event.budgetCurrency ?? displayCurrency, colorHex: event.colorHex)
   }
 
   /// "New event": a name, no dates, no budget.
@@ -180,7 +187,7 @@ public final class EventsModel {
     errorMessage = nil
     draft = EventDraft(
       id: UUID(), isNew: true, name: "", hasStart: false, start: today, hasEnd: false, end: today, budget: "",
-      budgetCurrency: displayCurrency)
+      budgetCurrency: displayCurrency, colorHex: ColorPalette.pick(avoiding: events.map(\.colorHex)))
   }
 
   public var selectedEvent: Event? { selection.flatMap(event) }
@@ -214,6 +221,7 @@ public final class EventsModel {
     event.endDay = draft.hasEnd ? Day(draft.end, calendar: format.calendar).string : nil
     event.budgetMinor = budget
     event.budgetCurrency = budget == nil ? nil : draft.budgetCurrency
+    event.colorHex = draft.colorHex
     return event
   }
 
@@ -230,6 +238,7 @@ public final class EventsModel {
     guard let draft, canSave, let event = built(from: draft, base: draft.isNew ? nil : event(draft.id)) else { return }
     do {
       try await dependencies.events.save(event)
+      await onDataChange?()
       selection = event.id
       self.draft = nil
       await load()
@@ -303,6 +312,7 @@ public final class EventsModel {
     guard let event = selectedEvent else { return }
     do {
       try await dependencies.events.setArchived(event.id, !event.isArchived)
+      await onDataChange?()
       if !event.isArchived { showArchived = true }
       await load()
     } catch {
@@ -328,6 +338,7 @@ public final class EventsModel {
     self.dialog = nil
     do {
       try await dependencies.events.delete(id)
+      await onDataChange?()
       selection = nil
       draft = nil
       await load()

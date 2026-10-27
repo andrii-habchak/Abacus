@@ -135,6 +135,6 @@ public enum ManageText {
     count == 1 ? "1 transaction" : "\(count) transactions"
   }
 
-  /// The colour swatches of the category inspector (prototype order).
-  public static let swatches = ["#E07B14", "#1E9E7E", "#0A64D6", "#7B4FCF", "#C93B6E", "#5C7B99", "#A35A2A", "#8E8E93"]
+  /// The colour swatches of the category, account and event inspectors (R-MGMT-7).
+  public static let swatches = ColorPalette.colors
 }

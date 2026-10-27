@@ -57,6 +57,14 @@ public final class AppSession {
     self.database = database
     self.refresher = refresher
     app.data.onRestore = { [weak self] in await self?.dataChanged() }
+    // A category, account or event edited (colour, name, archive): the list and the dashboard
+    // follow at once (R-MGMT-7), without waiting for this screen.
+    let referenceChanged: @MainActor () async -> Void = { [weak self] in
+      Task { await self?.referenceChanged() }
+    }
+    accounts.onDataChange = referenceChanged
+    categories.onDataChange = referenceChanged
+    events.onDataChange = referenceChanged
     app.onRefundsChange = { [weak self] on in
       guard let self else { return }
       self.transactions.refundsReduceSpending = on
@@ -227,6 +235,12 @@ public final class AppSession {
     await dashboard.load()
     await transactions.load()
     await reloadManageScreens(all: true)
+  }
+
+  /// Accounts, categories or events changed on a manage screen.
+  public func referenceChanged() async {
+    await transactions.referenceChanged()
+    if dashboard.phase == .loaded { await dashboard.load() }
   }
 
   /// Re-reads the manage screens after data changed elsewhere (balances, usage, event totals).

@@ -41,7 +41,7 @@ struct DefaultCategoriesTests {
       "Travel", "Fees", "Gifts", "Salary", "Cashback", "Refunds", "Other income",
     ]))
     #expect(Set(list.filter { $0.kind == .income }.map(\.name)) == ["Salary", "Cashback", "Refunds", "Other income"])
-    #expect(list.allSatisfy { $0.colorHex != nil && !$0.isArchived && $0.importBatchID == nil })
+    #expect(list.allSatisfy { !ColorPalette.needsColor($0.colorHex) && !$0.isArchived && $0.importBatchID == nil })
     // The categories screen shows them.
     await s.categories.load()
     #expect(s.categories.phase == .loaded)
