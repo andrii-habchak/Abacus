@@ -1,21 +1,108 @@
 #if DEBUG
+import AbacusDomain
+import AbacusFeatures
 import AppKit
+import ScreenCaptureKit
 
 /// Debug builds only: writes every visible window of the app to PNG files and quits, for UI
-/// reviews without screen-recording access. Launch with
+/// reviews and README screenshots. Launch with
 /// `-AbacusSnapshotDir <folder> -AbacusSnapshotName <prefix>` (plus `-AbacusDark YES` for dark
-/// mode, `-AbacusSnapshotDelay <seconds>`).
+/// mode, `-AbacusSnapshotDelay <seconds>`, `-AbacusDisplayCurrency EUR` to switch the display
+/// currency first, `-AbacusSnapshotFullPage YES` to grow the main window until its page scroll
+/// view shows its whole document, e.g. every dashboard widget).
+///
+/// Windows are captured with ScreenCaptureKit (`SCShareableContent.currentProcess`: an app's own
+/// windows need no Screen Recording permission), so sidebar glass, toolbar and traffic lights
+/// look exactly as on screen. If that fails, the older `cacheDisplay` paint below is used.
 @MainActor
 enum WindowSnapshot {
-  static func runIfRequested() async {
+  static func runIfRequested(session: AppSession) async {
     let defaults = UserDefaults.standard
     guard let folder = defaults.string(forKey: "AbacusSnapshotDir") else { return }
     let name = defaults.string(forKey: "AbacusSnapshotName") ?? "window"
-    NSApp.activate()
+    if let code = defaults.string(forKey: "AbacusDisplayCurrency"), let currency = Currency(rawValue: code) {
+      // As if the app had launched with this default: the rates page follows it too.
+      await session.app.setDisplayCurrency(currency).value
+      session.app.rates.showIn = currency
+    }
+    NSApp.activate(ignoringOtherApps: true)
+    // Active chrome (coloured traffic lights): the Settings window when it is open, else main.
+    let settings = NSApp.windows.first { $0.isVisible && $0.frame.width > 100 && $0 !== mainWindow }
+    (settings ?? mainWindow)?.makeKeyAndOrderFront(nil)
     let delay = defaults.double(forKey: "AbacusSnapshotDelay")
     try? await Task.sleep(for: .seconds(delay > 0 ? delay : 2))
-    capture(to: URL(filePath: folder, directoryHint: .isDirectory), prefix: name)
+    if defaults.bool(forKey: "AbacusSnapshotFullPage") { await growToFitContent() }
+    await capture(to: URL(filePath: folder, directoryHint: .isDirectory), prefix: name)
     NSApp.terminate(nil)
+  }
+
+  private static var mainWindow: NSWindow? {
+    NSApp.windows.first { $0.identifier?.rawValue.hasPrefix("main") == true }
+  }
+
+  /// Makes the main window tall enough that its biggest vertical scroll view (the page) shows
+  /// its whole document; the window may reach below the screen, which the capture still sees.
+  private static func growToFitContent() async {
+    guard let window = mainWindow, let root = window.contentView else { return }
+    allowFramesBeyondScreen(window)
+    for _ in 0..<4 {
+      let scrolls = descendants(of: root).compactMap { $0 as? NSScrollView }
+      guard
+        let page = scrolls.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }),
+        let document = page.documentView
+      else { return }
+      // The clip view runs under the toolbar; its insets are not part of the visible page.
+      let insets = page.contentView.contentInsets
+      let visible = page.contentView.bounds.height - insets.top - insets.bottom
+      let extra = (document.frame.height - visible).rounded(.up)
+      guard extra > 1 else { return }
+      var frame = window.frame
+      frame.size.height += extra
+      frame.origin.y -= extra
+      window.setFrame(frame, display: true)
+      try? await Task.sleep(for: .seconds(1))
+      print("WindowSnapshot: page \(document.frame.height) pt, window \(window.frame.height) pt")
+    }
+  }
+
+  /// AppKit keeps a window inside the screen (`constrainFrameRect(_:to:)`); for a full-page
+  /// capture the main window is moved to a runtime subclass that returns the frame unchanged.
+  private static func allowFramesBeyondScreen(_ window: NSWindow) {
+    let base: AnyClass = type(of: window)
+    let name = "AbacusSnapshotUnconstrained_\(NSStringFromClass(base))"
+    var subclass: AnyClass? = NSClassFromString(name)
+    if subclass == nil, let created = objc_allocateClassPair(base, name, 0),
+      let method = class_getInstanceMethod(base, #selector(NSWindow.constrainFrameRect(_:to:)))
+    {
+      let unconstrained: @convention(block) (NSWindow, NSRect, NSScreen?) -> NSRect = { _, rect, _ in rect }
+      class_addMethod(
+        created, #selector(NSWindow.constrainFrameRect(_:to:)), imp_implementationWithBlock(unconstrained),
+        method_getTypeEncoding(method))
+      objc_registerClassPair(created)
+      subclass = created
+    }
+    if let subclass { object_setClass(window, subclass) }
+  }
+
+  /// The window as the window server composites it (glass, chrome; no shadow, transparent
+  /// rounded corners), at the backing scale. Nil when ScreenCaptureKit is unavailable.
+  private static func screenCapture(_ window: NSWindow, in shareable: SCShareableContent?) async -> CGImage? {
+    guard let target = shareable?.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) })
+    else { return nil }
+    let filter = SCContentFilter(desktopIndependentWindow: target)
+    let configuration = SCStreamConfiguration()
+    let scale = CGFloat(filter.pointPixelScale)
+    configuration.width = Int((filter.contentRect.width * scale).rounded())
+    configuration.height = Int((filter.contentRect.height * scale).rounded())
+    configuration.showsCursor = false
+    configuration.ignoreShadowsSingleWindow = true
+    configuration.captureResolution = .best
+    do {
+      return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+    } catch {
+      print("WindowSnapshot: ScreenCaptureKit failed: \(error.localizedDescription)")
+      return nil
+    }
   }
 
   static func applyAppearance() {
@@ -26,20 +113,32 @@ enum WindowSnapshot {
     }
   }
 
-  static func capture(to folder: URL, prefix: String) {
+  static func capture(to folder: URL, prefix: String) async {
     try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let shareable: SCShareableContent?
+    do {
+      shareable = try await SCShareableContent.currentProcess
+    } catch {
+      print("WindowSnapshot: no shareable content: \(error.localizedDescription)")
+      shareable = nil
+    }
     for window in NSApp.windows where window.isVisible && window.frame.width > 100 {
       guard let root = window.contentView?.superview ?? window.contentView else { continue }
       window.displayIfNeeded()
       let isMain = window.identifier?.rawValue.hasPrefix("main") == true
       let file = folder.appending(path: "\(prefix)\(isMain ? "" : "-settings").png")
-      if let data = image(of: root)?.representation(using: .png, properties: [:]) {
-        try? data.write(to: file)
+      let data: Data?
+      if let shot = await screenCapture(window, in: shareable) {
+        data = NSBitmapImageRep(cgImage: shot).representation(using: .png, properties: [:])
+      } else {
+        print("WindowSnapshot: painting \(file.lastPathComponent) with cacheDisplay")
+        data = image(of: root)?.representation(using: .png, properties: [:])
       }
+      try? data?.write(to: file)
     }
   }
 
-  /// The view drawn with `cacheDisplay`; glass panes (the sidebar) do not draw that way, so
+  /// Fallback: the view drawn with `cacheDisplay`; glass panes (the sidebar) do not draw that way, so
   /// they are painted over with a plain sidebar colour and their content.
   private static func image(of root: NSView) -> NSBitmapImageRep? {
     guard let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds) else { return nil }

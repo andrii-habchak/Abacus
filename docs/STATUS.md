@@ -183,3 +183,4 @@ opens Import's review step on that file), snapshot `-AbacusSnapshotDir <dir>
 Also set `CFFIXED_USER_HOME=<scratch dir>` so saved window sizes and preferences don't touch the
 owner's. The terminal has no Screen Recording permission; use the in-app snapshot. Never take
 screenshots of the real database.
+The snapshot captures the app's own windows with ScreenCaptureKit (no permission needed; real glass and chrome), `-AbacusDisplayCurrency EUR` switches currency, `-AbacusSnapshotFullPage YES` grows the window to the whole page (R2).
