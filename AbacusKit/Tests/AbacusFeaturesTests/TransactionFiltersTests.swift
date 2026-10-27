@@ -106,8 +106,10 @@ struct TransactionFiltersTests {
 
     let event = try #require(TransactionFilters.event(PreviewData.lyonTrip).query(today: today))
     #expect(event.eventIDs == [PreviewData.lyonTrip.id])
-    #expect(event.fromDay == Day("2026-10-01"))
-    #expect(event.toDay == Day("2026-10-19"))
+    // Any date: the event's own dates only steer auto-tagging (R-EVT-2).
+    #expect(event.fromDay == Day("1900-01-01"))
+    #expect(event.toDay == Day("9999-12-31"))
+    #expect(event.types.isEmpty)
   }
 
   // MARK: Category multi-select

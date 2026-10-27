@@ -102,11 +102,11 @@ public struct TransactionFilters: Hashable, Sendable {
     return TransactionFilters(dateRange: days, categoryIDs: [category])
   }
 
-  /// Event view "Show N transactions" (R-EVT-3): every transaction of the event, any date.
+  /// Event view "Show N transactions" (R-EVT-3): every transaction tagged with the event, of
+  /// any type and on any date — the N the event view counts. The event's own dates only steer
+  /// auto-tagging (R-EVT-2): a flight booked before the trip or a refund after it still belongs.
   public static func event(_ event: Event) -> TransactionFilters {
-    let from = event.startDay.flatMap(Day.init) ?? Day(year: 1900, month: 1, day: 1)
-    let to = event.endDay.flatMap(Day.init) ?? Day(year: 9999, month: 12, day: 31)
-    return TransactionFilters(dateRange: .custom(from: from, to: to), eventID: event.id)
+    TransactionFilters(dateRange: allDates, eventID: event.id)
   }
 
   /// Import "Show transactions" (R-IMP-6): every transaction the import created, any date.
