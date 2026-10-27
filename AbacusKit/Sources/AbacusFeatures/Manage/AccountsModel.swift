@@ -11,7 +11,7 @@ public enum ManagePhase: Equatable, Sendable {
 /// One row of the Accounts list (R-MGMT-1, R-MGMT-9): an account (tile, name, "Kind · CUR",
 /// balance in the account currency) or a group (folder, name, "3 accounts", the sum of its
 /// accounts in the display currency).
-public struct AccountRow: Identifiable, Equatable, Sendable {
+public struct AccountRow: Identifiable, Hashable, Sendable {
   public let id: UUID
   public let name: String
   /// "Card · UAH"; for a group "3 accounts".
@@ -61,6 +61,31 @@ public struct AccountGroupDraft: Equatable, Sendable {
   public var colorHex: String?
 }
 
+/// The editor sheet open on the Accounts page (D55): an account's or a group's form. The sheet
+/// keeps its own copy of the draft; the model only sees it again on Save.
+public enum AccountSheet: Identifiable, Equatable, Sendable {
+  case account(AccountDraft)
+  case group(AccountGroupDraft)
+
+  public var id: UUID {
+    switch self {
+    case .account(let draft): draft.id
+    case .group(let draft): draft.id
+    }
+  }
+}
+
+/// An account dropped onto an ungrouped account (D55, like folders on iOS): a new group will hold
+/// both; the page asks for its name first (`defaultName`: the target's first word).
+public struct AccountGroupPrompt: Identifiable, Equatable, Sendable {
+  public let id: UUID
+  /// The dragged account.
+  public let moving: Account.ID
+  /// The ungrouped account it was dropped onto; the group takes its place.
+  public let target: Account.ID
+  public let defaultName: String
+}
+
 /// The Accounts screen (approved prototype group 4, R-MGMT-1, R-MGMT-9, R-ACC-1…5, D48): page
 /// search, sort (Name A–Z / Z–A / Custom order) and currency filter, groups as folders with the
 /// sum of their accounts, drag and drop (between rows reorders, onto a group moves into it),
@@ -94,11 +119,17 @@ public final class AccountsModel {
   public var groupDraft: AccountGroupDraft?
   public private(set) var dialog: ManageDialog?
   public private(set) var errorMessage: String?
+  /// The open editor sheet (D55); nil while none is open.
+  public private(set) var sheet: AccountSheet?
+  /// A drop of an account onto an ungrouped account waiting for the new group's name (D55).
+  public private(set) var groupPrompt: AccountGroupPrompt?
 
   @ObservationIgnored public let dependencies: ManageDependencies
   /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
   /// so the transaction list and the dashboard re-read it.
   @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
+  /// The selection before "New account" / "New group", given back when the sheet is cancelled.
+  @ObservationIgnored private var selectionBeforeNew: UUID?
   @ObservationIgnored private var converter: (any CurrencyConverter)?
   @ObservationIgnored private var sortLoaded = false
   private var format: ManageFormat { dependencies.format }
@@ -315,16 +346,77 @@ public final class AccountsModel {
   }
 
   /// "New account": an empty form in the display currency, opening today; inside the selected
-  /// group (or the selected account's group).
+  /// group (or the selected account's group). Opens the editor sheet.
   public func newAccount(currency: Currency = .UAH) {
     let groupID = selection.flatMap { id in group(id)?.id ?? account(id)?.groupID }
+    newAccount(currency: currency, inGroup: groupID)
+  }
+
+  /// "New account in <group>" (the split button's menu, D55); nil = top level.
+  public func newAccount(currency: Currency = .UAH, inGroup groupID: AccountGroup.ID?) {
+    selectionBeforeNew = selection ?? selectionBeforeNew
     selection = nil
     errorMessage = nil
     groupDraft = nil
-    draft = AccountDraft(
+    let draft = AccountDraft(
       id: UUID(), isNew: true, name: "", kind: .bank, currency: currency, openingBalance: format.amountInput(0),
-      openingDate: dependencies.today().date(calendar: format.calendar), groupID: groupID, iban: "",
+      openingDate: dependencies.today().date(calendar: format.calendar),
+      groupID: groupID.flatMap { group($0)?.id }, iban: "",
       colorHex: ColorPalette.pick(avoiding: accounts.map(\.colorHex)))
+    self.draft = draft
+    sheet = .account(draft)
+  }
+
+  // MARK: Editor sheet (D55)
+
+  /// Opens the editor sheet on an account or a group (double-click, Return, "Edit…").
+  public func edit(_ id: UUID) {
+    guard account(id) != nil || group(id) != nil else { return }
+    select(id)
+    if let groupDraft {
+      sheet = .group(groupDraft)
+    } else if let draft {
+      sheet = .account(draft)
+    }
+  }
+
+  /// Cancel / Escape: closes the sheet without saving; a new item's sheet gives the selection
+  /// back.
+  public func dismissSheet() {
+    let wasNew: Bool
+    switch sheet {
+    case .account(let draft): wasNew = draft.isNew
+    case .group(let draft): wasNew = draft.isNew
+    case nil: wasNew = false
+    }
+    sheet = nil
+    if wasNew {
+      let previous = selectionBeforeNew.flatMap { id in account(id) != nil || group(id) != nil ? id : nil }
+      selectionBeforeNew = nil
+      select(previous)
+    } else {
+      select(selection)
+    }
+  }
+
+  /// Saves the sheet's account form; the sheet closes when the save worked.
+  public func save(_ draft: AccountDraft) async {
+    groupDraft = nil
+    self.draft = draft
+    if await save() {
+      sheet = nil
+      selectionBeforeNew = nil
+    }
+  }
+
+  /// Saves the sheet's group form; the sheet closes when the save worked.
+  public func save(_ draft: AccountGroupDraft) async {
+    self.draft = nil
+    groupDraft = draft
+    if await save() {
+      sheet = nil
+      selectionBeforeNew = nil
+    }
   }
 
   /// The account being edited (nil for a new one or a group).
@@ -332,8 +424,11 @@ public final class AccountsModel {
 
   /// R-ACC-1: the currency is fixed after the first transaction.
   public var isCurrencyLocked: Bool {
-    guard let draft, !draft.isNew else { return false }
-    return (txnCounts[draft.id] ?? 0) > 0
+    draft.map(isCurrencyLocked) ?? false
+  }
+
+  public func isCurrencyLocked(_ draft: AccountDraft) -> Bool {
+    !draft.isNew && (txnCounts[draft.id] ?? 0) > 0
   }
 
   public var inspectorTitle: String {
@@ -373,28 +468,42 @@ public final class AccountsModel {
 
   /// What is wrong with the open form, or nil when it can be saved.
   public var validationMessage: String? {
-    if let groupDraft {
-      return groupDraft.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter a name." : nil
-    }
-    guard let draft else { return nil }
+    if let groupDraft { return validationMessage(groupDraft) }
+    return draft.flatMap(validationMessage)
+  }
+
+  public func validationMessage(_ draft: AccountDraft) -> String? {
     if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name." }
     if format.parseAmount(draft.openingBalance) == nil { return "The opening balance is not a number." }
     return nil
   }
 
+  public func validationMessage(_ draft: AccountGroupDraft) -> String? {
+    draft.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter a name." : nil
+  }
+
   public var isDirty: Bool {
-    if let groupDraft {
-      if groupDraft.isNew { return true }
-      guard let group = group(groupDraft.id) else { return false }
-      return builtGroup(from: groupDraft, base: group) != group
-    }
-    guard let draft else { return false }
+    if let groupDraft { return isDirty(groupDraft) }
+    return draft.map(isDirty) ?? false
+  }
+
+  public func isDirty(_ draft: AccountDraft) -> Bool {
     if draft.isNew { return true }
     guard let account = account(draft.id) else { return false }
     return built(from: draft, base: account) != account
   }
 
+  public func isDirty(_ draft: AccountGroupDraft) -> Bool {
+    if draft.isNew { return true }
+    guard let group = group(draft.id) else { return false }
+    return builtGroup(from: draft, base: group) != group
+  }
+
   public var canSave: Bool { isDirty && validationMessage == nil }
+
+  public func canSave(_ draft: AccountDraft) -> Bool { isDirty(draft) && validationMessage(draft) == nil }
+
+  public func canSave(_ draft: AccountGroupDraft) -> Bool { isDirty(draft) && validationMessage(draft) == nil }
 
   /// After every group and top-level account (or last in a group): positions only order
   /// siblings, so one more than any position is last wherever the account lands.
@@ -421,15 +530,15 @@ public final class AccountsModel {
     return account
   }
 
-  /// Saves the open form: the account (R-ACC-1) or the group (R-MGMT-9).
-  public func save() async {
+  /// Saves the open form: the account (R-ACC-1) or the group (R-MGMT-9). True when it was saved.
+  @discardableResult
+  public func save() async -> Bool {
     if groupDraft != nil {
-      await saveGroup()
-      return
+      return await saveGroup()
     }
-    guard let draft, canSave else { return }
+    guard let draft, canSave else { return false }
     let base = draft.isNew ? nil : account(draft.id)
-    guard var account = built(from: draft, base: base) else { return }
+    guard var account = built(from: draft, base: base) else { return false }
     if isCurrencyLocked, let base { account.currency = base.currency }
     // Moved to another group (or out of one): last there.
     if let base, base.groupID != account.groupID { account.position = nextPosition }
@@ -440,8 +549,10 @@ public final class AccountsModel {
       self.draft = nil
       await load()
       self.draft = self.account(account.id).map { Self.draft($0, format: format) }
+      return true
     } catch {
       errorMessage = ManageFailure.message(error, doing: "save the account")
+      return false
     }
   }
 
@@ -464,10 +575,13 @@ public final class AccountsModel {
 
   /// "New group": an empty form; the group goes last at the top level.
   public func newGroup() {
+    selectionBeforeNew = selection ?? selectionBeforeNew
     selection = nil
     errorMessage = nil
     draft = nil
-    groupDraft = AccountGroupDraft(id: UUID(), isNew: true, name: "", colorHex: nil)
+    let draft = AccountGroupDraft(id: UUID(), isNew: true, name: "", colorHex: nil)
+    groupDraft = draft
+    sheet = .group(draft)
   }
 
   private func builtGroup(from draft: AccountGroupDraft, base: AccountGroup?) -> AccountGroup {
@@ -494,8 +608,8 @@ public final class AccountsModel {
     return groupSum(group.id).map { format.money($0) } ?? "—"
   }
 
-  private func saveGroup() async {
-    guard let groupDraft, canSave else { return }
+  private func saveGroup() async -> Bool {
+    guard let groupDraft, canSave else { return false }
     let group = builtGroup(from: groupDraft, base: groupDraft.isNew ? nil : self.group(groupDraft.id))
     do {
       try await dependencies.accounts.saveGroup(group)
@@ -504,8 +618,10 @@ public final class AccountsModel {
       self.groupDraft = nil
       await load()
       self.groupDraft = self.group(group.id).map(Self.groupDraft)
+      return true
     } catch {
       errorMessage = ManageFailure.message(error, doing: "save the group")
+      return false
     }
   }
 
@@ -526,7 +642,28 @@ public final class AccountsModel {
 
   /// Whether `moving` (an account or a group) may be dropped there.
   public func canDrop(_ moving: UUID, on target: UUID?, position: AccountDropPosition) -> Bool {
-    plan(moving, on: target, position: position) != nil
+    newGroupDrop(moving, on: target, position: position) != nil || plan(moving, on: target, position: position) != nil
+  }
+
+  /// An account in a group that still exists.
+  private func isGrouped(_ account: Account) -> Bool {
+    account.groupID.map { id in groups.contains { $0.id == id } } ?? false
+  }
+
+  /// `.onto` an ungrouped account (D55): the two accounts that go into a new group.
+  private func newGroupDrop(_ movingID: UUID, on targetID: UUID?, position: AccountDropPosition)
+    -> (moving: Account, target: Account)?
+  {
+    guard position == .onto, let targetID, movingID != targetID, let moving = account(movingID),
+      let target = account(targetID), !isGrouped(target)
+    else { return nil }
+    return (moving, target)
+  }
+
+  /// The new group's suggested name: the target's first word ("PKO Personal" → "PKO").
+  public static func suggestedGroupName(for account: Account) -> String {
+    let name = account.name.trimmingCharacters(in: .whitespaces)
+    return name.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? name
   }
 
   /// Applies a drop (like Reminders):
@@ -537,8 +674,17 @@ public final class AccountsModel {
   ///   account in a group → into that group there; right below a group whose accounts follow →
   ///   its first account.
   /// - `target` nil (the space below the list): top level, last.
-  /// Balances and transactions never change.
+  /// - `.onto` an ungrouped account (D55): asks for a name first (`groupPrompt`);
+  ///   `confirmGroupPrompt(name:)` then creates a group in the target's place holding both.
+  /// Balances and transactions never change. A group left empty by a move stays (a folder the
+  /// user deletes, D48).
   public func drop(_ moving: UUID, on target: UUID?, position: AccountDropPosition) async {
+    if let pair = newGroupDrop(moving, on: target, position: position) {
+      groupPrompt = AccountGroupPrompt(
+        id: UUID(), moving: pair.moving.id, target: pair.target.id,
+        defaultName: Self.suggestedGroupName(for: pair.target))
+      return
+    }
     guard let plan = plan(moving, on: target, position: position) else { return }
     if plan.reorders { await setSort(.custom) }
     do {
@@ -551,6 +697,37 @@ public final class AccountsModel {
       await load()
     }
   }
+
+  /// Creates the prompted group (D55): it takes the target account's place at the top level and
+  /// holds the target, then the dragged account. The sort stays. Nothing happens with an empty
+  /// name; nothing changes when either account is gone or the target joined a group meanwhile.
+  public func confirmGroupPrompt(name: String) async {
+    guard let prompt = groupPrompt else { return }
+    let trimmed = name.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    groupPrompt = nil
+    guard prompt.moving != prompt.target, var target = account(prompt.target), var moving = account(prompt.moving),
+      !isGrouped(target)
+    else { return }
+    let group = AccountGroup(id: UUID(), name: trimmed, position: target.position)
+    target.groupID = group.id
+    target.position = 0
+    moving.groupID = group.id
+    moving.position = 1
+    do {
+      try await dependencies.accounts.saveGroup(group)
+      try await dependencies.accounts.save(target)
+      try await dependencies.accounts.save(moving)
+      await onDataChange?()
+      await load()
+    } catch {
+      errorMessage = ManageFailure.message(error, doing: "create the group")
+      await load()
+    }
+  }
+
+  /// The name prompt's Cancel: nothing moves.
+  public func cancelGroupPrompt() { groupPrompt = nil }
 
   private struct DropPlan {
     var accounts: [Account]
@@ -683,12 +860,14 @@ public final class AccountsModel {
     self.dialog = nil
     switch dialog.action {
     case .archiveAccount(let id):
+      sheet = nil
       await setArchived(id, true)
       // The archived account stays visible and selected (prototype).
       showArchived = true
     case .deleteAccount(let id):
       do {
         try await dependencies.accounts.delete(id)
+        sheet = nil
         await onDataChange?()
         selection = nil
         draft = nil
@@ -699,6 +878,7 @@ public final class AccountsModel {
     case .deleteAccountGroup(let id):
       do {
         try await dependencies.accounts.deleteGroup(id)
+        sheet = nil
         await onDataChange?()
         selection = nil
         groupDraft = nil

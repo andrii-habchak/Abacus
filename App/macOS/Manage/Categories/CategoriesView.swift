@@ -1,13 +1,13 @@
 import AbacusDomain
 import AbacusFeatures
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// The Categories screen (approved prototype group 4, R-MGMT-2, R-MGMT-8, R-CAT-1…3): page
+/// The Categories screen (approved prototype group 4, R-MGMT-2, R-MGMT-8, R-CAT-1…3, D55): page
 /// search, Expense / Income tabs and the sort selector, the built-in "Uncategorised" pinned on
-/// top, the one-level tree with drag and drop (between rows reorders, onto a row nests, like
-/// Reminders) and usage counts, the inspector; only "New category" in the toolbar; Delete… asks
-/// where a used category's transactions go.
+/// top, the one-level tree in a native outline list (a line between rows reorders, a
+/// highlighted row nests) with usage counts; the editor is a sheet (double-click / Return /
+/// "Edit…"); only "New category" in the toolbar; Delete… asks where a used category's
+/// transactions go.
 public struct CategoriesView: View {
   @State private var model: CategoriesModel
 
@@ -21,12 +21,8 @@ public struct CategoriesView: View {
 
   public var body: some View {
     ManagePhaseView(phase: model.phase, title: "Categories", retry: { await model.load() }) {
-      HStack(spacing: 0) {
-        CategoriesTree(model: model)
-          .frame(minWidth: 380, maxWidth: .infinity)
-        Divider()
-        CategoryInspectorView(model: model)
-      }
+      CategoriesTree(model: model)
+        .frame(minWidth: 380, maxWidth: .infinity)
     }
     .navigationTitle("Categories")
     .toolbar {
@@ -35,11 +31,39 @@ public struct CategoriesView: View {
           .labelStyle(.titleAndIcon)
       }
     }
-    .sheet(item: Binding(get: { model.dialog }, set: { if $0 == nil { model.cancelDialog() } })) { dialog in
+    .sheet(item: Binding(get: { model.sheet }, set: { if $0 == nil, model.sheet != nil { model.dismissSheet() } })) {
+      draft in
+      CategoryEditorSheet(model: model, initial: draft)
+    }
+    // Confirmations raised outside the editor; the editor sheet shows its own.
+    .sheet(
+      item: Binding(
+        get: { model.sheet == nil ? model.dialog : nil },
+        set: { if $0 == nil, model.sheet == nil, model.dialog != nil { model.cancelDialog() } })
+    ) { dialog in
       CategoryDeleteDialog(model: model, dialog: dialog)
     }
-    .task { if model.phase == .idle { await model.load() } }
+    .task {
+      if model.phase == .idle { await model.load() }
+      #if DEBUG
+        for _ in 0..<50 where model.phase != .loaded || model.rows.isEmpty { try? await Task.sleep(for: .milliseconds(100)) }
+        openDebugSheet()
+      #endif
+    }
   }
+
+  #if DEBUG
+    /// UI checks (in-app snapshot): `-AbacusOpenSheet newCategory|editCategory|editUncategorised`
+    /// opens that sheet once the page has loaded.
+    private func openDebugSheet() {
+      switch UserDefaults.standard.string(forKey: "AbacusOpenSheet") {
+      case "newCategory": model.newCategory()
+      case "editCategory": if let row = model.rows.first(where: { !$0.isChild }) { model.edit(row.id) }
+      case "editUncategorised": model.edit(CategoriesModel.uncategorisedID)
+      default: break
+      }
+    }
+  #endif
 }
 
 /// The delete dialog with its reassignment target (R-CAT-3).
@@ -60,18 +84,9 @@ struct CategoryDeleteDialog: View {
   }
 }
 
-/// Where a drag would land, for the drop indicator.
-struct CategoryDropTarget: Equatable {
-  /// nil: the space below the last row (top level, last).
-  var id: AbacusDomain.Category.ID?
-  var position: CategoryDropPosition
-}
-
-/// Search, kind tabs, sort, and the tree with drag and drop (R-MGMT-2, R-MGMT-8, R-MGMT-11).
+/// Search, kind tabs, sort, and the outline (R-MGMT-2, R-MGMT-8, R-MGMT-11, D55).
 struct CategoriesTree: View {
   let model: CategoriesModel
-  @State private var dragging: AbacusDomain.Category.ID?
-  @State private var dropTarget: CategoryDropTarget?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -98,37 +113,16 @@ struct CategoriesTree: View {
       .padding(.horizontal, ManageMetrics.horizontalPadding)
       .padding(.top, 10)
       .padding(.bottom, 6)
-      List(selection: Binding(get: { model.selection }, set: { model.select($0) })) {
-        if let row = model.uncategorisedRow {
-          CategoryRowView(row: row, indicator: nil).tag(row.id)
-        }
-        ForEach(model.rows) { row in
-          CategoryRowView(row: row, indicator: dropTarget?.id == row.id ? dropTarget?.position : nil)
-            .tag(row.id)
-            .onDrag {
-              dragging = row.id
-              return NSItemProvider(object: row.id.uuidString as NSString)
-            }
-            .onDrop(
-              of: [.text],
-              delegate: CategoryDropDelegate(
-                model: model, target: row.id, dragging: $dragging, dropTarget: $dropTarget))
-        }
-        // Below the last row: top level, last.
-        Color.clear
-          .frame(height: 44)
-          .overlay(alignment: .top) {
-            if dropTarget == CategoryDropTarget(id: nil, position: .after) {
-              Rectangle().fill(Color.accentColor).frame(height: 2)
-            }
-          }
-          .listRowSeparator(.hidden)
-          .onDrop(
-            of: [.text],
-            delegate: CategoryDropDelegate(model: model, target: nil, dragging: $dragging, dropTarget: $dropTarget))
-      }
-      .listStyle(.inset)
-      .scrollContentBackground(.hidden)
+      OutlineList(
+        nodes: nodes,
+        selection: model.selection,
+        rowHeight: 30,
+        onSelect: { model.select($0) },
+        onActivate: { model.edit($0) },
+        canDrop: { model.canDrop($0.moving, on: $0.target, position: $0.position) },
+        onDrop: { drop in Task { await model.drop(drop.moving, on: drop.target, position: drop.position) } }
+      )
+      .padding(.horizontal, 8)
       .overlay {
         if let message = model.emptySearchMessage {
           Text(message).foregroundStyle(.secondary)
@@ -136,72 +130,22 @@ struct CategoriesTree: View {
       }
     }
   }
-}
 
-/// Between rows (the top or bottom quarter of a row) reorders, the middle nests (R-MGMT-8).
-struct CategoryDropDelegate: DropDelegate {
-  let model: CategoriesModel
-  let target: AbacusDomain.Category.ID?
-  @Binding var dragging: AbacusDomain.Category.ID?
-  @Binding var dropTarget: CategoryDropTarget?
-
-  /// Row height used to split it into before / onto / after.
-  static let rowHeight: CGFloat = 30
-
-  private func position(_ info: DropInfo) -> CategoryDropPosition {
-    guard target != nil else { return .after }
-    let y = info.location.y
-    if y < Self.rowHeight * 0.28 { return .before }
-    if y > Self.rowHeight * 0.72 { return .after }
-    return .onto
-  }
-
-  private func allowed(_ info: DropInfo) -> CategoryDropPosition? {
-    guard let dragging else { return nil }
-    let position = position(info)
-    if model.canDrop(dragging, on: target, position: position) { return position }
-    // Nesting not possible (a parent with subcategories): fall back to a reorder.
-    if position == .onto {
-      let fallback: CategoryDropPosition = info.location.y < Self.rowHeight / 2 ? .before : .after
-      if model.canDrop(dragging, on: target, position: fallback) { return fallback }
+  private var nodes: [OutlineNode] {
+    var nodes: [OutlineNode] = []
+    if let row = model.uncategorisedRow {
+      nodes.append(OutlineNode(id: row.id, signature: row, isPinned: true) { CategoryRowView(row: row) })
     }
-    return nil
-  }
-
-  func validateDrop(info: DropInfo) -> Bool { dragging != nil }
-
-  func dropEntered(info: DropInfo) { _ = dropUpdated(info: info) }
-
-  func dropUpdated(info: DropInfo) -> DropProposal? {
-    guard let position = allowed(info) else {
-      if dropTarget?.id == target { dropTarget = nil }
-      return DropProposal(operation: .forbidden)
+    nodes += OutlineTree.nodes(model.rows, isChild: \.isChild) { row, children in
+      OutlineNode(id: row.id, signature: row, children: children) { CategoryRowView(row: row) }
     }
-    let next = CategoryDropTarget(id: target, position: position)
-    if dropTarget != next { dropTarget = next }
-    return DropProposal(operation: .move)
-  }
-
-  func dropExited(info: DropInfo) {
-    if dropTarget?.id == target { dropTarget = nil }
-  }
-
-  func performDrop(info: DropInfo) -> Bool {
-    defer {
-      dropTarget = nil
-      dragging = nil
-    }
-    guard let moving = dragging, let position = allowed(info) else { return false }
-    Task { await model.drop(moving, on: target, position: position) }
-    return true
+    return nodes
   }
 }
 
-/// Drag handle, colour dot, name (parents bold, children indented), usage count; the drop
-/// indicator (a line above / below, or the row outlined for "make a subcategory").
+/// Drag handle, colour dot, name (parents bold; the outline indents children), usage count.
 struct CategoryRowView: View {
   let row: CategoryRow
-  let indicator: CategoryDropPosition?
 
   var body: some View {
     HStack(spacing: 10) {
@@ -209,8 +153,7 @@ struct CategoryRowView: View {
         Image(systemName: "pin.fill")
           .font(.system(size: 9))
           .foregroundStyle(.secondary)
-          .frame(width: 8)
-          .help("Built in: always on top")
+          .frame(width: 10)
       } else {
         ManageGrip()
       }
@@ -218,6 +161,7 @@ struct CategoryRowView: View {
       HStack(spacing: 6) {
         Text(row.name)
           .fontWeight(row.isChild ? .regular : .semibold)
+          .lineLimit(1)
         if row.isArchived {
           badge("Archived")
         }
@@ -225,26 +169,13 @@ struct CategoryRowView: View {
           badge("Built in")
         }
       }
-      .padding(.leading, row.isChild ? 18 : 0)
       .opacity(row.isArchived || !row.matchesSearch ? 0.55 : 1)
       Spacer(minLength: 8)
       Text(row.usage).font(.system(size: 12)).foregroundStyle(.secondary)
+        .padding(.trailing, 8)
     }
     .font(.system(size: 13))
-    .frame(minHeight: CategoryDropDelegate.rowHeight - 8)
-    .padding(.vertical, 4)
-    .contentShape(.rect)
-    .overlay(alignment: indicator == .before ? .top : .bottom) {
-      if indicator == .before || indicator == .after {
-        Rectangle().fill(Color.accentColor).frame(height: 2)
-          .padding(.leading, row.isChild ? 46 : 28)
-      }
-    }
-    .overlay {
-      if indicator == .onto {
-        RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2).padding(-3)
-      }
-    }
+    .frame(maxHeight: .infinity)
     .accessibilityElement(children: .combine)
   }
 
@@ -258,103 +189,79 @@ struct CategoryRowView: View {
   }
 }
 
-/// Name, parent, colour, usage; Archive and Delete…; Save at the bottom-right (R-CAT-1…3,
-/// R-MGMT-10). The built-in "Uncategorised" shows its colour only (D47).
-struct CategoryInspectorView: View {
+/// The category editor (D55, R-CAT-1…3): name, parent, colour, usage; Archive and Delete… on
+/// the left, Cancel and Save on the right (R-MGMT-10). The built-in "Uncategorised" shows its
+/// colour only (D47). The form is this sheet's own state; the model sees it on Save.
+struct CategoryEditorSheet: View {
   let model: CategoriesModel
+  @State private var draft: CategoryDraft
 
-  private func binding<Value>(_ keyPath: WritableKeyPath<CategoryDraft, Value>, _ fallback: Value) -> Binding<Value> {
-    draftBinding({ model.draft }, { model.draft = $0 }, keyPath, fallback: fallback)
+  init(model: CategoriesModel, initial: CategoryDraft) {
+    self.model = model
+    _draft = State(initialValue: initial)
+  }
+
+  private var title: String {
+    if draft.isNew { return draft.kind == .income ? "New income category" : "New expense category" }
+    if draft.isBuiltIn { return Uncategorised.title }
+    return model.category(draft.id)?.name ?? draft.name
   }
 
   var body: some View {
-    if let draft = model.draft {
-      VStack(spacing: 0) {
-        ManageInspector(title: model.inspectorTitle) {
-          ManageField("Name") {
-            if draft.isBuiltIn {
-              Text(Uncategorised.title)
-                .foregroundStyle(.secondary)
-                .help("The built-in entry can't be renamed")
-            } else {
-              TextField("Name", text: binding(\.name, ""))
-                .labelsHidden()
-                .textFieldStyle(.roundedBorder)
-            }
+    ManageEditorSheet(
+      title: title,
+      message: model.isDirty(draft) ? model.validationMessage(draft) : nil,
+      error: model.errorMessage,
+      saveTitle: draft.isNew ? "Create" : "Save",
+      canSave: model.canSave(draft),
+      width: 420,
+      onCancel: model.dismissSheet,
+      onSave: { Task { await model.save(draft) } }
+    ) {
+      ManageField("Name") {
+        if draft.isBuiltIn {
+          Text(Uncategorised.title)
+            .foregroundStyle(.secondary)
+            .help("The built-in entry can't be renamed")
+        } else {
+          TextField("Name", text: $draft.name)
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+        }
+      }
+      if !draft.isBuiltIn {
+        ManageField("Parent") {
+          Picker("Parent", selection: $draft.parentID) {
+            Text("None (top level)").tag(AbacusDomain.Category.ID?.none)
+            ForEach(model.parentOptions(draft)) { Text($0.name).tag(Optional($0.id)) }
           }
-          if !draft.isBuiltIn {
-            ManageField("Parent") {
-              Picker("Parent", selection: binding(\.parentID, nil)) {
-                Text("None (top level)").tag(AbacusDomain.Category.ID?.none)
-                ForEach(model.parentOptions) { Text($0.name).tag(Optional($0.id)) }
-              }
-              .labelsHidden()
-              .disabled(!model.canChangeParent)
-              if !model.canChangeParent {
-                Text("Has subcategories, so it stays at the top level.")
-                  .font(.system(size: 11)).foregroundStyle(.secondary)
-              }
-            }
-          }
-          ManageField("Colour") {
-            ManageColorField(hex: binding(\.colorHex, nil))
-          }
-          if !draft.isNew {
-            ManageCard {
-              Text(model.usageText).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-          }
-          if !draft.isNew && !draft.isBuiltIn {
-            HStack(spacing: 8) {
-              Button(model.archiveTitle) { Task { await model.archiveOrUnarchive() } }
-              Button("Delete…", role: .destructive) { model.requestDelete() }
-                .foregroundStyle(ManagePalette.destructive)
-            }
-            .padding(.top, 4)
+          .labelsHidden()
+          .disabled(!model.canChangeParent(draft))
+          if !model.canChangeParent(draft) {
+            Text("Has subcategories, so it stays at the top level.")
+              .font(.system(size: 11)).foregroundStyle(.secondary)
           }
         }
-        CategorySaveFooter(model: model, isNew: draft.isNew)
       }
-      .frame(width: ManageMetrics.inspectorWidth)
-      .background(ManagePalette.inspectorBackground)
-    } else {
-      ManageInspector(title: "") {
-        Text("Select a category or create one.").foregroundStyle(.secondary)
+      ManageField("Colour") {
+        ManageColorField(hex: $draft.colorHex)
       }
-    }
-  }
-}
-
-/// Messages on the left, Revert / Cancel and the primary Save on the right, pinned to the
-/// bottom of the inspector (R-MGMT-10).
-struct CategorySaveFooter: View {
-  let model: CategoriesModel
-  let isNew: Bool
-
-  var body: some View {
-    VStack(alignment: .trailing, spacing: 6) {
-      if model.isDirty, let validation = model.validationMessage {
-        Text(validation).font(.caption).foregroundStyle(ManagePalette.negative)
-          .frame(maxWidth: .infinity, alignment: .leading)
+      if !draft.isNew {
+        ManageCard {
+          Text(model.usageText(draft)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
       }
-      if let error = model.errorMessage {
-        Text(error).font(.caption).foregroundStyle(ManagePalette.negative)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      HStack(spacing: 8) {
-        Spacer()
-        Button(isNew ? "Cancel" : "Revert", action: model.revert)
-          .disabled(!model.isDirty)
-        Button(isNew ? "Create" : "Save") { Task { await model.save() } }
-          .buttonStyle(.borderedProminent)
-          .disabled(!model.canSave)
-          .keyboardShortcut("s", modifiers: .command)
+    } actions: {
+      if !draft.isNew, !draft.isBuiltIn, model.selection == draft.id {
+        Button(model.archiveTitle) { Task { await model.archiveOrUnarchive() } }
+        Button("Delete…", role: .destructive) { model.requestDelete() }
       }
     }
-    .font(.system(size: 13))
-    .padding(.horizontal, 20)
-    .padding(.vertical, 12)
-    .overlay(alignment: .top) { Divider() }
+    .sheet(
+      item: Binding(get: { model.dialog }, set: { if $0 == nil, model.dialog != nil { model.cancelDialog() } })
+    ) { dialog in
+      CategoryDeleteDialog(model: model, dialog: dialog)
+    }
   }
 }
 

@@ -89,6 +89,9 @@ public final class TransactionEditorModel {
     case .newInCategory(let id):
       await applyDefaults()
       preselect(category: id)
+    case .newInAccount(let id):
+      await applyDefaults()
+      preselect(account: id)
     case .edit(let id):
       do {
         guard let row = try await dependencies.transaction(id) else {
@@ -135,6 +138,14 @@ public final class TransactionEditorModel {
     draft.isRefund = false
     draft.categoryID = category.id
     draft.categoryChosen = true
+  }
+
+  /// D55: the account selected on the Accounts page, with its currency (an archived or unknown
+  /// one keeps the defaults).
+  private func preselect(account id: Account.ID) {
+    guard let account = reference.account(id), !account.isArchived else { return }
+    draft.accountID = account.id
+    draft.currencyCode = account.currency.rawValue
   }
 
   /// An active account stored under `key`.

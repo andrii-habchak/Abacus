@@ -150,10 +150,16 @@ public final class AppModel {
   /// category selected on the Categories page, nil elsewhere.
   @ObservationIgnored public var newTransactionCategory: (@MainActor () -> AbacusDomain.Category.ID?)?
 
+  /// The account "New transaction" starts on (D55): the session answers with the account
+  /// selected on the Accounts page, nil elsewhere.
+  @ObservationIgnored public var newTransactionAccount: (@MainActor () -> Account.ID?)?
+
   /// Toolbar "New transaction" and ⌘N; with a category selected on the Categories page the
   /// editor starts with it.
   public func requestNewTransaction() {
-    editor = newTransactionCategory?().map(TransactionEditorMode.newInCategory) ?? .new
+    editor =
+      newTransactionCategory?().map(TransactionEditorMode.newInCategory)
+      ?? newTransactionAccount?().map(TransactionEditorMode.newInAccount) ?? .new
   }
 
   /// Answers true when `id` is a debt record's leg and the session opened its debt instead

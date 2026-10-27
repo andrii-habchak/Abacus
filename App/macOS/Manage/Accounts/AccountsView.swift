@@ -1,12 +1,12 @@
 import AbacusDomain
 import AbacusFeatures
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// The Accounts screen (approved prototype group 4, R-MGMT-1, R-MGMT-9, R-ACC-1…5, D48): page
-/// search, sort and currency filter, groups as folders with the sum of their accounts, drag and
-/// drop like Reminders (between rows reorders, onto a group moves into it), the inspector on the
-/// right; "New account" in the toolbar, "New group" next to the sort selector.
+/// The Accounts screen (approved prototype group 4, R-MGMT-1, R-MGMT-9, R-ACC-1…5, D48, D55):
+/// page search, sort and currency filter, groups as folders with the sum of their accounts in a
+/// native outline list (a line between rows reorders, a highlighted row moves into a group or,
+/// on an ungrouped account, makes a new group of both), editors as sheets (double-click / Return
+/// / "Edit…"), and the "New account" split button in the toolbar.
 ///
 /// The shell routes `AppSection.accounts` here, keeping the model alive (`init(model:)`) or
 /// letting the view own one (`init(dependencies:)`).
@@ -26,44 +26,107 @@ public struct AccountsView: View {
 
   public var body: some View {
     ManagePhaseView(phase: model.phase, title: "Accounts", retry: { await model.load() }) {
-      HStack(spacing: 0) {
-        AccountsList(model: model)
-          .frame(minWidth: 380, maxWidth: .infinity)
-        Divider()
-        AccountInspectorView(model: model)
-      }
+      AccountsList(model: model)
+        .frame(minWidth: 380, maxWidth: .infinity)
     }
     .navigationTitle("Accounts")
     .toolbar {
-      ToolbarItemGroup(placement: .primaryAction) {
-        Button("New account", systemImage: "plus") { model.newAccount(currency: displayCurrency) }
-          .labelStyle(.titleAndIcon)
-          .help("New account")
+      ToolbarItem(placement: .primaryAction) {
+        NewAccountButton(model: model, currency: displayCurrency)
       }
     }
-    .sheet(item: Binding(get: { model.dialog }, set: { if $0 == nil { model.cancelDialog() } })) { dialog in
-      ManageDialogView(dialog: dialog, onCancel: model.cancelDialog) {
-        Task { await model.confirmDialog() }
+    .sheet(item: Binding(get: { model.sheet }, set: { if $0 == nil, model.sheet != nil { model.dismissSheet() } })) {
+      sheet in
+      switch sheet {
+      case .account(let draft): AccountEditorSheet(model: model, initial: draft)
+      case .group(let draft): AccountGroupEditorSheet(model: model, initial: draft)
       }
+    }
+    // Confirmations raised from the list; the editor sheets show their own.
+    .sheet(
+      item: Binding(
+        get: { model.sheet == nil ? model.dialog : nil },
+        set: { if $0 == nil, model.sheet == nil, model.dialog != nil { model.cancelDialog() } })
+    ) { dialog in
+      AccountsDialog(model: model, dialog: dialog)
+    }
+    .sheet(
+      item: Binding(
+        get: { model.groupPrompt }, set: { if $0 == nil, model.groupPrompt != nil { model.cancelGroupPrompt() } })
+    ) { prompt in
+      AccountGroupNameSheet(model: model, prompt: prompt)
     }
     .onChange(of: displayCurrency, initial: true) { _, currency in model.setDisplayCurrency(currency) }
-    .task { if model.phase == .idle { await model.load() } }
+    .task {
+      if model.phase == .idle { await model.load() }
+      #if DEBUG
+        await openDebugSheet()
+      #endif
+    }
+  }
+
+  #if DEBUG
+    /// UI checks (in-app snapshot): `-AbacusOpenSheet newAccount|editAccount|newGroup|editGroup|
+    /// groupPrompt` opens that sheet once the page has loaded.
+    private func openDebugSheet() async {
+      guard let which = UserDefaults.standard.string(forKey: "AbacusOpenSheet") else { return }
+      for _ in 0..<50 where model.phase != .loaded || model.rows.isEmpty { try? await Task.sleep(for: .milliseconds(100)) }
+      let accounts = model.rows.filter { !$0.isGroup }
+      switch which {
+      case "newAccount": model.newAccount(currency: displayCurrency)
+      case "editAccount": if let row = accounts.first { model.edit(row.id) }
+      case "newGroup": model.newGroup()
+      case "editGroup": if let row = model.rows.first(where: \.isGroup) { model.edit(row.id) }
+      case "groupPrompt":
+        let loose = accounts.filter { !$0.isChild }
+        if loose.count >= 2 { await model.drop(loose[1].id, on: loose[0].id, position: .onto) }
+      default: break
+      }
+    }
+  #endif
+}
+
+/// "New account | ˅" (D55): the main part creates an account (in the selected row's group, as
+/// before); the menu lists "New account in <group>" for every group A–Z and "New group…".
+struct NewAccountButton: View {
+  let model: AccountsModel
+  let currency: Currency
+
+  var body: some View {
+    Menu {
+      ForEach(model.groupOptions) { group in
+        Button("New account in \(group.name)") { model.newAccount(currency: currency, inGroup: group.id) }
+      }
+      if !model.groupOptions.isEmpty { Divider() }
+      Button("New group…") { model.newGroup() }
+    } label: {
+      Label("New account", systemImage: "plus")
+        .labelStyle(.titleAndIcon)
+    } primaryAction: {
+      model.newAccount(currency: currency)
+    }
+    .menuIndicator(.visible)
+    .fixedSize()
+    .help("New account; the arrow lists the groups and New group")
   }
 }
 
-/// Where a drag would land, for the drop indicator.
-struct AccountDropTarget: Equatable {
-  /// nil: the space below the last row (top level, last).
-  var id: UUID?
-  var position: AccountDropPosition
+/// The archive / delete confirmations (R-ACC-4, R-ACC-5, R-MGMT-9).
+struct AccountsDialog: View {
+  let model: AccountsModel
+  let dialog: ManageDialog
+
+  var body: some View {
+    ManageDialogView(dialog: dialog, onCancel: model.cancelDialog) {
+      Task { await model.confirmDialog() }
+    }
+  }
 }
 
-/// Search, sort, currency filter, "Show archived accounts" and the grouped list with drag and
-/// drop (R-MGMT-1, R-MGMT-9, R-MGMT-11).
+/// Search, currency filter, sort, "Show archived accounts" and the outline (R-MGMT-1,
+/// R-MGMT-9, R-MGMT-11, D55).
 struct AccountsList: View {
   let model: AccountsModel
-  @State private var dragging: UUID?
-  @State private var dropTarget: AccountDropTarget?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -86,10 +149,6 @@ struct AccountsList: View {
         .pickerStyle(.menu)
         .fixedSize()
         .help("Order of the list")
-        Button("New group", systemImage: "folder.badge.plus") { model.newGroup() }
-          .labelStyle(.iconOnly)
-          .buttonStyle(.borderless)
-          .help("New account group")
       }
       .padding(.horizontal, ManageMetrics.horizontalPadding)
       .padding(.top, 10)
@@ -102,33 +161,16 @@ struct AccountsList: View {
       .padding(.horizontal, ManageMetrics.horizontalPadding)
       .padding(.top, 8)
       .padding(.bottom, 4)
-      List(selection: Binding(get: { model.selection }, set: { model.select($0) })) {
-        ForEach(model.rows) { row in
-          AccountRowView(row: row, indicator: dropTarget?.id == row.id ? dropTarget?.position : nil)
-            .tag(row.id)
-            .onDrag {
-              dragging = row.id
-              return NSItemProvider(object: row.id.uuidString as NSString)
-            }
-            .onDrop(
-              of: [.text],
-              delegate: AccountDropDelegate(model: model, target: row.id, dragging: $dragging, dropTarget: $dropTarget))
-        }
-        // Below the last row: top level, last.
-        Color.clear
-          .frame(height: 44)
-          .overlay(alignment: .top) {
-            if dropTarget == AccountDropTarget(id: nil, position: .after) {
-              Rectangle().fill(Color.accentColor).frame(height: 2)
-            }
-          }
-          .listRowSeparator(.hidden)
-          .onDrop(
-            of: [.text],
-            delegate: AccountDropDelegate(model: model, target: nil, dragging: $dragging, dropTarget: $dropTarget))
-      }
-      .listStyle(.inset)
-      .scrollContentBackground(.hidden)
+      OutlineList(
+        nodes: nodes,
+        selection: model.selection,
+        rowHeight: 44,
+        onSelect: { model.select($0) },
+        onActivate: { model.edit($0) },
+        canDrop: { model.canDrop($0.moving, on: $0.target, position: $0.position) },
+        onDrop: { drop in Task { await model.drop(drop.moving, on: drop.target, position: drop.position) } }
+      )
+      .padding(.horizontal, 8)
       .overlay {
         if let message = model.emptySearchMessage {
           Text(message).foregroundStyle(.secondary)
@@ -136,74 +178,19 @@ struct AccountsList: View {
       }
     }
   }
-}
 
-/// The top or bottom quarter of a row reorders, the middle moves an account into a group
-/// (R-MGMT-9, like Reminders).
-struct AccountDropDelegate: DropDelegate {
-  let model: AccountsModel
-  let target: UUID?
-  @Binding var dragging: UUID?
-  @Binding var dropTarget: AccountDropTarget?
-
-  /// Row height used to split it into before / onto / after.
-  static let rowHeight: CGFloat = 44
-
-  private func position(_ info: DropInfo) -> AccountDropPosition {
-    guard target != nil else { return .after }
-    let y = info.location.y
-    if y < Self.rowHeight * 0.28 { return .before }
-    if y > Self.rowHeight * 0.72 { return .after }
-    return .onto
-  }
-
-  private func allowed(_ info: DropInfo) -> AccountDropPosition? {
-    guard let dragging else { return nil }
-    let position = position(info)
-    if model.canDrop(dragging, on: target, position: position) { return position }
-    // Not into a group (a group, or onto a top-level account): fall back to a reorder.
-    if position == .onto {
-      let fallback: AccountDropPosition = info.location.y < Self.rowHeight / 2 ? .before : .after
-      if model.canDrop(dragging, on: target, position: fallback) { return fallback }
+  private var nodes: [OutlineNode] {
+    OutlineTree.nodes(model.rows, isChild: \.isChild) { row, children in
+      OutlineNode(id: row.id, signature: row, children: children) { AccountRowView(row: row) }
     }
-    return nil
-  }
-
-  func validateDrop(info: DropInfo) -> Bool { dragging != nil }
-
-  func dropEntered(info: DropInfo) { _ = dropUpdated(info: info) }
-
-  func dropUpdated(info: DropInfo) -> DropProposal? {
-    guard let position = allowed(info) else {
-      if dropTarget?.id == target { dropTarget = nil }
-      return DropProposal(operation: .forbidden)
-    }
-    let next = AccountDropTarget(id: target, position: position)
-    if dropTarget != next { dropTarget = next }
-    return DropProposal(operation: .move)
-  }
-
-  func dropExited(info: DropInfo) {
-    if dropTarget?.id == target { dropTarget = nil }
-  }
-
-  func performDrop(info: DropInfo) -> Bool {
-    defer {
-      dropTarget = nil
-      dragging = nil
-    }
-    guard let moving = dragging, let position = allowed(info) else { return false }
-    Task { await model.drop(moving, on: target, position: position) }
-    return true
   }
 }
 
 /// A group (folder tile, name, "3 accounts", the sum in the display currency) or an account
-/// (tile with the currency symbol, name, "Kind · CUR", balance; indented inside a group); the
-/// drop indicator (a line above / below, or the group outlined for "move into").
+/// (tile with the currency symbol, name, "Kind · CUR", balance); the outline indents accounts
+/// inside a group.
 struct AccountRowView: View {
   let row: AccountRow
-  var indicator: AccountDropPosition? = nil
 
   var body: some View {
     HStack(spacing: 12) {
@@ -211,7 +198,7 @@ struct AccountRowView: View {
       tile
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 6) {
-          Text(row.name).fontWeight(row.isGroup ? .semibold : .medium)
+          Text(row.name).fontWeight(row.isGroup ? .semibold : .medium).lineLimit(1)
           if row.isArchived {
             Text("Archived")
               .font(.system(size: 10, weight: .semibold))
@@ -221,30 +208,18 @@ struct AccountRowView: View {
               .background(ManagePalette.badge, in: .capsule)
           }
         }
-        Text(row.detail).font(.system(size: 12)).foregroundStyle(.secondary)
+        Text(row.detail).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer(minLength: 8)
       Text(row.balanceText)
         .fontWeight(.semibold)
         .monospacedDigit()
         .foregroundStyle(row.isNegative ? ManagePalette.negative : Color.primary)
+        .padding(.trailing, 8)
     }
-    .padding(.leading, row.isChild ? 22 : 0)
     .opacity(row.matchesSearch ? 1 : 0.55)
     .font(.system(size: 13))
-    .padding(.vertical, 5)
-    .contentShape(.rect)
-    .overlay(alignment: indicator == .before ? .top : .bottom) {
-      if indicator == .before || indicator == .after {
-        Rectangle().fill(Color.accentColor).frame(height: 2)
-          .padding(.leading, row.isChild ? 50 : 28)
-      }
-    }
-    .overlay {
-      if indicator == .onto {
-        RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2).padding(-3)
-      }
-    }
+    .frame(maxHeight: .infinity)
     .accessibilityElement(children: .combine)
   }
 
@@ -279,153 +254,174 @@ struct AccountRowView: View {
   }
 }
 
-/// The account form or the group form, with Save at the bottom-right (R-MGMT-10).
-struct AccountInspectorView: View {
-  let model: AccountsModel
+// MARK: - Sheets
 
-  var body: some View {
-    if model.groupDraft != nil {
-      inspector(isNew: model.groupDraft?.isNew == true) { AccountGroupFields(model: model) }
-    } else if model.draft != nil {
-      inspector(isNew: model.draft?.isNew == true) { AccountFields(model: model) }
-    } else {
-      ManageInspector(title: "") {
-        Text("Select an account or create one.").foregroundStyle(.secondary)
-      }
-    }
+/// The account editor (D55, R-ACC-1, R-ACC-4, R-ACC-5): name, kind, currency (fixed after the
+/// first transaction), opening balance and date, group, colour, IBAN, current balance; Archive…
+/// / Unarchive and Delete… on the left, Cancel and Save on the right (R-MGMT-10). The form is
+/// this sheet's own state; the model sees it on Save.
+struct AccountEditorSheet: View {
+  let model: AccountsModel
+  @State private var draft: AccountDraft
+
+  init(model: AccountsModel, initial: AccountDraft) {
+    self.model = model
+    _draft = State(initialValue: initial)
   }
 
-  private func inspector<Fields: View>(isNew: Bool, @ViewBuilder fields: () -> Fields) -> some View {
-    VStack(spacing: 0) {
-      ManageInspector(title: model.inspectorTitle) { fields() }
-      AccountSaveFooter(model: model, isNew: isNew)
+  private var title: String {
+    if draft.isNew { return "New account" }
+    return model.account(draft.id)?.name ?? draft.name
+  }
+
+  var body: some View {
+    ManageEditorSheet(
+      title: title,
+      message: model.isDirty(draft) ? model.validationMessage(draft) : nil,
+      error: model.errorMessage,
+      saveTitle: draft.isNew ? "Create" : "Save",
+      canSave: model.canSave(draft),
+      onCancel: model.dismissSheet,
+      onSave: { Task { await model.save(draft) } }
+    ) {
+      AccountFields(model: model, draft: $draft)
+    } actions: {
+      if !draft.isNew, model.account(draft.id) != nil {
+        Button(model.archiveTitle) { Task { await model.archiveOrUnarchive() } }
+        Button("Delete…", role: .destructive) { model.requestDelete() }
+          .disabled(!model.canDelete)
+          .help(model.deleteHint)
+      }
     }
-    .frame(width: ManageMetrics.inspectorWidth)
-    .background(ManagePalette.inspectorBackground)
+    .sheet(
+      item: Binding(get: { model.dialog }, set: { if $0 == nil, model.dialog != nil { model.cancelDialog() } })
+    ) { dialog in
+      AccountsDialog(model: model, dialog: dialog)
+    }
   }
 }
 
-/// Name, kind, currency (fixed after the first transaction), opening balance and date, group,
-/// colour, IBAN, current balance; Archive… / Unarchive and Delete… (R-ACC-1, R-ACC-4, R-ACC-5).
 struct AccountFields: View {
   let model: AccountsModel
-
-  private func binding<Value>(_ keyPath: WritableKeyPath<AccountDraft, Value>, _ fallback: Value) -> Binding<Value> {
-    draftBinding({ model.draft }, { model.draft = $0 }, keyPath, fallback: fallback)
-  }
+  @Binding var draft: AccountDraft
 
   var body: some View {
-    if let draft = model.draft {
-      ManageField("Name") {
-        TextField("Name", text: binding(\.name, ""), prompt: Text("e.g. PKO Personal"))
-          .labelsHidden()
-          .textFieldStyle(.roundedBorder)
-      }
+    ManageField("Name") {
+      TextField("Name", text: $draft.name, prompt: Text("e.g. PKO Personal"))
+        .labelsHidden()
+        .textFieldStyle(.roundedBorder)
+    }
+    HStack(alignment: .top, spacing: 12) {
       ManageField("Kind") {
-        Picker("Kind", selection: binding(\.kind, .bank)) {
+        Picker("Kind", selection: $draft.kind) {
           Section("Assets") {
             ForEach(ManageText.assetKinds, id: \.self) { Text(ManageText.kindTitle($0)).tag($0) }
           }
           Section("Liabilities") {
-            ForEach(ManageText.liabilityKinds(offeredFor: binding(\.kind, .bank).wrappedValue), id: \.self) { Text(ManageText.kindTitle($0)).tag($0) }
+            ForEach(ManageText.liabilityKinds(offeredFor: draft.kind), id: \.self) {
+              Text(ManageText.kindTitle($0)).tag($0)
+            }
           }
         }
         .labelsHidden()
       }
       ManageField("Currency") {
-        if model.isCurrencyLocked {
-          HStack(spacing: 4) {
-            Text(draft.currency.rawValue)
-            Text("· fixed after the first transaction").font(.system(size: 11)).foregroundStyle(.secondary)
-          }
-          .padding(.vertical, 4)
+        if model.isCurrencyLocked(draft) {
+          Text(draft.currency.rawValue)
+            .padding(.vertical, 4)
+            .help("Fixed after the first transaction")
         } else {
-          HStack(spacing: 8) {
-            Picker("Currency", selection: binding(\.currency, .UAH)) {
-              ForEach(Currency.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .labelsHidden()
-            .fixedSize()
-            Text("fixed after the first transaction").font(.system(size: 11)).foregroundStyle(.secondary)
+          Picker("Currency", selection: $draft.currency) {
+            ForEach(Currency.allCases, id: \.self) { Text($0.rawValue).tag($0) }
           }
+          .labelsHidden()
+          .fixedSize()
         }
       }
-      HStack(alignment: .top, spacing: 8) {
-        ManageField("Opening balance") {
-          TextField("Opening balance", text: binding(\.openingBalance, ""))
-            .labelsHidden()
-            .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.trailing)
-            .monospacedDigit()
-        }
-        ManageField("Opening date") {
-          DatePicker("Opening date", selection: binding(\.openingDate, Date()), displayedComponents: .date)
-            .labelsHidden()
-            .datePickerStyle(.field)
-        }
-      }
-      ManageField("Group") {
-        Picker("Group", selection: binding(\.groupID, nil)) {
-          Text("None (top level)").tag(AccountGroup.ID?.none)
-          ForEach(model.groupOptions) { Text($0.name).tag(Optional($0.id)) }
-        }
-        .labelsHidden()
-      }
-      ManageField("Colour") {
-        ManageColorField(hex: binding(\.colorHex, nil))
-      }
-      ManageField("Bank account number (IBAN)") {
-        TextField("IBAN", text: binding(\.iban, ""), prompt: Text("Used to recognise transfers in bank imports"))
+    }
+    Text("The currency is fixed after the first transaction.")
+      .font(.system(size: 11))
+      .foregroundStyle(.secondary)
+    HStack(alignment: .top, spacing: 12) {
+      ManageField("Opening balance") {
+        TextField("Opening balance", text: $draft.openingBalance)
           .labelsHidden()
           .textFieldStyle(.roundedBorder)
+          .multilineTextAlignment(.trailing)
+          .monospacedDigit()
       }
-      if let balance = model.balanceText {
-        ManageCard {
-          HStack {
-            Text("Current balance").foregroundStyle(.secondary)
-            Spacer()
-            Text(balance)
-              .fontWeight(.semibold)
-              .monospacedDigit()
-              .foregroundStyle(model.isBalanceNegative ? ManagePalette.negative : Color.primary)
-          }
-        }
+      ManageField("Opening date") {
+        DatePicker("Opening date", selection: $draft.openingDate, displayedComponents: .date)
+          .labelsHidden()
+          .datePickerStyle(.field)
       }
-      if !draft.isNew {
-        HStack(spacing: 8) {
-          Button(model.archiveTitle) { Task { await model.archiveOrUnarchive() } }
-          Button("Delete…", role: .destructive) { model.requestDelete() }
-            .foregroundStyle(model.canDelete ? ManagePalette.destructive : Color.secondary)
-            .disabled(!model.canDelete)
-            .help(model.deleteHint)
+    }
+    ManageField("Group") {
+      Picker("Group", selection: $draft.groupID) {
+        Text("None (top level)").tag(AccountGroup.ID?.none)
+        ForEach(model.groupOptions) { Text($0.name).tag(Optional($0.id)) }
+      }
+      .labelsHidden()
+    }
+    ManageField("Colour") {
+      ManageColorField(hex: $draft.colorHex)
+    }
+    ManageField("Bank account number (IBAN)") {
+      TextField("IBAN", text: $draft.iban, prompt: Text("Used to recognise transfers in bank imports"))
+        .labelsHidden()
+        .textFieldStyle(.roundedBorder)
+    }
+    if !draft.isNew, model.selection == draft.id, let balance = model.balanceText {
+      ManageCard {
+        HStack {
+          Text("Current balance").foregroundStyle(.secondary)
+          Spacer()
+          Text(balance)
+            .fontWeight(.semibold)
+            .monospacedDigit()
+            .foregroundStyle(model.isBalanceNegative ? ManagePalette.negative : Color.primary)
         }
-        .padding(.top, 4)
         Text(model.deleteHint).font(.system(size: 11)).foregroundStyle(.secondary)
       }
     }
   }
 }
 
-/// A group (R-MGMT-9): name, optional colour, its accounts and their sum; Delete… moves its
-/// accounts to the top level.
-struct AccountGroupFields: View {
+/// The group editor (R-MGMT-9, D55): name, optional colour, its accounts and their sum; Delete
+/// group… on the left (its accounts move to the top level).
+struct AccountGroupEditorSheet: View {
   let model: AccountsModel
+  @State private var draft: AccountGroupDraft
 
-  private func binding<Value>(_ keyPath: WritableKeyPath<AccountGroupDraft, Value>, _ fallback: Value) -> Binding<Value> {
-    draftBinding({ model.groupDraft }, { model.groupDraft = $0 }, keyPath, fallback: fallback)
+  init(model: AccountsModel, initial: AccountGroupDraft) {
+    self.model = model
+    _draft = State(initialValue: initial)
+  }
+
+  private var title: String {
+    if draft.isNew { return "New group" }
+    return model.group(draft.id)?.name ?? draft.name
   }
 
   var body: some View {
-    if let draft = model.groupDraft {
+    ManageEditorSheet(
+      title: title,
+      message: model.isDirty(draft) ? model.validationMessage(draft) : nil,
+      error: model.errorMessage,
+      saveTitle: draft.isNew ? "Create" : "Save",
+      canSave: model.canSave(draft),
+      onCancel: model.dismissSheet,
+      onSave: { Task { await model.save(draft) } }
+    ) {
       ManageField("Name") {
-        TextField("Name", text: binding(\.name, ""), prompt: Text("e.g. Monobank, PKO"))
+        TextField("Name", text: $draft.name, prompt: Text("e.g. Monobank, PKO"))
           .labelsHidden()
           .textFieldStyle(.roundedBorder)
       }
       ManageField("Colour") {
-        ManageColorField(hex: binding(\.colorHex, nil))
+        ManageColorField(hex: $draft.colorHex)
       }
-      if let summary = model.selectedGroupSummary, let sum = model.selectedGroupSumText {
+      if !draft.isNew, let summary = model.selectedGroupSummary, let sum = model.selectedGroupSumText {
         ManageCard {
           HStack {
             Text(summary).foregroundStyle(.secondary)
@@ -438,51 +434,68 @@ struct AccountGroupFields: View {
             .fixedSize(horizontal: false, vertical: true)
         }
       }
-      if draft.isNew {
-        Text("Drag accounts onto the group to move them in, or pick the group in an account's form.")
-          .font(.system(size: 11))
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      } else {
+      Text(
+        draft.isNew
+          ? "Drag accounts onto the group to move them in, or pick the group in an account's form."
+          : "Deleting the group moves its accounts to the top level."
+      )
+      .font(.system(size: 11))
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+    } actions: {
+      if !draft.isNew, model.group(draft.id) != nil {
         Button("Delete group…", role: .destructive) { model.requestDeleteGroup() }
-          .foregroundStyle(ManagePalette.destructive)
-          .padding(.top, 4)
-        Text("Its accounts move to the top level.").font(.system(size: 11)).foregroundStyle(.secondary)
       }
+    }
+    .sheet(
+      item: Binding(get: { model.dialog }, set: { if $0 == nil, model.dialog != nil { model.cancelDialog() } })
+    ) { dialog in
+      AccountsDialog(model: model, dialog: dialog)
     }
   }
 }
 
-/// Messages on the left, Revert / Cancel and the primary Save on the right, pinned to the
-/// bottom of the inspector (R-MGMT-10).
-struct AccountSaveFooter: View {
+/// An account dropped onto an ungrouped account (D55): the new group's name, suggested from the
+/// target's first word. Cancel leaves both accounts where they were.
+struct AccountGroupNameSheet: View {
   let model: AccountsModel
-  let isNew: Bool
+  let prompt: AccountGroupPrompt
+  @State private var name: String
+
+  init(model: AccountsModel, prompt: AccountGroupPrompt) {
+    self.model = model
+    self.prompt = prompt
+    _name = State(initialValue: prompt.defaultName)
+  }
+
+  private var names: String {
+    let target = model.account(prompt.target)?.name ?? ""
+    let moving = model.account(prompt.moving)?.name ?? ""
+    return "“\(target)” and “\(moving)”"
+  }
 
   var body: some View {
-    VStack(alignment: .trailing, spacing: 6) {
-      if model.isDirty, let validation = model.validationMessage {
-        Text(validation).font(.caption).foregroundStyle(ManagePalette.negative)
-          .frame(maxWidth: .infinity, alignment: .leading)
+    ManageEditorSheet(
+      title: "New group",
+      message: nil,
+      error: nil,
+      saveTitle: "Create group",
+      canSave: !name.trimmingCharacters(in: .whitespaces).isEmpty,
+      width: 380,
+      onCancel: model.cancelGroupPrompt,
+      onSave: { Task { await model.confirmGroupPrompt(name: name) } }
+    ) {
+      Text("A new group will hold \(names).")
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+      ManageField("Group name") {
+        TextField("Group name", text: $name)
+          .labelsHidden()
+          .textFieldStyle(.roundedBorder)
       }
-      if let error = model.errorMessage {
-        Text(error).font(.caption).foregroundStyle(ManagePalette.negative)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      HStack(spacing: 8) {
-        Spacer()
-        Button(isNew ? "Cancel" : "Revert", action: model.revert)
-          .disabled(!model.isDirty)
-        Button(isNew ? "Create" : "Save") { Task { await model.save() } }
-          .buttonStyle(.borderedProminent)
-          .disabled(!model.canSave)
-          .keyboardShortcut("s", modifiers: .command)
-      }
+    } actions: {
+      EmptyView()
     }
-    .font(.system(size: 13))
-    .padding(.horizontal, 20)
-    .padding(.vertical, 12)
-    .overlay(alignment: .top) { Divider() }
   }
 }
 
