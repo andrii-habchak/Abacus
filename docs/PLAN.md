@@ -133,7 +133,7 @@ Wave 1 (parallel):
   switcher on Budget page, red trash, Save bottom-right.
 - [x] **C9 Rules** (merged 2026-10-27; migration v8) — apply-to-existing bug, rollback, amount-only condition, category filter,
   page search.
-- [ ] **C10 Categories** — built-in Uncategorised (D47), same colour everywhere, A–Z pickers,
+- [x] **C10 Categories** (merged 2026-10-27; migration v9) — built-in Uncategorised (D47), same colour everywhere, A–Z pickers,
   sort selector, search, drag-to-nest, New transaction preselects the category.
 - [x] **C11 Transactions, events, shell** (merged 2026-10-27) — page search on Transactions/Events, event inspector
   layout + read-only archived event, type filter layout, Save bottom-right in event inspector.
@@ -141,7 +141,7 @@ Wave 2:
 - [ ] **C12 Accounts** — account groups (D48), drag/sort/search/currency filter, grouped pickers,
   net worth hierarchy.
 - [ ] **C13 Dashboard widgets** — income donut, income vs expenses, drag-reorder widgets.
-- [ ] **Debts** — owner interview → TA → lane (D49).
+- [ ] **C14 Debts** — `R-DEBT` (TA v1.7, D51).
 - [ ] **Release 1.2.0**.
 
 ### Phase 4 — v2 (planned after v1)

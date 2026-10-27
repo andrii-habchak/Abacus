@@ -55,7 +55,8 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 | C11 Transactions/events | background agent | `wp/C11-transactions-events` | **merged** 2026-10-27 (event list shows all dates; notes `docs/status/C11.md`) |
 | C9 Rules | background agent | `wp/C9-rules` | **merged** 2026-10-27 (apply fix, rollback via migration v8; interpretations in `docs/status/C9.md`) |
 | C8 Budget | background agent | `wp/C8-budget` | **merged** 2026-10-27 (widget showed the saved limits; the editor lost unsaved edits — fixed; interpretations in `docs/status/C8.md`) |
-| C10 Categories | background agent | `wp/C10-categories` | in progress |
+| C10 Categories | background agent | `wp/C10-categories` | **merged** 2026-10-27 (built-in Uncategorised, one colour mapping, migration v9; interpretations in `docs/status/C10.md`) |
+| C12 Accounts, C13 Dashboard, C14 Debts | background agents | `wp/C12-accounts`, `wp/C13-dashboard`, `wp/C14-debts` | in progress (wave 2) |
 | C7 Rules | background agent | `wp/C7-rules` | **merged** 2026-10-27 (migration v6 rebuilds `categoryRules`; interpretations to confirm in `docs/status/C7.md`) |
 
 ## Contract-change requests (orchestrator queue)

@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.6 — agreed** (2026-10-27). All open questions closed (§9). Changes after this point
+_Status: **v1.7 — agreed** (2026-10-27). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -107,6 +107,40 @@ Answers "how do I track a vacation / a relocation / the car" (what Saldo tags we
   filter can filter by event.
 - `R-EVT-4` Events are orthogonal to categories: "Trip 2025" spending still lands in Eating out,
   Transport, etc., so monthly category reports stay correct.
+
+### 3.6a Debts — `R-DEBT` (v1.7, D51)
+Answers "who owes me, whom do I owe, and how much".
+- `R-DEBT-1` A **debt** is a **person** and a **currency**; one person can have debts in several
+  currencies, each with its own balance, never netted across currencies. A debt is **not an
+  account**. Fields: person name, currency, optional due date, note, **"Count in net worth"**
+  checkbox (per debt), settled/archived flag.
+- `R-DEBT-2` Balance direction: positive = they owe me, negative = I owe them; shown as "owes you"
+  / "you owe".
+- `R-DEBT-3` **Records** (each with day, amount in the debt's currency, optional note):
+  *I lent* (money from my account to them), *They repaid* (money to my account), *I borrowed*
+  (money from them to my account), *I repaid* (money from my account to them), *Paid on their
+  behalf* (I paid a bill for them from my account; they owe me), *Forgive* (close part or all of
+  the balance, no money moves). A record that moves money names my account; if the account's
+  currency differs, the account amount is entered too (like a cross-currency transfer). My
+  account balances change accordingly; the record appears in the transaction list on that account
+  marked as a debt record.
+- `R-DEBT-4` Expense/income flags, **off by default**: *I lent* and *Paid on their behalf* have
+  "Count as expense" (then they appear in monthly expenses and the budget under a "Debts"
+  category); *They repaid* has "Count as income". *Forgive* of money owed to me has "Count as
+  expense" (on by default — a forgiven debt is an expense on the forgiveness day). Unflagged
+  records never touch expense/income reports.
+- `R-DEBT-5` **Debts tab** (sidebar, Overview): people with their balances per currency and
+  direction, search, filter Active/Settled; a person's detail lists the records, totals, due date;
+  add record / edit / delete. A debt whose balance reaches zero can be marked settled (moves to
+  Settled, drops off the widget).
+- `R-DEBT-6` **Dashboard Debts widget**: totals "Owed to you" and "You owe" in the display
+  currency, and a per-person list (largest first, per-currency balances).
+- `R-DEBT-7` Net worth includes a debt only when its "Count in net worth" is on (owed to me =
+  asset, I owe = liability).
+- `R-DEBT-8` Migration: existing accounts of kind *debt* become debts (person = account name,
+  currency = account currency); their transfers become records with the same days and amounts;
+  every own-account balance and the net worth (with "Count in net worth" on) stay exactly equal.
+  Imports that would create a debt account create/find a debt instead.
 
 ### 3.7 Exchange rates — `R-FX`
 - `R-FX-1` **Automatic:** on launch and then daily (and on demand via "Refresh rates") the app
@@ -348,6 +382,7 @@ No open questions.
 |---------|------|--------|
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
+| 1.7 | 2026-10-27 | Debts (`R-DEBT`, owner interview, D51). |
 | 1.6 | 2026-10-27 | Owner review of 1.1.0: budget total + currency back with unallocated (`R-BUD-1`, `R-MGMT-3`); built-in Uncategorised, sorting/search/drag-to-nest for categories (`R-MGMT-8`); account groups (`R-MGMT-9`); form button placement (`R-MGMT-10`); page search (`R-MGMT-11`); rules: amount-only condition, rollback; income donut, income vs expenses, widget reorder (`R-HOME-6`); currency switch order and Budget page; debts: design pending (owner interview). |
 | 1.5 | 2026-10-27 | Owner review of v1.0.0: per-category budget currencies, no separate total (`R-BUD-1/2`, `R-MGMT-3`); Saldo-like rules with amount conditions and a transfer action (`R-IMP-8`, `R-MGMT-6`); colours for categories, accounts, events (`R-MGMT-7`, `R-EVT-1`); click-only drill-down (`R-HOME-3`); budget edit button (`R-HOME-2`); currency switch only where it applies (`R-HOME-4`). |
 | 1.4 | 2026-10-21 | Q23: no second Saldo pairing pass; cross-currency halves go to Needs review. |
