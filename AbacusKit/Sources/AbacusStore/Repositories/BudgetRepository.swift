@@ -37,7 +37,8 @@ public struct SQLiteBudgetRepository: BudgetRepository {
       try BudgetPlan.upsert { BudgetPlan.Draft(plan) }.execute(db)
       try BudgetAllocation.where { $0.planID.eq(planID) }.delete().execute(db)
       let rows = allocations.map {
-        BudgetAllocation(id: $0.id, planID: planID, categoryID: $0.categoryID, limitMinor: $0.limitMinor)
+        BudgetAllocation(
+          id: $0.id, planID: planID, categoryID: $0.categoryID, limitMinor: $0.limitMinor, currency: $0.currency)
       }
       if !rows.isEmpty {
         try BudgetAllocation.insert { rows }.execute(db)

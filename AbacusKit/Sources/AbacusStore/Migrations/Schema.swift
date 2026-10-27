@@ -28,6 +28,21 @@ extension AbacusDatabase {
         )
       }
     }
+    // D43: each budget limit has its own currency; existing limits take their plan's. The
+    // plan's totalMinor / currency columns stay (append-only) but are no longer read. The
+    // default only applies to rows written without the column (an older schema's records).
+    migrator.registerMigration("v5: budget allocation currency") { db in
+      try db.execute(
+        sql: #"ALTER TABLE "budgetAllocations" ADD COLUMN "currency" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT 'PLN'"#
+      )
+      try db.execute(
+        sql: #"""
+          UPDATE "budgetAllocations"
+          SET "currency" = (SELECT "currency" FROM "budgetPlans" WHERE "budgetPlans"."id" = "budgetAllocations"."planID")
+          WHERE EXISTS (SELECT 1 FROM "budgetPlans" WHERE "budgetPlans"."id" = "budgetAllocations"."planID")
+          """#
+      )
+    }
     return migrator
   }
 

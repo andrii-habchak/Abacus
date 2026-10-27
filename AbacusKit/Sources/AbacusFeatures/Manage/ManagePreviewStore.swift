@@ -174,10 +174,13 @@ public final class ManagePreviewStore: Sendable {
           for index in state.rules.indices where state.rules[index].categoryID == id {
             state.rules[index].categoryID = target
           }
-          // A plan holds at most one allocation per category: add the limits up.
+          // A plan holds at most one allocation per category: add the limits up when they share a
+          // currency, else the target keeps its own (as the store does).
           for moving in state.allocations.filter({ $0.categoryID == id }) {
             if let existing = state.allocations.firstIndex(where: { $0.planID == moving.planID && $0.categoryID == target }) {
-              state.allocations[existing].limitMinor += moving.limitMinor
+              if state.allocations[existing].currency == moving.currency {
+                state.allocations[existing].limitMinor += moving.limitMinor
+              }
               state.allocations.removeAll { $0.id == moving.id }
             } else if let index = state.allocations.firstIndex(where: { $0.id == moving.id }) {
               state.allocations[index].categoryID = target
@@ -233,7 +236,8 @@ public final class ManagePreviewStore: Sendable {
         state.allocations.removeAll { replaced.contains($0.planID) }
         state.plans.append(plan)
         state.allocations += allocations.map {
-          BudgetAllocation(id: $0.id, planID: plan.id, categoryID: $0.categoryID, limitMinor: $0.limitMinor)
+          BudgetAllocation(
+            id: $0.id, planID: plan.id, categoryID: $0.categoryID, limitMinor: $0.limitMinor, currency: $0.currency)
         }
       }
     }

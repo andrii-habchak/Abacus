@@ -2,6 +2,7 @@ import AbacusDomain
 import AbacusFX
 import AbacusFeatures
 import Foundation
+import Synchronization
 import Testing
 
 @MainActor
@@ -17,32 +18,79 @@ struct ManageBudgetTests {
     return model
   }
 
-  @Test("R-MGMT-3, R-BUD-1: the editor loads the plan in effect: total, currency, limits and the unallocated rest")
+  func uah(_ minor: Int64) -> String { ManageFixture.format.money(Money(minorUnits: minor, currency: .UAH)) }
+
+  @Test("R-MGMT-3, R-BUD-1, D43: the editor loads each limit in its own currency; the total is their sum in the display currency")
   func loadsPlan() async {
     let model = await model()
-    #expect(model.total == "9000.00")
-    #expect(model.currency == .PLN)
     #expect(model.appliesFrom == october)
+    #expect(model.displayCurrency == .UAH)
     #expect(model.rows.map(\.name) == ["Groceries", "Eating out", "Rent", "Transport", "Health"])
+    #expect(model.rows.map(\.currency) == [.PLN, .PLN, .PLN, .PLN, .EUR])
     #expect(model.rows.first { $0.name == "Transport" }?.covers == "incl. Taxi, Fuel")
     #expect(model.rows.first { $0.name == "Rent" }?.covers == "")
-    #expect(model.rows.first { $0.name == "Rent" }?.share == 4_000.0 / 9_000.0)
-    #expect(model.unallocated == Money(minorUnits: 1_700_00, currency: .PLN))
-    #expect(model.unallocatedText == ManageFixture.format.money(Money(minorUnits: 1_700_00, currency: .PLN)))
-    #expect(model.unallocatedNote == "Spending in categories without a limit")
-    #expect(!model.isOverAllocated)
+    // zł6,800 at 11.30 + €110 at 48.50 (the latest preview rates).
+    #expect(model.totalMinor == Int64(76_840_00 + 5_335_00))
+    #expect(model.totalText == uah(82_175_00))
+    #expect(model.totalNote == "Sum of the limits in UAH at the latest rate")
+    #expect(model.rows.first { $0.name == "Rent" }?.share == 45_200.0 / 82_175.0)
+    #expect(model.currenciesWithoutRate.isEmpty)
     #expect(!model.canSave)
   }
 
-  @Test("R-BUD-1: limits above the total make the unallocated row negative with a note")
-  func overAllocated() async {
+  @Test("R-MGMT-3, D43: a limit's currency can be changed and becomes the default for the next limit")
+  func currencyPerLimit() async {
     let model = await model()
-    model.setLimit("6000", for: PreviewData.id(205))
-    #expect(model.isOverAllocated)
-    #expect(model.unallocated?.minorUnits == -300_00)
-    #expect(model.unallocatedNote.hasPrefix("Limits exceed the total by "))
-    #expect(model.unallocatedNote.hasSuffix("300.00"))
+    #expect(model.newLimitCurrency == .EUR)  // the last limit loaded (Health)
+    model.setCurrency(.USD, for: PreviewData.id(205))
+    #expect(model.currency(PreviewData.id(205)) == .USD)
+    #expect(model.newLimitCurrency == .USD)
     #expect(model.canSave)
+    model.categoryToAdd = PreviewData.id(212)
+    model.addLimit()
+    #expect(model.rows.last?.name == "Clothing")
+    #expect(model.rows.last?.currency == .USD)
+  }
+
+  @Test("R-MGMT-3, D43: an empty budget's first limit is in the display currency")
+  func firstLimitInDisplayCurrency() async {
+    let empty = ManagePreviewStore(
+      accounts: PreviewData.accounts, categories: PreviewData.categories, settings: PreviewData.settings)
+    let model = BudgetEditorModel(dependencies: ManageFixture.dependencies(empty))
+    await model.load()
+    #expect(model.rows.isEmpty)
+    #expect(model.totalText == uah(0))
+    #expect(model.newLimitCurrency == .UAH)
+    model.addLimit()
+    #expect(model.rows.first?.currency == .UAH)
+    #expect(model.totalNote == "Sum of the limits")
+  }
+
+  @Test("D27, D43: a limit without a rate to the display currency is left out of the total and named")
+  func limitWithoutRate() async {
+    let noRates = ManageDependencies.preview(
+      store: store, rates: RateTable(rates: [], today: PreviewData.today), format: ManageFixture.format)
+    let model = BudgetEditorModel(dependencies: noRates)
+    await model.load()
+    #expect(model.totalMinor == 0)
+    #expect(model.currenciesWithoutRate == [.PLN, .EUR])
+    #expect(model.totalNote == "No PLN, EUR→UAH rate: those limits are not counted")
+    #expect(model.rows.allSatisfy { $0.share == 0 })
+  }
+
+  @Test("R-FX-1, D43: rates arriving after the screen loaded fill in the total; edits are kept")
+  func ratesArriveLater() async {
+    let current = Mutex(RateTable(rates: [], today: PreviewData.today))
+    var dependencies = ManageFixture.dependencies(store)
+    dependencies.converter = { current.withLock { $0 } }
+    let model = BudgetEditorModel(dependencies: dependencies)
+    await model.load()
+    #expect(model.totalMinor == 0)
+    model.setLimit("4100", for: PreviewData.id(205))
+    current.withLock { $0 = RateTable(rates: PreviewData.fxRates, today: PreviewData.today) }
+    await model.refreshRates()
+    #expect(model.totalMinor == Int64(82_175_00 + 1_130_00))
+    #expect(model.limitText(PreviewData.id(205)) == "4100")
   }
 
   @Test("R-BUD-1: category limits can be added and removed; used and archived categories are not offered")
@@ -59,27 +107,27 @@ struct ManageBudgetTests {
     #expect(!model.addOptions.contains { $0.name == "Clothing" })
     model.removeLimit(PreviewData.id(209))
     #expect(!model.rows.contains { $0.name == "Health" })
-    #expect(model.unallocated?.minorUnits == 2_200_00)
+    #expect(model.totalMinor == Int64(82_175_00 - 5_335_00))  // €110 at 48.50
   }
 
   @Test("R-BUD-3: saving applies from the chosen month on; earlier months keep their budget")
   func savesFromMonth() async throws {
     let model = await model()
     await model.setAppliesFrom(november)
-    model.total = "9500"
-    model.currency = .EUR
+    model.setLimit("150", for: PreviewData.id(209))
+    model.setCurrency(.USD, for: PreviewData.id(206))
     #expect(model.canSave)
     await model.save()
     #expect(model.savedMessage == "Saved. It applies from November 2026.")
     #expect(!model.isDirty)
     let budget = store.budgetRepository
     let oct = try #require(try await budget.plan(for: october))
-    #expect(oct.plan.totalMinor == 9_000_00)
-    #expect(oct.plan.currency == .PLN)
+    #expect(oct.allocations.first { $0.categoryID == PreviewData.id(209) }?.limit == Money(minorUnits: 110_00, currency: .EUR))
+    #expect(oct.allocations.first { $0.categoryID == PreviewData.id(206) }?.currency == .PLN)
     let nov = try #require(try await budget.plan(for: november))
-    #expect(nov.plan.totalMinor == 9_500_00)
-    #expect(nov.plan.currency == .EUR)
     #expect(nov.allocations.count == 5)
+    #expect(nov.allocations.first { $0.categoryID == PreviewData.id(209) }?.limit == Money(minorUnits: 150_00, currency: .EUR))
+    #expect(nov.allocations.first { $0.categoryID == PreviewData.id(206) }?.limit == Money(minorUnits: 400_00, currency: .USD))
     let dec = try #require(try await budget.plan(for: november.adding(months: 1)))
     #expect(dec.plan.id == nov.plan.id)
   }
@@ -87,19 +135,23 @@ struct ManageBudgetTests {
   @Test("R-BUD-3, D29: saving again for the same month replaces that month's plan; a later plan is kept and noted")
   func replacesSameMonth() async throws {
     let model = await model()
+    let rent = PreviewData.id(205)
+    func rentLimit(_ month: Month) async throws -> Int64? {
+      try await store.budgetRepository.plan(for: month)?.allocations.first { $0.categoryID == rent }?.limitMinor
+    }
     await model.setAppliesFrom(november.adding(months: 2))
-    model.total = "8000"
+    model.setLimit("3000", for: rent)
     await model.save()
     await model.setAppliesFrom(november)
     #expect(model.laterPlanMonth == november.adding(months: 2))
     #expect(model.appliesNote.hasSuffix("From January 2027 the budget saved for that month applies."))
-    model.total = "9100"
+    model.setLimit("3100", for: rent)
     await model.save()
-    model.total = "9200"
+    model.setLimit("3200", for: rent)
     await model.save()
     #expect(store.budgetRepository.plans().map(\.effectiveMonth) == ["2026-01", "2026-11", "2027-01"])
-    #expect(try await store.budgetRepository.plan(for: november)?.plan.totalMinor == 9_200_00)
-    #expect(try await store.budgetRepository.plan(for: november.adding(months: 2))?.plan.totalMinor == 8_000_00)
+    #expect(try await rentLimit(november) == 3_200_00)
+    #expect(try await rentLimit(november.adding(months: 2)) == 3_000_00)
   }
 
   @Test("R-BUD-3: Applies from offers this month and later only")
@@ -110,15 +162,17 @@ struct ManageBudgetTests {
     #expect(model.monthTitle(november) == "November 2026")
   }
 
-  @Test("R-MGMT-3: an invalid total or limit cannot be saved")
+  @Test("R-MGMT-3: an invalid limit cannot be saved")
   func validation() async {
     let model = await model()
-    model.total = "lots"
-    #expect(model.validationMessage == "The total is not a valid amount.")
+    model.setLimit("lots", for: PreviewData.id(205))
+    #expect(model.validationMessage == "A category limit is not a valid amount.")
+    #expect(model.totalText == "—")
     #expect(!model.canSave)
-    model.total = "9000"
     model.setLimit("-5", for: PreviewData.id(205))
     #expect(model.validationMessage == "A category limit is not a valid amount.")
+    model.setLimit("4000", for: PreviewData.id(205))
+    #expect(model.validationMessage == nil)
   }
 }
 
