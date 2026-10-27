@@ -195,9 +195,12 @@ struct CategoryRowView: View {
 struct CategoryEditorSheet: View {
   let model: CategoriesModel
   @State private var draft: CategoryDraft
+  /// The form as opened: the validation message waits for the first edit.
+  private let initial: CategoryDraft
 
   init(model: CategoriesModel, initial: CategoryDraft) {
     self.model = model
+    self.initial = initial
     _draft = State(initialValue: initial)
   }
 
@@ -210,7 +213,7 @@ struct CategoryEditorSheet: View {
   var body: some View {
     ManageEditorSheet(
       title: title,
-      message: model.isDirty(draft) ? model.validationMessage(draft) : nil,
+      message: draft != initial ? model.validationMessage(draft) : nil,
       error: model.errorMessage,
       saveTitle: draft.isNew ? "Create" : "Save",
       canSave: model.canSave(draft),

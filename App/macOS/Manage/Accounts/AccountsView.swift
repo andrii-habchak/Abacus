@@ -263,9 +263,12 @@ struct AccountRowView: View {
 struct AccountEditorSheet: View {
   let model: AccountsModel
   @State private var draft: AccountDraft
+  /// The form as opened: the validation message waits for the first edit.
+  private let initial: AccountDraft
 
   init(model: AccountsModel, initial: AccountDraft) {
     self.model = model
+    self.initial = initial
     _draft = State(initialValue: initial)
   }
 
@@ -277,7 +280,7 @@ struct AccountEditorSheet: View {
   var body: some View {
     ManageEditorSheet(
       title: title,
-      message: model.isDirty(draft) ? model.validationMessage(draft) : nil,
+      message: draft != initial ? model.validationMessage(draft) : nil,
       error: model.errorMessage,
       saveTitle: draft.isNew ? "Create" : "Save",
       canSave: model.canSave(draft),
@@ -392,9 +395,12 @@ struct AccountFields: View {
 struct AccountGroupEditorSheet: View {
   let model: AccountsModel
   @State private var draft: AccountGroupDraft
+  /// The form as opened: the validation message waits for the first edit.
+  private let initial: AccountGroupDraft
 
   init(model: AccountsModel, initial: AccountGroupDraft) {
     self.model = model
+    self.initial = initial
     _draft = State(initialValue: initial)
   }
 
@@ -406,7 +412,7 @@ struct AccountGroupEditorSheet: View {
   var body: some View {
     ManageEditorSheet(
       title: title,
-      message: model.isDirty(draft) ? model.validationMessage(draft) : nil,
+      message: draft != initial ? model.validationMessage(draft) : nil,
       error: model.errorMessage,
       saveTitle: draft.isNew ? "Create" : "Save",
       canSave: model.canSave(draft),
