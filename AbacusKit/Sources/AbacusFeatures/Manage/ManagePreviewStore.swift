@@ -17,6 +17,7 @@ public final class ManagePreviewStore: Sendable {
     var plans: [BudgetPlan]
     var allocations: [BudgetAllocation]
     var rules: [CategoryRule]
+    var ruleApplications: [RuleApplication] = []
     var settings: [String: String]
   }
 
@@ -333,10 +334,60 @@ public final class ManagePreviewStore: Sendable {
       }
     }
 
+    public func apply(_ rule: CategoryRule, records: [RuleApplication]) async throws {
+      try store.state.withLock { state in
+        let indices = try records.map { record in
+          guard let index = state.txns.firstIndex(where: { $0.txn.id == record.txnID }) else { throw RepositoryError.notFound }
+          return index
+        }
+        for (index, record) in zip(indices, records) {
+          state.txns[index].txn = record.after.applied(to: state.txns[index].txn)
+        }
+        if let index = state.rules.firstIndex(where: { $0.id == rule.id }) {
+          state.rules[index] = rule
+        } else {
+          state.rules.append(rule)
+        }
+        state.ruleApplications.append(contentsOf: records)
+      }
+    }
+
+    public func applications(of ruleID: CategoryRule.ID) async throws -> [RuleApplication] {
+      store.state.withLock { state in
+        state.ruleApplications.filter { $0.ruleID == ruleID }.sorted { $0.appliedAt > $1.appliedAt }
+      }
+    }
+
+    /// As the store: newest first, only transactions still as the rule left them.
+    public func rollBack(_ ruleID: CategoryRule.ID) async throws -> RuleRollback {
+      store.state.withLock { state in
+        var result = RuleRollback()
+        let records = state.ruleApplications.enumerated().filter { $0.element.ruleID == ruleID }
+          .sorted { ($0.element.appliedAt, $0.offset) > ($1.element.appliedAt, $1.offset) }.map(\.element)
+        let categoryIDs = Set(state.categories.map(\.id))
+        let accountIDs = Set(state.accounts.map(\.id))
+        for record in records {
+          guard let index = state.txns.firstIndex(where: { $0.txn.id == record.txnID }),
+            let restored = record.restoring(state.txns[index].txn),
+            restored.categoryID.map(categoryIDs.contains) ?? true, accountIDs.contains(restored.accountID),
+            restored.toAccountID.map(accountIDs.contains) ?? true
+          else {
+            result.skipped += 1
+            continue
+          }
+          state.txns[index].txn = restored
+          result.restored += 1
+        }
+        state.ruleApplications.removeAll { $0.ruleID == ruleID }
+        return result
+      }
+    }
+
     public func delete(_ id: CategoryRule.ID) async throws {
       try store.state.withLock { state in
         guard state.rules.contains(where: { $0.id == id }) else { throw RepositoryError.notFound }
         state.rules.removeAll { $0.id == id }
+        state.ruleApplications.removeAll { $0.ruleID == id }
       }
     }
 

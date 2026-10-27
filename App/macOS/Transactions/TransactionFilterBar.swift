@@ -11,23 +11,32 @@ struct TransactionFilterBar: View {
 
   enum Popover: Hashable { case date, categories, accounts, event }
 
+  /// The chips wrap onto a second line when the window is too narrow; no label is squeezed
+  /// or broken. "Clear filters" and the sort button stay at the trailing edge of the first line.
   var body: some View {
-    HStack(spacing: 8) {
-      dateChip
-      categoriesChip
-      accountsChip
-      typeToggles
-      eventChip
-      importChip
-      Spacer(minLength: 8)
-      if model.filters.hasActiveFilters {
-        Button("Clear filters") { model.clearFilters() }
-          .buttonStyle(.plain)
-          .foregroundStyle(TxnPalette.link)
-          .font(.system(size: 13))
-          .padding(.horizontal, 6)
+    HStack(alignment: .top, spacing: 8) {
+      TxnFlowLayout(spacing: 8, lineSpacing: 8) {
+        dateChip
+        categoriesChip
+        accountsChip
+        typeToggles
+        eventChip
+        importChip
       }
-      sortButton
+      .frame(maxWidth: .infinity, alignment: .leading)
+      HStack(spacing: 8) {
+        if model.filters.hasActiveFilters {
+          Button("Clear filters") { model.clearFilters() }
+            .buttonStyle(.plain)
+            .foregroundStyle(TxnPalette.link)
+            .font(.system(size: 13))
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+        }
+        sortButton
+      }
+      .fixedSize()
+      .frame(minHeight: 28)
     }
     .padding(.horizontal, TxnMetrics.horizontalPadding)
     .padding(.vertical, 10)
@@ -97,11 +106,13 @@ struct TransactionFilterBar: View {
         let isOn = model.filters.types.contains(type)
         Button(title) { model.filters.toggleType(type) }
           .buttonStyle(TxnSegmentStyle(isOn: isOn))
+          .lineLimit(1)
           .accessibilityAddTraits(isOn ? .isSelected : [])
       }
     }
     .padding(2)
     .background(RoundedRectangle(cornerRadius: 7).fill(TxnPalette.segmentTrack))
+    .fixedSize()
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Type")
   }

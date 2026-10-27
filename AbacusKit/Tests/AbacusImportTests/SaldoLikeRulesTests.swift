@@ -53,6 +53,21 @@ struct SaldoLikeRulesTests {
     #expect(matcher.match(Self.subject("Coffee shop")) == nil)
   }
 
+  @Test("TA v1.6: an amount-only rule (empty pattern) matches any description by amount; a rule without conditions never matches")
+  func amountOnlyConditions() {
+    let amountOnly = Self.category(0, "", F.groceries, amount: (.biggerThan, 500_00))
+    let empty = Self.category(1, "  ", Self.food)
+    let matcher = RuleMatcher(rules: [amountOnly, empty], categories: Self.categories)
+    #expect(matcher.match(Self.subject("Anything at all", 600_00))?.id == amountOnly.id)
+    #expect(matcher.match(Self.subject("", -600_00))?.id == amountOnly.id)
+    #expect(matcher.match(Self.subject("Anything at all", 500_00)) == nil)
+    #expect(matcher.match(Self.subject("Anything at all")) == nil)
+    #expect(!RuleMatcher.conditionsHold(empty, for: Self.subject("x", 1_00)))
+    #expect(amountOnly.label == "amount > 500.00")
+    #expect(Self.category(2, "", F.groceries, amount: (.smallerThan, 12_05)).label == "amount < 12.05")
+    #expect(Self.category(3, "kiosk", F.groceries, amount: (.smallerThan, 12_05)).label == "kiosk")
+  }
+
   @Test("R-IMP-8: amount bigger / smaller than compare the absolute amount strictly; no amount, no match")
   func amountConditions() {
     let bigger = Self.category(0, "shop", F.groceries, amount: (.biggerThan, 100_00))

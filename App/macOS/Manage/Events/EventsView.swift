@@ -2,9 +2,9 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// The Events screen (approved prototype group 4, R-MGMT-4, R-EVT-1…4): events with dates and
-/// spent against the budget, the inspector (dates, optional budget, spent by category, "Show N
-/// transactions", Archive, Delete…); "New event" in the toolbar.
+/// The Events screen (approved prototype group 4, R-MGMT-4, R-EVT-1…4): the page search
+/// (R-MGMT-11), events with dates and spent against the budget, the inspector (dates, optional
+/// budget, spent by category, "Show N transactions", Archive, Delete…); "New event" in the toolbar.
 ///
 /// `onShowTransactions` opens Transactions filtered by the event (the shell routes it, e.g.
 /// `TransactionFilters.event(_:)`).
@@ -50,15 +50,23 @@ public struct EventsView: View {
       }
     }
     .onChange(of: displayCurrency, initial: true) { _, currency in model.setDisplayCurrency(currency) }
-    .task { if model.phase == .idle { await model.load() } }
+    .task {
+      if model.phase == .idle { await model.load() }
+      #if DEBUG
+        EventsDebugLaunch.apply(to: model)
+      #endif
+    }
   }
 }
 
 struct EventsList: View {
-  let model: EventsModel
+  @Bindable var model: EventsModel
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
+      PageSearchField(text: $model.search, prompt: "Search events")
+        .padding(.horizontal, ManageMetrics.horizontalPadding)
+        .padding(.top, 12)
       Toggle("Show archived events", isOn: Binding(get: { model.showArchived }, set: { model.setShowArchived($0) }))
         .toggleStyle(.checkbox)
         .font(.system(size: 12))
@@ -73,11 +81,20 @@ struct EventsList: View {
       .scrollContentBackground(.hidden)
       .overlay {
         if model.rows.isEmpty {
-          Text("No events yet. Create one for a trip, a move or the car.")
+          Text(emptyMessage)
             .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 20)
         }
       }
     }
+  }
+
+  private var emptyMessage: String {
+    let query = model.search.trimmingCharacters(in: .whitespacesAndNewlines)
+    return query.isEmpty
+      ? "No events yet. Create one for a trip, a move or the car."
+      : "No events match “\(query)”."
   }
 }
 
@@ -118,8 +135,10 @@ struct EventRowView: View {
   }
 }
 
-/// Name, Starts / Ends (each optional), budget, spent by category, Show N transactions,
-/// Archive / Unarchive, Delete… (R-EVT-1…3).
+/// Name, Starts / Ends (each optional), budget with what was spent right under it, colour,
+/// "Show N transactions"; then Archive / Unarchive and Delete… in their own row, and Revert /
+/// Save changes at the bottom-right (R-EVT-1…3, R-MGMT-4, R-MGMT-10). An archived event's name,
+/// dates, budget and currency are read-only until it is unarchived; its colour stays editable.
 struct EventInspectorView: View {
   let model: EventsModel
   let onShowTransactions: (Event.ID) -> Void
@@ -130,15 +149,23 @@ struct EventInspectorView: View {
 
   var body: some View {
     if let draft = model.draft {
+      let readOnly = model.isReadOnly
       ManageInspector(title: model.inspectorTitle) {
+        if readOnly {
+          Label("Archived. Unarchive it to change the name, dates or budget.", systemImage: "archivebox")
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         ManageField("Name") {
           TextField("Name", text: binding(\.name, ""), prompt: Text("e.g. Lyon trip"))
             .labelsHidden()
             .textFieldStyle(.roundedBorder)
+            .disabled(readOnly)
         }
         HStack(alignment: .top, spacing: 8) {
-          dateField("Starts", isOn: binding(\.hasStart, false), date: binding(\.start, Date()))
-          dateField("Ends", isOn: binding(\.hasEnd, false), date: binding(\.end, Date()))
+          dateField("Starts", isOn: binding(\.hasStart, false), date: binding(\.start, Date()), readOnly: readOnly)
+          dateField("Ends", isOn: binding(\.hasEnd, false), date: binding(\.end, Date()), readOnly: readOnly)
         }
         ManageField("Budget (optional)") {
           HStack(spacing: 6) {
@@ -153,56 +180,40 @@ struct EventInspectorView: View {
             .labelsHidden()
             .fixedSize()
           }
+          .disabled(readOnly)
         }
+        if !draft.isNew { spentCard }
         ManageField("Colour") {
           ManageColorField(hex: binding(\.colorHex, nil))
         }
-        Text("While the event's dates are active, new expenses are tagged with it by default.")
-          .font(.system(size: 11))
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+        if !readOnly {
+          Text("While the event's dates are active, new expenses are tagged with it by default.")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        if !draft.isNew {
+          Button(model.showTransactionsTitle) {
+            if let id = model.selection { onShowTransactions(id) }
+          }
+          .buttonStyle(.link)
+          .foregroundStyle(ManagePalette.link)
+          Divider().padding(.vertical, 2)
+          HStack(spacing: 8) {
+            Button(model.archiveTitle) { Task { await model.archiveOrUnarchive() } }
+            Button("Delete…", role: .destructive) { model.requestDelete() }
+              .foregroundStyle(ManagePalette.destructive)
+            Spacer(minLength: 0)
+          }
+          .controlSize(.small)
+        }
         ManageSaveBar(
           isNew: draft.isNew, isDirty: model.isDirty, canSave: model.canSave, validation: model.validationMessage,
           error: model.errorMessage, onRevert: model.revert
         ) {
           Task { await model.save() }
         }
-        if !draft.isNew {
-          ManageCard {
-            HStack {
-              Text("Spent").foregroundStyle(.secondary)
-              Spacer()
-              Text(model.spentText)
-                .fontWeight(.semibold)
-                .monospacedDigit()
-                .foregroundStyle(model.selectedTotals?.budgetStatus == .over ? ManagePalette.negative : Color.primary)
-            }
-            ForEach(model.categoryBars) { bar in
-              VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                  Text(bar.name)
-                  Spacer()
-                  Text(bar.amountText).foregroundStyle(.secondary).monospacedDigit()
-                }
-                .font(.system(size: 12))
-                ManageBar(fraction: bar.fraction, color: ManagePalette.hex(bar.colorHex))
-              }
-            }
-            if let missing = model.missingRatesNote {
-              Text(missing).font(.system(size: 11)).foregroundStyle(.orange)
-            }
-          }
-          Button(model.showTransactionsTitle) {
-            if let id = model.selection { onShowTransactions(id) }
-          }
-          .buttonStyle(.link)
-          .foregroundStyle(ManagePalette.link)
-          HStack(spacing: 8) {
-            Button(model.archiveTitle) { Task { await model.archiveOrUnarchive() } }
-            Button("Delete…", role: .destructive) { model.requestDelete() }
-              .foregroundStyle(ManagePalette.destructive)
-          }
-        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
     } else {
       ManageInspector(title: "") {
@@ -211,20 +222,74 @@ struct EventInspectorView: View {
     }
   }
 
-  private func dateField(_ label: String, isOn: Binding<Bool>, date: Binding<Date>) -> some View {
+  /// "Spent x of y" and the spending by category (R-EVT-3), right under the budget.
+  private var spentCard: some View {
+    ManageCard {
+      HStack {
+        Text("Spent").foregroundStyle(.secondary)
+        Spacer()
+        Text(model.spentText)
+          .fontWeight(.semibold)
+          .monospacedDigit()
+          .foregroundStyle(model.selectedTotals?.budgetStatus == .over ? ManagePalette.negative : Color.primary)
+      }
+      ForEach(model.categoryBars) { bar in
+        VStack(alignment: .leading, spacing: 3) {
+          HStack {
+            Text(bar.name)
+            Spacer()
+            Text(bar.amountText).foregroundStyle(.secondary).monospacedDigit()
+          }
+          .font(.system(size: 12))
+          ManageBar(fraction: bar.fraction, color: ManagePalette.hex(bar.colorHex))
+        }
+      }
+      if let missing = model.missingRatesNote {
+        Text(missing).font(.system(size: 11)).foregroundStyle(.orange)
+      }
+    }
+  }
+
+  private func dateField(_ label: String, isOn: Binding<Bool>, date: Binding<Date>, readOnly: Bool) -> some View {
     VStack(alignment: .leading, spacing: 4) {
       Toggle(label, isOn: isOn)
         .toggleStyle(.checkbox)
         .foregroundStyle(.secondary)
+        .disabled(readOnly)
       DatePicker(label, selection: date, displayedComponents: .date)
         .labelsHidden()
         .datePickerStyle(.field)
-        .disabled(!isOn.wrappedValue)
+        .disabled(readOnly || !isOn.wrappedValue)
         .opacity(isOn.wrappedValue ? 1 : 0.5)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
+
+#if DEBUG
+  /// Debug builds only, for UI checks on a scratch database: `-AbacusEventsSelect <name>`
+  /// selects that event (showing archived ones if needed), `-AbacusEventsSearch <text>` fills the
+  /// page search, `-AbacusEventsEditBudget <text>` types into the budget field (Save bar).
+  @MainActor
+  enum EventsDebugLaunch {
+    private static var applied = false
+
+    static func apply(to model: EventsModel) {
+      guard !applied else { return }
+      applied = true
+      let defaults = UserDefaults.standard
+      if let name = defaults.string(forKey: "AbacusEventsSelect"),
+        let event = model.events.first(where: { $0.name == name })
+      {
+        if event.isArchived { model.setShowArchived(true) }
+        model.select(event.id)
+      }
+      if let search = defaults.string(forKey: "AbacusEventsSearch") { model.search = search }
+      if let budget = defaults.string(forKey: "AbacusEventsEditBudget") { model.draft?.budget = budget }
+      DebugWindowSize.applyIfRequested()
+    }
+  }
+#endif
 
 #Preview("Events") {
   EventsView(dependencies: .preview(), displayCurrency: .PLN)

@@ -473,7 +473,7 @@ public final class TransactionEditorModel {
 
   /// "Suggested by rule “lidl” → Groceries".
   public var suggestionText: String? {
-    suggestion.map { "Suggested by rule “\($0.rule.pattern)” → \($0.category.name)" }
+    suggestion.map { "Suggested by rule “\($0.rule.label)” → \($0.category.name)" }
   }
 
   public var effectiveCategoryID: AbacusDomain.Category.ID? {

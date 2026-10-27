@@ -29,9 +29,14 @@ struct BackupTests {
 
   static func seedEverything(_ f: F) async throws {
     try f.seedBasics()
-    try await f.insert(
-      F.expense(100, "2026-03-02", 10_00, F.groceries, event: F.trip),
-      lines: [AttachedRecord(txnID: F.id(100), categoryID: F.fees.id, amountMinor: 1_00)])
+    let expense = F.expense(100, "2026-03-02", 10_00, F.groceries, event: F.trip)
+    try await f.insert(expense, lines: [AttachedRecord(txnID: F.id(100), categoryID: F.fees.id, amountMinor: 1_00)])
+    // A rule applied to it (v8 rule applications), then put back to Groceries by hand.
+    var recategorised = expense
+    recategorised.categoryID = F.eatingOut.id
+    let rule = CategoryRule(pattern: "trip", categoryID: F.eatingOut.id)
+    try await f.rules.apply(rule, records: RuleApplication.records(ruleID: rule.id, originals: [expense], changes: [recategorised]))
+    try await f.txns.save(expense, lines: [AttachedRecord(txnID: F.id(100), categoryID: F.fees.id, amountMinor: 1_00)])
     try await f.imports.commit(ImportStoreTests.saldoCommit())
     let plan = BudgetPlan(effectiveMonth: "2026-01")
     try await f.budgets.save(

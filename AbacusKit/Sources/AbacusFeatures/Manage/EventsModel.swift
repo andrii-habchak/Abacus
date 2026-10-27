@@ -56,6 +56,8 @@ public final class EventsModel {
   public private(set) var events: [Event] = []
   public private(set) var totals: [Event.ID: EventTotals] = [:]
   public var showArchived = false
+  /// The page search above the list (R-MGMT-11): filters the rows by name.
+  public var search = ""
   public private(set) var selection: Event.ID?
   public var draft: EventDraft?
   public private(set) var dialog: ManageDialog?
@@ -145,8 +147,16 @@ public final class EventsModel {
 
   private var visibleEvents: [Event] { events.filter { showArchived || !$0.isArchived } }
 
+  /// Whether the event's name matches the page search (case- and diacritic-insensitive).
+  public func matchesSearch(_ event: Event) -> Bool {
+    let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return true }
+    return event.name.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+  }
+
+  /// The list: visible events whose name matches the search.
   public var rows: [EventRow] {
-    visibleEvents.map { event in
+    visibleEvents.filter(matchesSearch).map { event in
       let totals = totals[event.id]
       return EventRow(
         id: event.id, name: event.name, dates: dates(event), spentText: totals.map { format.money($0.spent) } ?? "—",
@@ -195,6 +205,13 @@ public final class EventsModel {
 
   public var selectedEvent: Event? { selection.flatMap(event) }
 
+  /// An archived event's name, dates, budget and currency are read-only until it is
+  /// unarchived; only its colour can still change.
+  public var isReadOnly: Bool {
+    guard let draft, !draft.isNew else { return false }
+    return event(draft.id)?.isArchived == true
+  }
+
   public var inspectorTitle: String {
     guard let draft else { return "" }
     if draft.isNew { return draft.name.isEmpty ? "New event" : draft.name }
@@ -219,6 +236,11 @@ public final class EventsModel {
     let budget = budgetText.isEmpty ? nil : format.parseAmount(budgetText)
     if !budgetText.isEmpty, budget == nil { return nil }
     var event = base ?? Event(id: draft.id, name: "")
+    if let base, base.isArchived {
+      // Read-only while archived: only the colour changes.
+      event.colorHex = draft.colorHex
+      return event
+    }
     event.name = draft.name.trimmingCharacters(in: .whitespaces)
     event.startDay = draft.hasStart ? Day(draft.start, calendar: format.calendar).string : nil
     event.endDay = draft.hasEnd ? Day(draft.end, calendar: format.calendar).string : nil

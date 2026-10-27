@@ -57,6 +57,13 @@ extension AbacusDatabase {
         try db.execute(sql: statement)
       }
     }
+    // C9 (TA v1.6): what each "Update existing transactions" changed, so a rule can be rolled
+    // back after a restart. Registered last; "v7" is left to another lane.
+    migrator.registerMigration("v8: rule applications") { db in
+      for statement in ruleApplicationsV8 {
+        try db.execute(sql: statement)
+      }
+    }
     // R-MGMT-8: categories sort by creation ("Newest first" / "Oldest first"). Existing rows
     // get stable values one second apart from 2000-01-01 in their current order (kind,
     // position, name), so "Oldest first" starts out as that order and every category created
@@ -119,6 +126,26 @@ extension AbacusDatabase {
     #"CREATE INDEX "idx_categoryRules_accountID" ON "categoryRules"("accountID")"#,
     #"CREATE INDEX "idx_categoryRules_categoryID" ON "categoryRules"("categoryID")"#,
     #"CREATE INDEX "idx_categoryRules_transferAccountID" ON "categoryRules"("transferAccountID")"#,
+  ]
+
+  /// One row per transaction changed by applying a rule to existing transactions: the
+  /// rule-changed fields before and after, as JSON (`RuleTxnState`), so old category/account ids
+  /// carry no foreign keys (rollback checks they still exist). Deleting the rule or the
+  /// transaction deletes its rows. No UNIQUE, single primary key, only CASCADE (CloudKit rules).
+  static let ruleApplicationsV8: [String] = [
+    """
+    CREATE TABLE "ruleApplications" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "ruleID" TEXT NOT NULL REFERENCES "categoryRules"("id") ON DELETE CASCADE,
+      "batchID" TEXT NOT NULL,
+      "txnID" TEXT NOT NULL REFERENCES "txns"("id") ON DELETE CASCADE,
+      "appliedAt" TEXT NOT NULL,
+      "before" TEXT NOT NULL,
+      "after" TEXT NOT NULL
+    ) STRICT
+    """,
+    #"CREATE INDEX "idx_ruleApplications_ruleID" ON "ruleApplications"("ruleID")"#,
+    #"CREATE INDEX "idx_ruleApplications_txnID" ON "ruleApplications"("txnID")"#,
   ]
 
   static let schemaV1: [String] = [

@@ -131,11 +131,11 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
 Wave 1 (parallel):
 - [ ] **C8 Budget** — widget bug (wrong limit currency), total + currency + unallocated (D46),
   switcher on Budget page, red trash, Save bottom-right.
-- [ ] **C9 Rules** — apply-to-existing bug, rollback, amount-only condition, category filter,
+- [x] **C9 Rules** (merged 2026-10-27; migration v8) — apply-to-existing bug, rollback, amount-only condition, category filter,
   page search.
 - [ ] **C10 Categories** — built-in Uncategorised (D47), same colour everywhere, A–Z pickers,
   sort selector, search, drag-to-nest, New transaction preselects the category.
-- [ ] **C11 Transactions, events, shell** — page search on Transactions/Events, event inspector
+- [x] **C11 Transactions, events, shell** (merged 2026-10-27) — page search on Transactions/Events, event inspector
   layout + read-only archived event, type filter layout, Save bottom-right in event inspector.
 Wave 2:
 - [ ] **C12 Accounts** — account groups (D48), drag/sort/search/currency filter, grouped pickers,
