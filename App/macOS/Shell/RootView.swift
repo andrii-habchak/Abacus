@@ -74,8 +74,8 @@ struct SectionDetail: View {
     case .dashboard:
       DashboardView(
         model: session.dashboard, displayCurrency: app.displayCurrency, onEditBudget: { app.openBudget() }
-      ) { categoryID, month in
-        app.showTransactions(.drillDown(category: categoryID, month: month))
+      ) { target in
+        app.showTransactions(.drillDown(target))
       }
       .shellToolbar()
     case .transactions:

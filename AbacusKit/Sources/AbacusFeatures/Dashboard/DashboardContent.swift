@@ -381,12 +381,18 @@ public struct DashboardBudget: Sendable {
   }
 }
 
-// MARK: - Expenses donut (R-HOME-3)
+// MARK: - Category donuts (R-HOME-3, R-HOME-6)
 
-public struct DashboardExpenses: Sendable {
+/// The expenses donut (R-HOME-3) keeps its name.
+public typealias DashboardExpenses = DashboardDonut
+
+/// A month's expenses (R-HOME-3) or income (R-HOME-6) by top-level category, for a donut.
+public struct DashboardDonut: Sendable {
   public struct Slice: Hashable, Sendable, Identifiable {
     public let id: CategoryKey
-    /// nil for "Uncategorised" (drills down to expenses without a category).
+    /// Expense or income: which donut the slice belongs to (and what a drill-down filters).
+    public let kind: CategoryKind
+    /// nil for "Uncategorised" (drills down to the kind's transactions without a category).
     public let categoryID: AbacusDomain.Category.ID?
     public let name: String
     /// "#RRGGBB".
@@ -406,28 +412,42 @@ public struct DashboardExpenses: Sendable {
     }
   }
 
+  public let kind: CategoryKind
   public let month: Month
   public let total: Money
   public let totalText: String
-  /// Top-level categories with positive spending, largest first.
+  /// Top-level categories with a positive amount, largest first.
   public let slices: [Slice]
   public let missing: DashboardMissingRates
-  /// "Expenses by category, October 2026".
+  /// "Expenses by category, October 2026" / "Income by category, October 2026".
   public let chartLabel: String
 
   public var isEmpty: Bool { slices.isEmpty }
 
+  /// "Monthly expenses" / "Monthly income".
+  public var title: String { kind == .expense ? "Monthly expenses" : "Monthly income" }
+  /// The label in the donut's hole: "Spent" / "Received".
+  public var totalLabel: String { kind == .expense ? "Spent" : "Received" }
+  /// "No expenses in October 2026." / "No income in October 2026."
+  public func emptyText(_ monthTitle: String) -> String {
+    kind == .expense ? "No expenses in \(monthTitle)." : "No income in \(monthTitle)."
+  }
+
   /// "Refunds" and a category without a valid colour: the neutral grey of every screen.
   public static let neutralColor = "#8E8E93"
 
+  /// Expenses or income of `month` by category (`Calc.categoryTotals`), each amount at its
+  /// day's rate (R-FX-3), refunds by the setting (R-TX-4, R-SET-3): with it off, income has a
+  /// "Refunds" slice (not a drill-down).
   static func make(
-    month: Month, accounts: [Account], categories: [AbacusDomain.Category], txns: [TxnWithLines],
-    currency: Currency, converter: any CurrencyConverter, refundsReduceSpending: Bool, format: DashboardFormat,
-    uncategorisedColor: String = Uncategorised.defaultColorHex
-  ) -> DashboardExpenses {
-    let breakdown = Calc.expensesByCategory(
-      month: month, accounts: accounts, categories: categories, txns: txns, currency: currency,
-      converter: converter, refundsReduceSpending: refundsReduceSpending, calendar: format.calendar)
+    kind: CategoryKind = .expense, month: Month, accounts: [Account], categories: [AbacusDomain.Category],
+    txns: [TxnWithLines], currency: Currency, converter: any CurrencyConverter, refundsReduceSpending: Bool,
+    format: DashboardFormat, uncategorisedColor: String = Uncategorised.defaultColorHex
+  ) -> DashboardDonut {
+    let breakdown = Calc.categoryTotals(
+      kind: kind, days: month.firstDay...month.lastDay(calendar: format.calendar), accounts: accounts,
+      categories: categories, txns: txns, currency: currency, converter: converter,
+      refundsReduceSpending: refundsReduceSpending, calendar: format.calendar)
     let tree = CategoryTree(categories)
     func slice(_ item: CategoryTotal, parentColor: String?) -> Slice {
       let category: AbacusDomain.Category? =
@@ -435,8 +455,10 @@ public struct DashboardExpenses: Sendable {
       // The same colour the Categories page shows (R-MGMT-7): the category's own, a child
       // without one takes its parent's; no category is the built-in Uncategorised (D47).
       let color =
-        if case .uncategorized = item.key { uncategorisedColor } else {
-          ColorPalette.normalized(category?.colorHex) ?? parentColor ?? neutralColor
+        switch item.key {
+        case .uncategorized: uncategorisedColor
+        case .refunds: neutralColor
+        case .category: ColorPalette.normalized(category?.colorHex) ?? parentColor ?? neutralColor
         }
       let name =
         switch item.key {
@@ -445,15 +467,16 @@ public struct DashboardExpenses: Sendable {
         case .refunds: "Refunds"
         }
       return Slice(
-        id: item.key, categoryID: category?.id, name: name, colorHex: color, amount: item.total, share: item.share,
-        amountText: format.money(item.total), percentText: item.share.map(format.percent) ?? "—",
+        id: item.key, kind: kind, categoryID: category?.id, name: name, colorHex: color, amount: item.total,
+        share: item.share, amountText: format.money(item.total), percentText: item.share.map(format.percent) ?? "—",
         children: item.children.filter { $0.total.minorUnits > 0 }.map { slice($0, parentColor: color) })
     }
     var missing = DashboardMissingRates()
     missing.add(breakdown.unconverted)
-    return DashboardExpenses(
-      month: month, total: breakdown.total, totalText: format.money(breakdown.total),
+    let what = kind == .expense ? "Expenses" : "Income"
+    return DashboardDonut(
+      kind: kind, month: month, total: breakdown.total, totalText: format.money(breakdown.total),
       slices: breakdown.items.filter { $0.total.minorUnits > 0 }.map { slice($0, parentColor: nil) },
-      missing: missing, chartLabel: "Expenses by category, \(format.month(month))")
+      missing: missing, chartLabel: "\(what) by category, \(format.month(month))")
   }
 }

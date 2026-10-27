@@ -87,16 +87,46 @@ extension DashboardDependencies {
 
 /// Builds the Transactions query a donut drill-down opens: one category (its children
 /// included, R-LIST-2) over one month (R-HOME-3). A nil category is the "Uncategorised"
-/// slice: expenses without a category.
+/// slice: expenses (or income) without a category. The income donut (R-HOME-6) also filters
+/// to income transactions.
 public enum DashboardDrillDown {
+  /// Where a picked donut slice leads: Transactions of `kind`, `categoryID` (nil:
+  /// "Uncategorised") and `month`.
+  public struct Target: Hashable, Sendable {
+    public var kind: CategoryKind
+    public var categoryID: AbacusDomain.Category.ID?
+    public var month: Month
+
+    public init(kind: CategoryKind = .expense, categoryID: AbacusDomain.Category.ID?, month: Month) {
+      self.kind = kind
+      self.categoryID = categoryID
+      self.month = month
+    }
+  }
+
+  /// The transaction type a drill-down of `kind` filters to; nil for an expense category (as
+  /// before R-HOME-6: the category alone, refunds and records included).
+  public static func types(kind: CategoryKind, uncategorised: Bool) -> Set<TxnType>? {
+    switch kind {
+    case .income: [.income]
+    case .expense: uncategorised ? [.expense] : nil
+    }
+  }
+
   public static func query(
-    categoryID: AbacusDomain.Category.ID?, month: Month, calendar: Calendar = .autoupdatingCurrent
+    categoryID: AbacusDomain.Category.ID?, month: Month, kind: CategoryKind = .expense,
+    calendar: Calendar = .autoupdatingCurrent
   ) -> TxnQuery {
+    let types = types(kind: kind, uncategorised: categoryID == nil) ?? []
     guard let categoryID else {
       return TxnQuery(
-        fromDay: month.firstDay, toDay: month.lastDay(calendar: calendar), types: [.expense],
-        includeUncategorised: true)
+        fromDay: month.firstDay, toDay: month.lastDay(calendar: calendar), types: types, includeUncategorised: true)
     }
-    return TxnQuery(fromDay: month.firstDay, toDay: month.lastDay(calendar: calendar), categoryIDs: [categoryID])
+    return TxnQuery(
+      fromDay: month.firstDay, toDay: month.lastDay(calendar: calendar), categoryIDs: [categoryID], types: types)
+  }
+
+  public static func query(_ target: Target, calendar: Calendar = .autoupdatingCurrent) -> TxnQuery {
+    query(categoryID: target.categoryID, month: target.month, kind: target.kind, calendar: calendar)
   }
 }

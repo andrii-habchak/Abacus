@@ -282,3 +282,60 @@ extension Calc {
       expense: Money(minorUnits: expense, currency: currency), unconverted: gaps)
   }
 }
+
+// MARK: - Income vs expenses by month (R-HOME-6)
+
+/// One month of the income vs expenses widget: the same totals as the month's donuts.
+public struct MonthIncomeExpense: Hashable, Sendable, Identifiable {
+  public let month: Month
+  public let income: Money
+  public let expense: Money
+
+  /// income − expense.
+  public var net: Money { income - expense }
+  public var id: Month { month }
+}
+
+public struct IncomeExpenseSeries: Hashable, Sendable {
+  public let currency: Currency
+  /// Oldest first, one per month; months without entries are zero.
+  public let months: [MonthIncomeExpense]
+  public let unconverted: Unconverted
+}
+
+extension Calc {
+  /// Income and expenses of each of the `count` months ending at `last` (R-HOME-6) in
+  /// `currency`, each amount at its day's rate (R-FX-3). The same entries as the donuts and the
+  /// list totals: transfers count as neither, attached records by their kind, refunds by the
+  /// setting (the net is the same either way).
+  public static func incomeExpenseSeries(
+    endingAt last: Month, count: Int = 12, accounts: [Account], categories: [Category], txns: [TxnWithLines],
+    currency: Currency, converter: some CurrencyConverter, refundsReduceSpending: Bool,
+    calendar: Calendar = .current
+  ) -> IncomeExpenseSeries {
+    let count = max(count, 1)
+    let months = (0..<count).map { last.adding(months: $0 - count + 1) }
+    var gaps = Unconverted()
+    let entries = convertedEntries(
+      txns, accounts: accounts, categories: CategoryTree(categories), currency: currency, converter: converter,
+      refundsReduceSpending: refundsReduceSpending, days: months[0].firstDay...last.lastDay(calendar: calendar),
+      calendar: calendar, gaps: &gaps)
+    var income: [Month: Int64] = [:]
+    var expense: [Month: Int64] = [:]
+    for entry in entries {
+      if entry.kind == .income {
+        income[entry.day.yearMonth, default: 0] += entry.amount.minorUnits
+      } else {
+        expense[entry.day.yearMonth, default: 0] += entry.amount.minorUnits
+      }
+    }
+    return IncomeExpenseSeries(
+      currency: currency,
+      months: months.map {
+        MonthIncomeExpense(
+          month: $0, income: Money(minorUnits: income[$0] ?? 0, currency: currency),
+          expense: Money(minorUnits: expense[$0] ?? 0, currency: currency))
+      },
+      unconverted: gaps)
+  }
+}
