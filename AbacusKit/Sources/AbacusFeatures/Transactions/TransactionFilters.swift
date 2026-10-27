@@ -90,16 +90,23 @@ public struct TransactionFilters: Hashable, Sendable {
   /// R-LIST-1: the last 30 days, every type, newest first.
   public static let `default` = TransactionFilters()
 
-  /// Dashboard drill-down (R-HOME-3): one category in one month; a nil category is the
-  /// "Uncategorised" slice of the expenses donut (expenses without a category).
+  /// Dashboard drill-down (R-HOME-3, R-HOME-6): one category in one month; a nil category is
+  /// the "Uncategorised" slice (that kind without a category). The income donut also filters to
+  /// income (`DashboardDrillDown.types`).
   public static func drillDown(
-    category: AbacusDomain.Category.ID?, month: Month, calendar: Calendar = .current
+    category: AbacusDomain.Category.ID?, month: Month, kind: CategoryKind = .expense, calendar: Calendar = .current
   ) -> TransactionFilters {
     let days = DateRange.custom(from: month.firstDay, to: month.lastDay(calendar: calendar))
+    let types = DashboardDrillDown.types(kind: kind, uncategorised: category == nil) ?? Set(TxnType.allCases)
     guard let category else {
-      return TransactionFilters(dateRange: days, types: [.expense], includeUncategorised: true)
+      return TransactionFilters(dateRange: days, types: types, includeUncategorised: true)
     }
-    return TransactionFilters(dateRange: days, categoryIDs: [category])
+    return TransactionFilters(dateRange: days, categoryIDs: [category], types: types)
+  }
+
+  /// A picked donut slice's drill-down (R-HOME-3, R-HOME-6).
+  public static func drillDown(_ target: DashboardDrillDown.Target, calendar: Calendar = .current) -> TransactionFilters {
+    drillDown(category: target.categoryID, month: target.month, kind: target.kind, calendar: calendar)
   }
 
   /// Event view "Show N transactions" (R-EVT-3): every transaction tagged with the event, of
