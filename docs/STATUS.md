@@ -58,6 +58,9 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 | C10 Categories | background agent | `wp/C10-categories` | **merged** 2026-10-27 (built-in Uncategorised, one colour mapping, migration v9; interpretations in `docs/status/C10.md`) |
 | C13 Dashboard | background agent | `wp/C13-dashboard` | **merged** 2026-10-27 (income donut, income vs expenses, widget reorder; Debts slot `DashboardView(debts:)`; notes `docs/status/C13.md`) |
 | C12 Accounts | background agent | `wp/C12-accounts` | **merged** 2026-10-27 (account groups via migration v11, grouped pickers, net worth hierarchy; interpretations in `docs/status/C12.md`) |
+| S3 Budget/rules polish | background agent | `wp/S3-polish` | **merged** 2026-10-27 (Save button states, rules tester removed; notes `docs/status/S3.md`) |
+| S2 Lists | background agent | `wp/S2-lists` | **merged** 2026-10-27 (NSOutlineView lists, sheet editors, split New account; real mouse drag not tested; notes `docs/status/S2.md`) |
+| S1 Stability | background agent | `wp/S1-stability` | in progress |
 | C14 Debts | background agent | `wp/C14-debts` | **merged** 2026-10-27 (debts separate from accounts, migration v10 converts debt accounts — real-data invariants hold; follow-up: dashboard opens scrolled when Debts is first; interpretations in `docs/status/C14.md`) |
 | C7 Rules | background agent | `wp/C7-rules` | **merged** 2026-10-27 (migration v6 rebuilds `categoryRules`; interpretations to confirm in `docs/status/C7.md`) |
 

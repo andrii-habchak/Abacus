@@ -26,6 +26,17 @@ public struct BudgetLimitRow: Identifiable, Equatable, Sendable {
   public var id: AbacusDomain.Category.ID { categoryID }
 }
 
+/// The Save button's state (D56): blue and disabled with nothing to save, blue and enabled
+/// after an edit, green, disabled and "Saved" after a successful save until the next edit.
+public enum BudgetSaveState: Equatable, Sendable {
+  /// Nothing edited since the page was loaded (or reverted).
+  case unchanged
+  /// Unsaved edits: Save and Revert are enabled.
+  case edited
+  /// Just saved; stays until the next edit.
+  case saved
+}
+
 /// The Budget screen (approved prototype group 4 as changed by TA v1.6, R-MGMT-3, R-BUD-1…3,
 /// D43, D46): a total limit in its own currency (optional: empty or 0 = the sum of the limits),
 /// per-category limits each in its own currency, share bars and the unallocated remainder
@@ -49,9 +60,15 @@ public final class BudgetEditorModel {
   /// The month a later plan starts (it is kept, so the saved budget stops there).
   public private(set) var laterPlanMonth: Month?
   /// The total limit as typed; empty (or 0) = no total, the sum of the limits is the total.
-  public var totalLimit: String = ""
+  public var totalLimit: String = "" {
+    didSet { if totalLimit != oldValue { edited() } }
+  }
   /// The total limit's currency.
-  public var totalCurrency: Currency = .UAH
+  public var totalCurrency: Currency = .UAH {
+    didSet { if totalCurrency != oldValue { edited() } }
+  }
+  /// Set by a successful save, cleared by the next edit (`saveState`).
+  public private(set) var justSaved = false
   /// The currency the page's sums are shown in (the toolbar switch, R-HOME-4); read from the
   /// settings on the first load, then set by the app (`setDisplayCurrency`).
   public private(set) var displayCurrency: Currency = .UAH
@@ -60,8 +77,10 @@ public final class BudgetEditorModel {
   public private(set) var lastUsedCurrency: Currency?
 
   @ObservationIgnored public let dependencies: ManageDependencies
-  /// What was loaded or last saved, to tell whether there is something to save.
-  @ObservationIgnored private var baseline: Snapshot?
+  /// What was loaded or last saved, to tell whether there is something to save. Observed:
+  /// `isDirty` and `saveState` read it, and a save changes only it (and `justSaved`, which a view
+  /// showing "edited" never read), so the Save button would otherwise stay blue (D56).
+  private var baseline: Snapshot?
   /// The plan loaded for editing (its id is reused when saving for the same month).
   @ObservationIgnored private var loadedPlan: BudgetPlan?
   /// The rates in memory when the screen loaded (the total uses the latest rate).
@@ -98,6 +117,9 @@ public final class BudgetEditorModel {
         displayCurrency = display.flatMap(Currency.init(rawValue:)) ?? .UAH
       }
       converter = await dependencies.converter()
+      // Loading is not an edit: the field observers must not end the "Saved" state.
+      let wasJustSaved = justSaved
+      let previousSavedMessage = savedMessage
       loadedPlan = found?.plan
       appliesFrom = month
       if let total = found?.plan.total {
@@ -112,8 +134,12 @@ public final class BudgetEditorModel {
         .sorted { (order[$0.categoryID] ?? .max, $0.limitMinor) < (order[$1.categoryID] ?? .max, $1.limitMinor) }
         .map { BudgetLimitDraft(categoryID: $0.categoryID, limit: format.amountInput($0.limitMinor), currency: $0.currency) }
       lastUsedCurrency = limits.last?.currency
+      // A reload right after saving (the data-changed signal, the page shown again) keeps
+      // "Saved" while it shows exactly the saved values.
+      let keepsSaved = wasJustSaved && baseline.map(normalized) == normalized(snapshot)
       baseline = snapshot
-      savedMessage = nil
+      justSaved = keepsSaved
+      savedMessage = keepsSaved ? previousSavedMessage : nil
       errorMessage = nil
       categoryToAdd = addOptions.first?.id
       await refreshLaterPlan()
@@ -155,11 +181,25 @@ public final class BudgetEditorModel {
     categoryToAdd = addOptions.first?.id
     errorMessage = nil
     savedMessage = nil
+    justSaved = false
     await refreshLaterPlan()
   }
 
   private var snapshot: Snapshot {
     Snapshot(appliesFrom: appliesFrom, totalLimit: totalLimit, totalCurrency: totalCurrency, limits: limits)
+  }
+
+  /// The values a snapshot stands for: amounts as stored ("4100" = "4100.00"), limits in a fixed
+  /// order (a reload sorts them by category).
+  private func normalized(_ snapshot: Snapshot) -> Snapshot {
+    func amount(_ text: String) -> String { format.parseAmount(text).map(format.amountInput) ?? text }
+    var copy = snapshot
+    copy.totalLimit = snapshot.totalLimit.trimmingCharacters(in: .whitespaces).isEmpty ? "" : amount(snapshot.totalLimit)
+    if (format.parseAmount(copy.totalLimit) ?? -1) == 0 { copy.totalLimit = "" }
+    copy.limits = snapshot.limits
+      .map { BudgetLimitDraft(categoryID: $0.categoryID, limit: amount($0.limit), currency: $0.currency) }
+      .sorted { $0.categoryID.uuidString < $1.categoryID.uuidString }
+    return copy
   }
 
   /// Finds a plan that starts after `appliesFrom` (the saved one runs until then).
@@ -182,8 +222,8 @@ public final class BudgetEditorModel {
   }
 
   public func setAppliesFrom(_ month: Month) async {
+    if month != appliesFrom { edited() }
     appliesFrom = month
-    savedMessage = nil
     await refreshLaterPlan()
   }
 
@@ -226,8 +266,9 @@ public final class BudgetEditorModel {
 
   public func setLimit(_ text: String, for categoryID: AbacusDomain.Category.ID) {
     guard let index = limits.firstIndex(where: { $0.categoryID == categoryID }) else { return }
+    guard limits[index].limit != text else { return }
     limits[index].limit = text
-    savedMessage = nil
+    edited()
   }
 
   public func limitText(_ categoryID: AbacusDomain.Category.ID) -> String {
@@ -237,9 +278,10 @@ public final class BudgetEditorModel {
   /// A limit's currency (R-MGMT-3); it becomes the default for the next limit added.
   public func setCurrency(_ currency: Currency, for categoryID: AbacusDomain.Category.ID) {
     guard let index = limits.firstIndex(where: { $0.categoryID == categoryID }) else { return }
-    limits[index].currency = currency
     lastUsedCurrency = currency
-    savedMessage = nil
+    guard limits[index].currency != currency else { return }
+    limits[index].currency = currency
+    edited()
   }
 
   public func currency(_ categoryID: AbacusDomain.Category.ID) -> Currency {
@@ -268,13 +310,14 @@ public final class BudgetEditorModel {
     guard let id = categoryToAdd ?? addOptions.first?.id, !limits.contains(where: { $0.categoryID == id }) else { return }
     limits.append(BudgetLimitDraft(categoryID: id, limit: format.amountInput(0), currency: newLimitCurrency))
     categoryToAdd = addOptions.first?.id
-    savedMessage = nil
+    edited()
   }
 
   public func removeLimit(_ categoryID: AbacusDomain.Category.ID) {
+    guard limits.contains(where: { $0.categoryID == categoryID }) else { return }
     limits.removeAll { $0.categoryID == categoryID }
     if categoryToAdd == nil { categoryToAdd = addOptions.first?.id }
-    savedMessage = nil
+    edited()
   }
 
   // MARK: Total and unallocated (R-BUD-1, D43, D46)
@@ -409,13 +452,26 @@ public final class BudgetEditorModel {
 
   public var canSave: Bool { validationMessage == nil && isDirty }
 
+  /// The Save button (D56): "Saved" (green, disabled) right after a save until the next edit;
+  /// otherwise blue, enabled while there are unsaved edits. A failed save stays `.edited`.
+  public var saveState: BudgetSaveState {
+    if isDirty { return .edited }
+    return justSaved ? .saved : .unchanged
+  }
+
+  /// Any edit: the "Saved" state and message end.
+  private func edited() {
+    justSaved = false
+    savedMessage = nil
+  }
+
   /// "Save": a plan effective from `appliesFrom` (R-BUD-3) with the total (0 = none) and each
   /// limit in its own currency. A plan already starting that month is replaced; earlier and
   /// later plans stay (D29).
   public func save() async {
-    guard validationMessage == nil else { return }
+    guard canSave else { return }  // valid and edited (D56: no save without an edit)
     let month = appliesFrom.string
-    let planID = loadedPlan?.effectiveMonth == month ? loadedPlan!.id : UUID()
+    let planID: UUID = loadedPlan.flatMap { $0.effectiveMonth == month ? $0.id : nil } ?? UUID()
     let plan = BudgetPlan(
       id: planID, effectiveMonth: month, totalMinor: total?.minorUnits ?? 0, currency: totalCurrency)
     let allocations = limits.compactMap { limit in
@@ -428,9 +484,11 @@ public final class BudgetEditorModel {
       loadedPlan = plan
       baseline = snapshot
       errorMessage = nil
+      justSaved = true
       savedMessage = "Saved. It applies from \(format.month(appliesFrom))."
       await refreshLaterPlan()
     } catch {
+      justSaved = false
       errorMessage = ManageFailure.message(error, doing: "save the budget")
     }
   }

@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 /// One row of the category tree (R-MGMT-2): parents bold, children indented, usage count.
-public struct CategoryRow: Identifiable, Equatable, Sendable {
+public struct CategoryRow: Identifiable, Hashable, Sendable {
   public let id: AbacusDomain.Category.ID
   public let name: String
   public let colorHex: String?
@@ -28,6 +28,8 @@ public struct CategoryDraft: Equatable, Sendable {
   public var colorHex: String?
   public var isBuiltIn = false
 }
+
+extension CategoryDraft: Identifiable {}
 
 /// Where a dragged category lands (R-MGMT-8, like Reminders).
 public enum CategoryDropPosition: Hashable, Sendable {
@@ -70,8 +72,13 @@ public final class CategoriesModel {
   public private(set) var sort: CategorySort = .default
   /// The page search: names of categories and subcategories (R-MGMT-11).
   public var searchText = ""
+  /// The open editor sheet's starting form (D55); the sheet keeps its own copy and hands it
+  /// back on Save. nil while no sheet is open.
+  public private(set) var sheet: CategoryDraft?
 
   @ObservationIgnored public let dependencies: ManageDependencies
+  /// The selection before "New category", given back when the sheet is cancelled.
+  @ObservationIgnored private var selectionBeforeNew: AbacusDomain.Category.ID?
   /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
   /// so the transaction list and the dashboard re-read it.
   @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
@@ -223,11 +230,76 @@ public final class CategoriesModel {
   /// "New category": a top-level category of the current tab (subcategories come from drag
   /// and drop or the inspector's Parent field).
   public func newCategory() {
+    selectionBeforeNew = selection ?? selectionBeforeNew
     selection = nil
     errorMessage = nil
     let siblings = categories.filter { $0.kind == kind && $0.parentID == nil }.map(\.colorHex)
-    draft = CategoryDraft(
+    let draft = CategoryDraft(
       id: UUID(), isNew: true, kind: kind, name: "", parentID: nil, colorHex: ColorPalette.pick(avoiding: siblings))
+    self.draft = draft
+    sheet = draft
+  }
+
+  // MARK: Editor sheet (D55)
+
+  /// Opens the editor sheet on a category or the built-in "Uncategorised" (double-click,
+  /// Return, "Edit…").
+  public func edit(_ id: AbacusDomain.Category.ID) {
+    guard id == Self.uncategorisedID || category(id) != nil else { return }
+    select(id)
+    sheet = draft
+  }
+
+  /// Cancel / Escape: closes the sheet without saving; a new category's sheet gives the
+  /// selection back.
+  public func dismissSheet() {
+    let wasNew = sheet?.isNew == true
+    sheet = nil
+    if wasNew {
+      let previous = selectionBeforeNew.flatMap { id in
+        id == Self.uncategorisedID || category(id)?.kind == kind ? id : nil
+      }
+      selectionBeforeNew = nil
+      select(previous ?? rows.first?.id)
+    } else {
+      select(selection)
+    }
+  }
+
+  /// Saves the sheet's form; the sheet closes when the save worked.
+  public func save(_ draft: CategoryDraft) async {
+    self.draft = draft
+    if await save() {
+      sheet = nil
+      selectionBeforeNew = nil
+    }
+  }
+
+  /// What is wrong with a form, or nil when it can be saved.
+  public func validationMessage(_ draft: CategoryDraft) -> String? {
+    guard !draft.isBuiltIn else { return nil }
+    return draft.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter a name." : nil
+  }
+
+  public func isDirty(_ draft: CategoryDraft) -> Bool {
+    if draft.isNew { return true }
+    if draft.isBuiltIn { return ColorPalette.normalized(draft.colorHex) != uncategorisedColor }
+    guard let category = category(draft.id) else { return false }
+    return built(from: draft, base: category) != category
+  }
+
+  public func canSave(_ draft: CategoryDraft) -> Bool { isDirty(draft) && validationMessage(draft) == nil }
+
+  /// Parent choices for a form: "None (top level)" plus top-level categories of its kind, A–Z.
+  public func parentOptions(_ draft: CategoryDraft) -> [AbacusDomain.Category] {
+    guard !draft.isBuiltIn else { return [] }
+    return CategoryOrder.alphabetical(
+      categories.filter { $0.kind == draft.kind && $0.parentID == nil && $0.id != draft.id && !$0.isArchived })
+  }
+
+  /// A category with subcategories stays top level (one level only, R-CAT-2).
+  public func canChangeParent(_ draft: CategoryDraft) -> Bool {
+    !draft.isBuiltIn && !categories.contains { $0.parentID == draft.id }
   }
 
   /// The selected category (nil for the built-in "Uncategorised").
@@ -243,20 +315,20 @@ public final class CategoriesModel {
   /// Parent choices: "None (top level)" plus top-level categories of the same kind, A–Z. A
   /// category with children stays top level (one level only, R-CAT-2).
   public var parentOptions: [AbacusDomain.Category] {
-    guard let draft, !draft.isBuiltIn else { return [] }
-    return CategoryOrder.alphabetical(
-      categories.filter { $0.kind == draft.kind && $0.parentID == nil && $0.id != draft.id && !$0.isArchived })
+    draft.map(parentOptions) ?? []
   }
 
   public var canChangeParent: Bool {
-    guard let draft, !draft.isBuiltIn else { return false }
-    return !categories.contains { $0.parentID == draft.id }
+    draft.map(canChangeParent) ?? false
   }
 
   /// "Used by 124 transactions and the monthly budget." (+ "Parent totals include its
   /// subcategories." for a top-level one).
   public var usageText: String {
-    guard let draft else { return "" }
+    draft.map(usageText) ?? ""
+  }
+
+  public func usageText(_ draft: CategoryDraft) -> String {
     if draft.isBuiltIn {
       let count = uncategorisedUsage[draft.kind] ?? 0
       let kindName = draft.kind == .income ? "incomes" : "expenses"
@@ -271,16 +343,11 @@ public final class CategoriesModel {
   }
 
   public var validationMessage: String? {
-    guard let draft, !draft.isBuiltIn else { return nil }
-    return draft.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter a name." : nil
+    draft.flatMap(validationMessage)
   }
 
   public var isDirty: Bool {
-    guard let draft else { return false }
-    if draft.isNew { return true }
-    if draft.isBuiltIn { return ColorPalette.normalized(draft.colorHex) != uncategorisedColor }
-    guard let category = category(draft.id) else { return false }
-    return built(from: draft, base: category) != category
+    draft.map(isDirty) ?? false
   }
 
   public var canSave: Bool { isDirty && validationMessage == nil }
@@ -296,11 +363,12 @@ public final class CategoriesModel {
     return category
   }
 
-  public func save() async {
-    guard let draft, canSave else { return }
+  /// Saves the open form; true when it was saved.
+  @discardableResult
+  public func save() async -> Bool {
+    guard let draft, canSave else { return false }
     if draft.isBuiltIn {
-      await saveUncategorisedColor(draft.colorHex)
-      return
+      return await saveUncategorisedColor(draft.colorHex)
     }
     let category = built(from: draft, base: draft.isNew ? nil : category(draft.id))
     do {
@@ -310,20 +378,24 @@ public final class CategoriesModel {
       self.draft = nil
       await load()
       select(category.id)
+      return true
     } catch {
       errorMessage = ManageFailure.message(error, doing: "save the category")
+      return false
     }
   }
 
-  private func saveUncategorisedColor(_ hex: String?) async {
-    guard let hex = ColorPalette.normalized(hex) else { return }
+  private func saveUncategorisedColor(_ hex: String?) async -> Bool {
+    guard let hex = ColorPalette.normalized(hex) else { return false }
     do {
       try await dependencies.settings.set(.uncategorisedColor, hex)
       uncategorisedColor = hex
       await onDataChange?()
       select(Self.uncategorisedID)
+      return true
     } catch {
       errorMessage = ManageFailure.message(error, doing: "save the colour")
+      return false
     }
   }
 
@@ -529,6 +601,7 @@ public final class CategoriesModel {
     self.dialog = nil
     do {
       try await dependencies.categories.delete(id, reassignTo: dialog.offersArchive ? reassignTarget : nil)
+      sheet = nil
       await onDataChange?()
       selection = nil
       draft = nil
@@ -542,6 +615,7 @@ public final class CategoriesModel {
   public func archiveInstead() async {
     guard let dialog, case .deleteCategory(let id) = dialog.action else { return }
     self.dialog = nil
+    sheet = nil
     await setArchived(id, true)
   }
 }

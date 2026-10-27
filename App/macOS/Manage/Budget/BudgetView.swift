@@ -36,8 +36,31 @@ public struct BudgetView: View {
     .onChange(of: app?.displayCurrency, initial: true) { _, currency in
       if let currency { model.setDisplayCurrency(currency) }
     }
-    .task { if model.phase == .idle { await model.load() } }
+    .task {
+      if model.phase == .idle { await model.load() }
+      #if DEBUG
+        await demoSaveStateForSnapshot()
+      #endif
+    }
+    #if DEBUG
+      // Sample data may arrive after the first load.
+      .onChange(of: model.rows.count) { Task { await demoSaveStateForSnapshot() } }
+    #endif
   }
+
+  #if DEBUG
+    @MainActor private static var demoed = false
+
+    /// Debug builds (UI snapshots on a scratch database): `-AbacusBudgetDemo edited` changes the
+    /// first limit; `-AbacusBudgetDemo saved` changes and saves it (D56 Save button states).
+    private func demoSaveStateForSnapshot() async {
+      guard !Self.demoed, let demo = UserDefaults.standard.string(forKey: "AbacusBudgetDemo"),
+        let first = model.rows.first
+      else { return }
+      Self.demoed = true
+      model.setLimit(model.limitText(first.categoryID) == "100" ? "200" : "100", for: first.categoryID)
+      if demo == "saved" { await model.save() }    }
+  #endif
 }
 
 /// Revert (left) and Save (right) at the bottom-right of the form (R-MGMT-10); the messages
@@ -64,14 +87,46 @@ struct BudgetSaveBar: View {
         Spacer(minLength: 8)
         Button("Revert") { Task { await model.revert() } }
           .disabled(!model.isDirty)
-        Button("Save") { Task { await model.save() } }
-          .buttonStyle(.borderedProminent)
-          .disabled(!model.canSave)
-          .keyboardShortcut("s", modifiers: .command)
+        Button {
+          Task { await model.save() }
+        } label: {
+          if model.saveState == .saved {
+            Label("Saved", systemImage: "checkmark")
+          } else {
+            Text("Save")
+          }
+        }
+        .buttonStyle(BudgetSaveButtonStyle(isSaved: model.saveState == .saved))
+        .disabled(!model.canSave)
+        .keyboardShortcut("s", modifiers: .command)
+        .accessibilityLabel(model.saveState == .saved ? "Saved" : "Save")
       }
     }
     .frame(maxWidth: .infinity, alignment: .trailing)
     .font(.system(size: 13))
+  }
+}
+
+/// The Budget Save button (D56): blue ("Save"; dimmed while there is nothing to save), green
+/// with a checkmark ("Saved", disabled) right after a save until the next edit. A custom style
+/// because a disabled bordered-prominent button loses its colour on macOS.
+struct BudgetSaveButtonStyle: ButtonStyle {
+  let isSaved: Bool
+  @Environment(\.isEnabled) private var isEnabled
+
+  static let saved = ManagePalette.dynamic(light: 0x1E8E3E, dark: 0x30A64A)
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: 13, weight: .medium))
+      .foregroundStyle(.white)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 4)
+      .frame(minWidth: 64)
+      .background(isSaved ? Self.saved : Color.accentColor, in: .rect(cornerRadius: 6))
+      .opacity(isEnabled || isSaved ? 1 : 0.45)
+      .brightness(configuration.isPressed ? -0.08 : 0)
+      .animation(.easeOut(duration: 0.15), value: isSaved)
   }
 }
 

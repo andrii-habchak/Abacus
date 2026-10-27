@@ -16,8 +16,6 @@ public struct RuleRow: Identifiable, Equatable, Sendable {
   public let origin: String
   public let hits: Int
   public let isEnabled: Bool
-  /// The tester's description matches this rule first.
-  public let isMatch: Bool
 
   /// "Description contains “lidl” → Food › Groceries".
   public var summary: String { "\(condition) → \(action)" }
@@ -148,7 +146,7 @@ public struct RuleApplyNotice: Equatable, Sendable {
 }
 
 /// The Rules screen (approved prototype group 4, R-MGMT-6, R-MGMT-11, R-IMP-8, D44): page
-/// search and a category filter, a tester highlighting the first matching rule, the rules in
+/// search and a category filter (the "Try a description" tester was removed, D56), the rules in
 /// evaluation order and in words with enable toggles, origin and hit counts; create, edit
 /// (Saldo-like editor), reorder, delete; "Update existing transactions" with a confirmation
 /// showing how many change, recorded so the rule can be rolled back later (TA v1.6).
@@ -165,12 +163,6 @@ public final class RulesModel {
   public var searchText = ""
   /// Only rules assigning this category or one of its subcategories (R-MGMT-11); nil = all.
   public var categoryFilter: AbacusDomain.Category.ID?
-  /// "Try a description".
-  public var probe = ""
-  /// The tester's account; nil = any account.
-  public var probeAccountID: Account.ID?
-  /// The tester's amount (optional; amount conditions fail without one).
-  public var probeAmountText = ""
   public var selection: CategoryRule.ID?
   /// The editor sheet; nil when closed.
   public var editor: RuleDraft?
@@ -190,9 +182,8 @@ public final class RulesModel {
   @ObservationIgnored public var onTransactionsChange: (@MainActor () async -> Void)?
   @ObservationIgnored public let dependencies: ManageDependencies
 
-  public init(dependencies: ManageDependencies, probe: String = "") {
+  public init(dependencies: ManageDependencies) {
     self.dependencies = dependencies
-    self.probe = probe
   }
 
   public func load() async {
@@ -208,29 +199,6 @@ public final class RulesModel {
     } catch {
       phase = .failed("Couldn't load rules: \(error.localizedDescription)")
     }
-  }
-
-  // MARK: Tester
-
-  public var probeAmountMinor: Int64? {
-    dependencies.format.parseAmount(probeAmountText).map(abs)
-  }
-
-  public var match: CategoryRule? {
-    // Same matching as imports and the editor (AbacusImport.RuleMatcher), in rule order.
-    rules.first {
-      RuleMatcher.matches(
-        $0, description: probe, accountID: probeAccountID, amountMinor: probeAmountMinor, categories: categories,
-        accounts: accounts)
-    }
-  }
-
-  /// "Matches “biedronka” → Food › Groceries" / "No rule matches; the category stays empty for
-  /// you to pick." / "" without a description or amount.
-  public var probeResult: String {
-    if let match { return "Matches “\(match.label)” → \(actionText(match))" }
-    return probe.trimmingCharacters(in: .whitespaces).isEmpty && probeAmountMinor == nil
-      ? "" : "No rule matches; the category stays empty for you to pick."
   }
 
   // MARK: Rows
@@ -289,12 +257,11 @@ public final class RulesModel {
   }
 
   public var rows: [RuleRow] {
-    let matchID = match?.id
-    return visibleRules.map { rule in
+    visibleRules.map { rule in
       RuleRow(
         id: rule.id, pattern: rule.label, condition: conditionText(rule), action: actionText(rule),
         origin: rule.origin == .imported ? "Learned from an import" : "Manual", hits: rule.hitCount,
-        isEnabled: rule.isEnabled, isMatch: rule.id == matchID)
+        isEnabled: rule.isEnabled)
     }
   }
 
@@ -376,10 +343,9 @@ public final class RulesModel {
 
   // MARK: Editor
 
-  /// "New rule": the tester's text as the pattern when no rule matches it.
+  /// "New rule": an empty draft.
   public func newRule() {
-    let text = match == nil ? probe.trimmingCharacters(in: .whitespaces).lowercased() : ""
-    open(RuleDraft(pattern: text))
+    open(RuleDraft())
   }
 
   public func edit(_ id: CategoryRule.ID) {

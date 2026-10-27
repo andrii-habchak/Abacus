@@ -7,12 +7,16 @@ public enum TransactionEditorMode: Hashable, Sendable, Identifiable {
   /// A new transaction starting with this category (and its kind's type): "New transaction"
   /// while a category is selected on the Categories page (R-MGMT-8).
   case newInCategory(AbacusDomain.Category.ID)
+  /// A new transaction starting on this account (and its currency): "New transaction" while an
+  /// account is selected on the Accounts page (D55).
+  case newInAccount(Account.ID)
   case edit(Txn.ID)
 
   public var id: String {
     switch self {
     case .new: "new"
     case .newInCategory(let id): "new-\(id.uuidString)"
+    case .newInAccount(let id): "new-account-\(id.uuidString)"
     case .edit(let id): "edit-\(id.uuidString)"
     }
   }
