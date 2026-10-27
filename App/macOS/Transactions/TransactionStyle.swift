@@ -35,10 +35,7 @@ enum TxnPalette {
   }
 
   /// A category colour (`#RRGGBB`), grey when missing or invalid.
-  static func tile(_ hex: String?) -> Color {
-    guard let hex, hex.hasPrefix("#"), let value = Int(hex.dropFirst(), radix: 16) else { return neutralTile }
-    return Color(txnHex: value)
-  }
+  static func tile(_ hex: String?) -> Color { CategoryColor.color(hex, fallback: neutralTile) }
 
   static func dynamic(light: Int, dark: Int) -> Color {
     Color(
