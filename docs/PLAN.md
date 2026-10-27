@@ -142,7 +142,13 @@ Wave 2:
   net worth hierarchy.
 - [x] **C13 Dashboard widgets** (merged 2026-10-27) — income donut, income vs expenses, drag-reorder widgets.
 - [x] **C14 Debts** (merged 2026-10-27; migration v10; widget scroll fix pending) — `R-DEBT` (TA v1.7, D51).
-- [ ] **Release 1.2.0** — DMG built for owner testing; tag after the owner's OK.
+- [ ] **Release 1.2.0** — DMG built for owner testing; superseded by 1.2.1 below.
+
+### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
+- [ ] **S1 Stability and performance** — crashes (binding force-unwrap, Escape), hangs, reload storms, timing on owner-size data.
+- [ ] **S2 Accounts and categories lists** — native outline drag and drop, sheet editors, split New account button, new-tx prefill for accounts.
+- [ ] **S3 Budget and rules polish** — Save button states, remove the rules tester row.
+- [ ] **Release 1.2.1**.
 
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
