@@ -26,8 +26,12 @@ struct EditorLinesSection: View {
           .font(.system(size: 12))
           .foregroundStyle(.secondary)
       }
-      ForEach($model.lines) { $line in
-        EditorLineRow(model: model, line: $line)
+      // By id, not `ForEach($model.lines)`: a removed line's fields may still read their
+      // binding while it goes away (S1).
+      ForEach(model.lines) { line in
+        EditorLineRow(
+          model: model,
+          line: elementBinding({ model.lines }, { model.lines = $0 }, id: line.id, fallback: line))
       }
       HStack(spacing: 8) {
         Text(model.effectLabel)

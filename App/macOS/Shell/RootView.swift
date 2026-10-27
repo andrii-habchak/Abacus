@@ -48,13 +48,23 @@ struct RootView: View {
       #if DEBUG
         WindowSnapshot.applyAppearance()
       #endif
+      // S1 checks (`StabilityProbe`): debug builds, or an optimised build with -DABACUS_PROBE.
+      #if DEBUG || ABACUS_PROBE
+        if UserDefaults.standard.bool(forKey: "AbacusHangWatch") { HangWatch.start() }
+      #endif
       let launch = LaunchOptions.current
       await session.start()
       if launch.loadSampleData {
         await session.loadSampleData()
         session.sampleDataMessage = nil
       }
+      #if DEBUG || ABACUS_PROBE
+        if launch.loadLargeSampleData { await session.loadLargeSampleData() }
+      #endif
       if launch.settingsTab != nil { openSettings() }
+      #if DEBUG || ABACUS_PROBE
+        await StabilityProbe.runIfRequested(session: session)
+      #endif
       #if DEBUG
         await WindowSnapshot.runIfRequested()
       #endif

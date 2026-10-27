@@ -63,7 +63,8 @@ struct SessionScope<Content: View>: View {
 /// Launch arguments for demos and screenshots: `-AbacusSection rates`,
 /// `-AbacusOpenSettings general|rates|data`, `-AbacusPreviewData YES` (synthetic data in memory,
 /// `-AbacusOffline YES` for a failed fetch), `-AbacusDatabasePath <file>` (another database
-/// file), `-AbacusLoadSampleData YES` ("Load Sample Data" on launch).
+/// file), `-AbacusLoadSampleData YES` ("Load Sample Data" on launch), DEBUG:
+/// `-AbacusLoadLargeSampleData YES` (5,000 synthetic transactions into an empty database).
 struct LaunchOptions {
   var section: AppSection?
   var settingsTab: SettingsTab?
@@ -71,6 +72,7 @@ struct LaunchOptions {
   var offline: Bool
   var databasePath: String?
   var loadSampleData: Bool
+  var loadLargeSampleData = false
 
   static var current: LaunchOptions {
     let defaults = UserDefaults.standard
@@ -80,6 +82,7 @@ struct LaunchOptions {
       previewData: defaults.bool(forKey: "AbacusPreviewData"),
       offline: defaults.bool(forKey: "AbacusOffline"),
       databasePath: defaults.string(forKey: "AbacusDatabasePath").flatMap { $0.isEmpty ? nil : $0 },
-      loadSampleData: defaults.bool(forKey: "AbacusLoadSampleData"))
+      loadSampleData: defaults.bool(forKey: "AbacusLoadSampleData"),
+      loadLargeSampleData: defaults.bool(forKey: "AbacusLoadLargeSampleData"))
   }
 }

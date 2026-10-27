@@ -334,6 +334,19 @@ public final class AppSession {
 
   // MARK: Sample data
 
+  /// The large synthetic set (`LargeSampleData`, S1 performance checks), only into a database
+  /// without accounts. DEBUG launch option `-AbacusLoadLargeSampleData YES`.
+  public func loadLargeSampleData() async {
+    guard let database else { return }
+    do {
+      if try await LargeSampleData.loadIfEmpty(into: database) {
+        await dataChanged()
+      }
+    } catch {
+      sampleDataMessage = "Couldn't load the large sample data: \(error.localizedDescription)"
+    }
+  }
+
   /// "Load Sample Data": the synthetic preview data set, only into a database without accounts.
   public func loadSampleData() async {
     guard let database else {

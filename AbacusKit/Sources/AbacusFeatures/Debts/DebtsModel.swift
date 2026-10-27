@@ -477,15 +477,24 @@ public final class DebtsModel {
 
   // MARK: Saving
 
+  /// One save or delete at a time: a second Return (or Save then Delete) while the first is
+  /// still writing is ignored instead of saving the record twice (S1).
+  public private(set) var isSaving = false
+
   private func perform(_ work: @MainActor () async throws -> Void) async {
+    guard !isSaving else { return }
+    isSaving = true
     do {
       try await work()
       errorMessage = nil
       await load()
+      isSaving = false
       await onDataChange?()
     } catch DebtRepositoryError.currencyLocked {
+      isSaving = false
       errorMessage = "The currency can't change: the debt has records."
     } catch {
+      isSaving = false
       errorMessage = "Couldn't save: \(error.localizedDescription)"
     }
   }

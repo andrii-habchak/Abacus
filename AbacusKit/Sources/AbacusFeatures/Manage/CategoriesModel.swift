@@ -395,7 +395,13 @@ public final class CategoriesModel {
     // Reorder: blocks of the order shown (parent + children), the moving category taken out.
     var blocks: [[AbacusDomain.Category]] = []
     for category in current {
-      if isChild(category, among: ids) { blocks[blocks.count - 1].append(category) } else { blocks.append([category]) }
+      // A child before any parent (an orphan the tree put first) starts a block of its own
+      // rather than trapping on `blocks[-1]` (S1).
+      if isChild(category, among: ids), !blocks.isEmpty {
+        blocks[blocks.count - 1].append(category)
+      } else {
+        blocks.append([category])
+      }
     }
     var movingBlock: [AbacusDomain.Category] = [moving]
     if let index = blocks.firstIndex(where: { $0[0].id == movingID }) {
