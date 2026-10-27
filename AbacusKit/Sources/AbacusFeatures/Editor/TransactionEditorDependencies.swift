@@ -113,6 +113,11 @@ public actor EditorPreviewRules: RuleRepository {
     if let index = list.firstIndex(where: { $0.id == rule.id }) { list[index] = rule } else { list.append(rule) }
   }
 
+  /// Rules only: the editor's fake has no transactions.
+  public func save(_ rule: CategoryRule?, updating txns: [Txn]) async throws {
+    if let rule { try await save(rule) }
+  }
+
   public func delete(_ id: CategoryRule.ID) async throws { list.removeAll { $0.id == id } }
 
   public func recordHit(_ id: CategoryRule.ID) async throws {

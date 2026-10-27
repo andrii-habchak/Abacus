@@ -49,5 +49,15 @@ public enum ManageSample {
       hitCount: 9, position: 3),
     CategoryRule(id: id(955), pattern: "orange", categoryID: PreviewData.id(211), origin: .imported, hitCount: 12, position: 4),
     CategoryRule(id: id(956), pattern: "farmacja", categoryID: PreviewData.id(209), origin: .imported, hitCount: 7, position: 5),
+    // Saldo-like rules (D44): an amount condition, an exact match, a transfer action.
+    CategoryRule(
+      id: id(957), pattern: "zalando", amountComparison: .biggerThan, amountMinor: 100_00,
+      categoryID: PreviewData.id(212), origin: .manual, hitCount: 2, position: 6),
+    CategoryRule(
+      id: id(958), pattern: "pizzeria napoli", matchKind: .exactly, accountID: PreviewData.monobank.id,
+      categoryID: PreviewData.id(203), origin: .manual, hitCount: 1, position: 7),
+    CategoryRule(
+      id: id(959), pattern: "friend", action: .transfer, transferAccountID: PreviewData.loanFromFriend.id,
+      origin: .manual, position: 8),
   ]
 }

@@ -52,8 +52,48 @@ extension AbacusDatabase {
           """#
       )
     }
+    migrator.registerMigration("v6: rules") { db in
+      for statement in rulesV6 {
+        try db.execute(sql: statement)
+      }
+    }
     return migrator
   }
+
+  /// Saldo-like rules (R-IMP-8, D44): match kind, amount condition, action and transfer account;
+  /// `categoryID` becomes nullable (transfer rules), which SQLite only allows by rebuilding the
+  /// table. Every existing rule is a category rule matching by "contains". GRDB runs migrations
+  /// with foreign keys deferred and checks them before committing.
+  static let rulesV6: [String] = [
+    """
+    CREATE TABLE "categoryRules_v6" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "pattern" TEXT NOT NULL,
+      "accountID" TEXT REFERENCES "accounts"("id") ON DELETE CASCADE,
+      "categoryID" TEXT REFERENCES "categories"("id") ON DELETE CASCADE,
+      "origin" TEXT NOT NULL,
+      "hitCount" INTEGER NOT NULL DEFAULT 0,
+      "position" INTEGER NOT NULL DEFAULT 0,
+      "isEnabled" INTEGER NOT NULL DEFAULT 1,
+      "matchKind" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT 'contains',
+      "amountComparison" TEXT,
+      "amountMinor" INTEGER,
+      "action" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT 'category',
+      "transferAccountID" TEXT REFERENCES "accounts"("id") ON DELETE CASCADE
+    ) STRICT
+    """,
+    """
+    INSERT INTO "categoryRules_v6" \
+    ("id", "pattern", "accountID", "categoryID", "origin", "hitCount", "position", "isEnabled", "matchKind", "action") \
+    SELECT "id", "pattern", "accountID", "categoryID", "origin", "hitCount", "position", "isEnabled", 'contains', 'category' \
+    FROM "categoryRules"
+    """,
+    #"DROP TABLE "categoryRules""#,
+    #"ALTER TABLE "categoryRules_v6" RENAME TO "categoryRules""#,
+    #"CREATE INDEX "idx_categoryRules_accountID" ON "categoryRules"("accountID")"#,
+    #"CREATE INDEX "idx_categoryRules_categoryID" ON "categoryRules"("categoryID")"#,
+    #"CREATE INDEX "idx_categoryRules_transferAccountID" ON "categoryRules"("transferAccountID")"#,
+  ]
 
   static let schemaV1: [String] = [
     """

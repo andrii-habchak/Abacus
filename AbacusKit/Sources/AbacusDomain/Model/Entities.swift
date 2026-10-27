@@ -443,26 +443,67 @@ public enum RuleOrigin: String, CaseIterable, Codable, Hashable, Sendable, Query
   case imported, manual
 }
 
-/// "Description contains `pattern` → category" (case-insensitive), optionally per account.
+/// How a rule's text is compared with the description (R-IMP-8). Both sides are folded for
+/// case, diacritics and whitespace first.
+public enum RuleMatchKind: String, CaseIterable, Codable, Hashable, Sendable, QueryBindable {
+  case contains, exactly
+}
+
+/// The optional amount condition: the transaction's absolute amount in its account's currency
+/// is strictly bigger / smaller than the rule's amount.
+public enum RuleAmountComparison: String, CaseIterable, Codable, Hashable, Sendable, QueryBindable {
+  case biggerThan, smallerThan
+}
+
+/// What a matching rule does.
+public enum RuleAction: String, CaseIterable, Codable, Hashable, Sendable, QueryBindable {
+  /// Assign `categoryID` (to an expense/income of the category's kind).
+  case category
+  /// Turn the transaction into a transfer between its own account and `transferAccountID`:
+  /// money out → to that account, money in → from it (D44).
+  case transfer
+}
+
+/// A rule (R-IMP-8, D44): a description condition (`matchKind` + `pattern`), an optional amount
+/// condition (`amountComparison` + `amountMinor`) and an optional account (`accountID`) → an
+/// action (`category` with `categoryID`, or `transfer` with `transferAccountID`). The table
+/// keeps its name from the category-only rules (schema v6 rebuilt it).
 @Table("categoryRules")
 public struct CategoryRule: Hashable, Identifiable, Sendable {
   public let id: UUID
   public var pattern: String
+  /// Only on this account; nil = any account.
   public var accountID: Account.ID?
-  public var categoryID: Category.ID
+  /// Set when `action == .category`.
+  public var categoryID: Category.ID?
   public var origin: RuleOrigin
   public var hitCount: Int
   public var position: Int
   public var isEnabled: Bool
+  public var matchKind: RuleMatchKind
+  public var amountComparison: RuleAmountComparison?
+  /// Positive minor units, compared with each transaction's amount in its account's currency.
+  public var amountMinor: Int64?
+  public var action: RuleAction
+  /// Set when `action == .transfer`.
+  public var transferAccountID: Account.ID?
 
   public init(
-    id: UUID = UUID(), pattern: String, accountID: Account.ID? = nil, categoryID: Category.ID,
-    origin: RuleOrigin = .manual, hitCount: Int = 0, position: Int = 0, isEnabled: Bool = true
+    id: UUID = UUID(), pattern: String, matchKind: RuleMatchKind = .contains,
+    amountComparison: RuleAmountComparison? = nil, amountMinor: Int64? = nil,
+    accountID: Account.ID? = nil, action: RuleAction = .category, categoryID: Category.ID? = nil,
+    transferAccountID: Account.ID? = nil, origin: RuleOrigin = .manual, hitCount: Int = 0,
+    position: Int = 0, isEnabled: Bool = true
   ) {
     self.id = id
     self.pattern = pattern
+    self.matchKind = matchKind
+    self.amountComparison = amountComparison
+    self.amountMinor = amountMinor
     self.accountID = accountID
+    self.action = action
     self.categoryID = categoryID
+    self.transferAccountID = transferAccountID
     self.origin = origin
     self.hitCount = hitCount
     self.position = position

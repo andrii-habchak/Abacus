@@ -365,7 +365,7 @@ private struct Resolver {
 
   init(preview: ImportPreview) {
     self.preview = preview
-    self.matcher = RuleMatcher(rules: preview.context.rules, categories: preview.context.categories)
+    self.matcher = RuleMatcher(rules: preview.context.rules, categories: preview.context.categories, accounts: preview.context.accounts)
   }
 
   var parsed: [NormalizedRow] { preview.parsedRows }
@@ -443,7 +443,28 @@ private struct Resolver {
 
     var shape = baseShape(source, found)
     row.type = shape.type
-    if shape.type != .transfer {
+    var transferRuleDetail: String?
+    if shape.type != .transfer, let (rule, accountID, otherAmount) = transferRule(for: source, shape: shape, account: account) {
+      // A transfer rule (D44): money out → to the rule's account, money in → from it.
+      let inflow = (shape.type == .income) != shape.isRefund
+      shape.type = .transfer
+      shape.original = nil
+      shape.isRefund = false
+      if inflow {
+        shape.from = .existing(accountID)
+        shape.to = account
+        shape.toAmountMinor = shape.amountMinor
+        shape.amountMinor = otherAmount
+      } else {
+        shape.to = .existing(accountID)
+        shape.toAmountMinor = otherAmount
+      }
+      shape.ruleID = rule.id
+      row.type = .transfer
+      row.counterAccount = .existing(accountID)
+      row.counterAmountMinor = otherAmount
+      transferRuleDetail = "Transfer by rule “\(rule.pattern)”"
+    } else if shape.type != .transfer {
       let (category, from, rule) = resolveCategory(for: source, kind: shape.type == .income ? .income : .expense, account: account, explicit: nil)
       shape.category = category
       shape.ruleID = rule
@@ -451,7 +472,7 @@ private struct Resolver {
       row.categorySource = from
       row.rulePattern = rulePattern(source, from)
     }
-    row.detail = detail(source, found)
+    row.detail = detail(source, found) ?? transferRuleDetail
 
     if let existing = found.duplicate {
       let action = decisions.duplicates[source.id] ?? .skip
@@ -532,10 +553,37 @@ private struct Resolver {
       return (fileCategory, .file, nil)
     }
     let accountID: Account.ID? = if case .existing(let id) = account { id } else { nil }
-    if let rule = matcher.match(description: source.payee, accountID: accountID, kind: kind) {
-      return (.existing(rule.categoryID), .rule(rule.id, pattern: rule.pattern), rule.id)
+    if let rule = matcher.match(description: source.payee, accountID: accountID, kind: kind, amountMinor: abs(source.amountMinor)),
+      let categoryID = rule.categoryID
+    {
+      return (.existing(categoryID), .rule(rule.id, pattern: rule.pattern), rule.id)
     }
     return (nil, .none, nil)
+  }
+
+  /// A transfer rule that wins for an expense/income row (D44): only when the file and the user
+  /// gave no category and no earlier category rule matches. Skips a transfer rule whose amount in
+  /// the other account's currency is unknown, and one that would move the row's attached records
+  /// to the other account (money in), and tries the next rule.
+  private func transferRule(
+    for source: NormalizedRow, shape: TxnShape, account: AccountRef
+  ) -> (CategoryRule, Account.ID, Int64)? {
+    let kind: CategoryKind = shape.type == .income ? .income : .expense
+    if decisions.categories[source.id] != nil { return nil }
+    if preview.categoryRef(source.category) != nil, source.category?.kind == kind { return nil }
+    let accountID: Account.ID? = if case .existing(let id) = account { id } else { nil }
+    let subject = RuleSubject(description: source.payee, accountID: accountID, amountMinor: abs(source.amountMinor), kind: kind)
+    let inflow = (shape.type == .income) != shape.isRefund
+    for rule in matcher.candidates(for: subject) {
+      guard rule.action == .transfer else { return nil }
+      guard let target = rule.transferAccountID, let other = preview.context.account(target), !other.isArchived,
+        account != .existing(target)
+      else { continue }
+      if inflow, !shape.lines.isEmpty { continue }
+      guard let amount = amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account)) else { continue }
+      return (rule, target, amount)
+    }
+    return nil
   }
 
   /// A user pick on a row the file and the rules left without a category becomes a rule.
