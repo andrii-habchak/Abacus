@@ -121,12 +121,12 @@ struct DashboardWidgetsTests {
 
   // MARK: Layout
 
-  @Test("R-HOME-6: the default order; widths: net worth, income vs expenses and debts are full width")
+  @Test("R-HOME-6: the default order; widths: net worth and income vs expenses are full width, debts half")
   func defaultLayout() {
     let layout = DashboardLayout.default
     #expect(layout.order == [.netWorth, .budget, .expenses, .income, .incomeVsExpenses, .debts])
     #expect(layout.isDefault)
-    #expect(DashboardWidget.allCases.filter(\.isFullWidth) == [.netWorth, .incomeVsExpenses, .debts])
+    #expect(DashboardWidget.allCases.filter(\.isFullWidth) == [.netWorth, .incomeVsExpenses])
     #expect(Set(DashboardLayout.defaultOrder) == Set(DashboardWidget.allCases))
   }
 
@@ -172,6 +172,10 @@ struct DashboardWidgetsTests {
     #expect(DashboardLayout.rows(DashboardLayout.defaultOrder, columns: 2)[1] == [.budget, .expenses])
     #expect(DashboardLayout.rows(DashboardLayout.defaultOrder, columns: 2)[2] == [.income])
     #expect(DashboardLayout.rows(order, columns: 1).allSatisfy { $0.count == 1 })
+    // Debts is half width: it pairs with another half-width widget.
+    #expect(
+      DashboardLayout.rows([.netWorth, .income, .debts, .budget], columns: 2)
+        == [[.netWorth], [.income, .debts], [.budget]])
   }
 
   @Test("R-HOME-6: the order is remembered in the settings and read back by the next load; reset clears it")

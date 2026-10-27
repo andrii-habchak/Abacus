@@ -23,6 +23,8 @@ struct DashboardView: View {
   @State private var model: DashboardModel
   /// Two half-width widgets per row (false at narrow widths: one per row).
   @State private var isWide = true
+  /// The page itself takes the window's first focus (see `content`).
+  @FocusState private var pageFocused: Bool
 
   /// Below this content width half-width widgets take a row each (two cards of 340 + spacing).
   static let twoColumnWidth: CGFloat = 696
@@ -84,6 +86,7 @@ struct DashboardView: View {
   }
 
   private var content: some View {
+    ScrollViewReader { proxy in
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
         if let warning = model.ratesWarning {
@@ -99,7 +102,7 @@ struct DashboardView: View {
           onStep: { widget, step in Task { await model.moveWidget(widget, by: step, among: visibleWidgets) } },
           onReset: model.layout.isDefault ? nil : { Task { await model.resetLayout() } }
         ) { widget in
-          widgetView(widget)
+          widgetView(widget).id(widget)
         }
         .animation(.snappy, value: model.layout)
         HStack(alignment: .firstTextBaseline) {
@@ -114,10 +117,35 @@ struct DashboardView: View {
           }
         }
       }
+      // With Full Keyboard Access on (System Settings › Keyboard navigation) the window gives its
+      // first focus to a control and scrolls it into view; without a default it picked the last
+      // control on the page ("Open Debts", "Reset layout"), so the dashboard opened scrolled to
+      // the bottom. This invisible anchor at the very top (behind the content, taking no space)
+      // takes that first focus, so the page always opens at the top; Tab moves on as before.
+      .background(alignment: .top) {
+        Color.clear
+          .frame(width: 1, height: 1)
+          .focusable()
+          .focusEffectDisabled()
+          .focused($pageFocused)
+          .accessibilityHidden(true)
+      }
       .onGeometryChange(for: Bool.self) { $0.size.width >= Self.twoColumnWidth } action: { isWide = $0 }
       .padding(20)
       .frame(maxWidth: 1180, alignment: .leading)
       .frame(maxWidth: .infinity)
+    }
+    .defaultFocus($pageFocused, true)
+    #if DEBUG
+      // `-AbacusDashboardScrollTo <widget>`: snapshots of a widget below the fold (C14).
+      .task {
+        guard let id = UserDefaults.standard.string(forKey: "AbacusDashboardScrollTo"),
+          let widget = DashboardWidget(rawValue: id)
+        else { return }
+        try? await Task.sleep(for: .seconds(1))
+        proxy.scrollTo(widget, anchor: .bottom)
+      }
+    #endif
     }
   }
 
