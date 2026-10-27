@@ -660,6 +660,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
   case uncategorisedColor
   /// The Categories page sort (`CategorySort.rawValue`); default custom order (R-MGMT-8).
   case categorySort
+  /// The dashboard widget order (`DashboardLayout`): a JSON array of widget ids (R-HOME-6).
+  case dashboardLayout
 }
 
 @Table("appSettings")
