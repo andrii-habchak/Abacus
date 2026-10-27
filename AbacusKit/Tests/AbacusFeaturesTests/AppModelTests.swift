@@ -103,25 +103,27 @@ struct AppModelTests {
     #expect(app.pendingTransactionFilters == nil)
   }
 
-  @Test("R-HOME-4 the display-currency switch shows on Dashboard, Transactions, Accounts, Events, Budget")
+  @Test("R-HOME-4 the display-currency switch shows on Dashboard, Transactions, Debts, Accounts, Events, Budget")
   func displayCurrencySections() {
     let shown = AppSection.allCases.filter(\.usesDisplayCurrency)
-    #expect(Set(shown) == [.dashboard, .transactions, .accounts, .events, .budget])
+    #expect(Set(shown) == [.dashboard, .transactions, .accounts, .events, .budget, .debts])
   }
 
-  @Test("TA v1.6: no New transaction button on Budget and Rules; switch order EUR, USD, PLN, UAH")
+  @Test("TA v1.6: no New transaction button on Budget, Rules and Debts; switch order EUR, USD, PLN, UAH")
   func newTransactionSectionsAndCurrencyOrder() {
     let hidden = AppSection.allCases.filter { !$0.offersNewTransaction }
-    #expect(Set(hidden) == [.budget, .rules])
+    #expect(Set(hidden) == [.budget, .rules, .debts])
     #expect(Currency.displayOrder == [.EUR, .USD, .PLN, .UAH])
     #expect(Set(Currency.displayOrder) == Set(Currency.allCases))
   }
 
-  @Test("Sidebar order: Overview then Manage, nine sections for ⌘1…⌘9")
+  @Test("R-DEBT-5 sidebar order: Overview (with Debts) then Manage; ⌘1…⌘9, then ⌘0 for the tenth")
   func sectionOrder() {
     #expect(AppModel.sectionsInOrder.map(\.title) == [
-      "Dashboard", "Transactions", "Events", "Accounts", "Categories", "Budget", "Import", "Exchange rates", "Rules",
+      "Dashboard", "Transactions", "Events", "Debts", "Accounts", "Categories", "Budget", "Import", "Exchange rates",
+      "Rules",
     ])
+    #expect(AppModel.shortcutKeys == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
   }
 }
 

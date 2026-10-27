@@ -7,10 +7,14 @@ import SQLiteData
 public struct SQLiteImportStore: ImportStore {
   public let database: any DatabaseWriter
   public let calendar: Calendar
+  /// Converts what lands on debt-kind accounts into debt records after each commit (R-DEBT-8).
+  /// Off only in tests that need the pre-v10 shape (the real-data migration check).
+  public var convertsDebtAccounts: Bool
 
-  public init(database: any DatabaseWriter, calendar: Calendar = .current) {
+  public init(database: any DatabaseWriter, calendar: Calendar = .current, convertsDebtAccounts: Bool = true) {
     self.database = database
     self.calendar = calendar
+    self.convertsDebtAccounts = convertsDebtAccounts
   }
 
   var bounds: DayBounds { DayBounds(calendar: calendar) }
@@ -85,6 +89,7 @@ public struct SQLiteImportStore: ImportStore {
   /// fingerprints are tagged with the batch. Mappings replace the previous mapping of the same
   /// (source, kind, external key); rules are upserted.
   public func commit(_ commit: ImportCommit) async throws {
+    let convertsDebtAccounts = self.convertsDebtAccounts
     try await database.write { db in
       let batchID = commit.batch.id
       try ImportBatch.insert { commit.batch }.execute(db)
@@ -153,7 +158,7 @@ public struct SQLiteImportStore: ImportStore {
         try CategoryRule.upsert { CategoryRule.Draft(rule) }.execute(db)
       }
       // R-DEBT-8: what landed on debt-kind accounts (Saldo LIABILITIES) becomes debt records.
-      try DebtConversion.convertDebtAccounts(db, calendar: calendar)
+      if convertsDebtAccounts { try DebtConversion.convertDebtAccounts(db, calendar: calendar) }
     }
   }
 

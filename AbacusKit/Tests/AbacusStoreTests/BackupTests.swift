@@ -44,6 +44,13 @@ struct BackupTests {
     try await f.rates.save([FXRate(day: "2026-03-02", base: .EUR, quote: .PLN, rateE8: 425_000_000, provider: "NBU")])
     try await f.rates.save(FXOverride(base: .EUR, quote: .PLN, rateE8: 430_000_000, fromDay: "2026-03-01"))
     try await f.settings.set(.displayCurrency, "PLN")
+    // Debts (v10): a debt with a record whose leg is on the bank account.
+    let debts = SQLiteDebtRepository(database: f.database, calendar: F.calendar)
+    let debt = Debt(personName: "Person A", currency: .PLN)
+    try await debts.save(debt)
+    try await debts.save(
+      DebtRecord(debtID: debt.id, kind: .lent, day: "2026-03-03", amountMinor: 20_00),
+      leg: DebtLegInput(accountID: F.bank.id, amountMinor: 20_00))
   }
 
   @Test("R-SET-2: export writes all tables to one file; restore replaces all data with it")

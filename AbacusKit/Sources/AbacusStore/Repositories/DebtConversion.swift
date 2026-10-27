@@ -252,6 +252,10 @@ public enum DebtConversion {
             debt: destination, delta: toAmount ?? amount, day: day, note: note,
             fingerprint: fingerprintUsed ? nil : fingerprint, importBatchID: batch)
         }
+        // Explicit deletes: a migration runs with foreign keys off, so nothing cascades there.
+        for table in ["importFingerprints", "attachedRecords", "ruleApplications"] {
+          try db.execute(sql: #"DELETE FROM "\#(table)" WHERE "txnID" = ?"#, arguments: [id])
+        }
         try db.execute(sql: #"DELETE FROM "txns" WHERE "id" = ?"#, arguments: [id])
         result.replacedTxns += 1
       }

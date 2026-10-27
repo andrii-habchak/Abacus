@@ -1,7 +1,7 @@
 import AbacusFeatures
 import SwiftUI
 
-/// Menu commands: File › New Transaction (⌘N); View › the sections (⌘1…⌘9) and Refresh Rates
+/// Menu commands: File › New Transaction (⌘N); View › the sections (⌘1…⌘9, ⌘0) and Refresh Rates
 /// (⌘R); Help › Load Sample Data. Settings… (⌘,) comes with the Settings scene.
 struct AppCommands: Commands {
   /// Read on every use: moving the data folder replaces the session (R-SET-1).
@@ -17,8 +17,12 @@ struct AppCommands: Commands {
 
     CommandGroup(before: .sidebar) {
       ForEach(Array(AppModel.sectionsInOrder.enumerated()), id: \.element) { index, section in
-        Button(section.title) { app.section = section }
-          .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
+        if index < AppModel.shortcutKeys.count, let key = AppModel.shortcutKeys[index].first {
+          Button(section.title) { app.section = section }
+            .keyboardShortcut(KeyEquivalent(key))
+        } else {
+          Button(section.title) { app.section = section }
+        }
       }
       Divider()
       Button("Refresh Rates") {

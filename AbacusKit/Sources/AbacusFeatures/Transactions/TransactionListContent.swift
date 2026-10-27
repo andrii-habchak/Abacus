@@ -38,7 +38,7 @@ public struct TransactionListContent: Equatable, Sendable {
   }
 
   public struct Badge: Hashable, Sendable {
-    public enum Kind: Hashable, Sendable { case pending, refund, event }
+    public enum Kind: Hashable, Sendable { case pending, refund, event, debt }
     public var kind: Kind
     public var label: String
   }
@@ -200,7 +200,10 @@ public struct TransactionListContent: Equatable, Sendable {
 
     var badges: [Badge] = []
     if txn.isPendingAtBank { badges.append(Badge(kind: .pending, label: "Pending")) }
-    if txn.isRefund {
+    // R-DEBT-3: a debt record's leg; its isRefund only marks money in (no refund badge).
+    if txn.debtRecordID != nil {
+      badges.append(Badge(kind: .debt, label: "Debt"))
+    } else if txn.isRefund {
       badges.append(Badge(kind: .refund, label: txn.type == .income ? "Reversal" : "Refund"))
     }
     if let event = txn.eventID.flatMap({ reference.eventsByID[$0] }) {
@@ -225,6 +228,15 @@ public struct TransactionListContent: Equatable, Sendable {
     }
 
     switch txn.type {
+    case .transfer where txn.debtRecordID != nil && txn.toAccountID == nil:
+      // A debt leg without destination: money out, or in when `isRefund` (R-DEBT-3).
+      let inflow = txn.isOneSidedInflow
+      return Row(
+        id: txn.id, type: .transfer, icon: Icon(symbol: "⇄", colorHex: nil),
+        title: txn.payee.isEmpty ? "Debt" : txn.payee, badges: badges, subtitle: subtitle,
+        category: "Debt", account: inflow ? "Debt → \(accountName)" : "\(accountName) → Debt",
+        amount: format.string(minor: inflow ? txn.amountMinor : -txn.amountMinor, code: code, sign: .always),
+        tone: .transfer, amountDetail: nil, lines: lines)
     case .transfer:
       let destination = txn.toAccountID.flatMap { reference.accountsByID[$0] }
       var detail: String?

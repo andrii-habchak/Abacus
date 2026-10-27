@@ -52,29 +52,32 @@ public struct SQLiteDebtRepository: DebtRepository {
 
   public func save(_ record: DebtRecord, leg: DebtLegInput?) async throws {
     let calendar = self.calendar
-    try await database.write { db in
-      guard let debt = try Debt.find(record.debtID).fetchOne(db) else { throw RepositoryError.notFound }
-      guard record.amountMinor >= 0, Day(record.day) != nil else { throw DebtRepositoryError.invalidLeg }
-      let previous = try DebtRecord.find(record.id).fetchOne(db)
-      var record = record
-      if let kind = record.reportKind, record.categoryID == nil {
-        record.categoryID = try Self.debtsCategory(kind, db)
-      }
-      try DebtRecord.upsert { DebtRecord.Draft(record) }.execute(db)
+    try await database.write { db in try Self.save(record, leg: leg, calendar: calendar, db) }
+  }
 
-      let recordID = record.id
-      let existingLeg = try Txn.where { $0.debtRecordID.eq(recordID) }.fetchOne(db)
-      guard let leg, record.kind.movesMoney else {
-        if let existingLeg { try Txn.find(existingLeg.id).delete().execute(db) }
-        return
-      }
-      guard leg.amountMinor >= 0, try Account.find(leg.accountID).fetchCount(db) > 0 else {
-        throw DebtRepositoryError.invalidLeg
-      }
-      let txn = Self.leg(
-        for: record, debt: debt, input: leg, existing: existingLeg, previous: previous, calendar: calendar)
-      try Txn.upsert { Txn.Draft(txn) }.execute(db)
+  /// `save(_:leg:)` inside the caller's database transaction (sample data, tests).
+  public static func save(_ record: DebtRecord, leg: DebtLegInput?, calendar: Calendar, _ db: Database) throws {
+    guard let debt = try Debt.find(record.debtID).fetchOne(db) else { throw RepositoryError.notFound }
+    guard record.amountMinor >= 0, Day(record.day) != nil else { throw DebtRepositoryError.invalidLeg }
+    let previous = try DebtRecord.find(record.id).fetchOne(db)
+    var record = record
+    if let kind = record.reportKind, record.categoryID == nil {
+      record.categoryID = try Self.debtsCategory(kind, db)
     }
+    try DebtRecord.upsert { DebtRecord.Draft(record) }.execute(db)
+
+    let recordID = record.id
+    let existingLeg = try Txn.where { $0.debtRecordID.eq(recordID) }.fetchOne(db)
+    guard let leg, record.kind.movesMoney else {
+      if let existingLeg { try Txn.find(existingLeg.id).delete().execute(db) }
+      return
+    }
+    guard leg.amountMinor >= 0, try Account.find(leg.accountID).fetchCount(db) > 0 else {
+      throw DebtRepositoryError.invalidLeg
+    }
+    let txn = Self.leg(
+      for: record, debt: debt, input: leg, existing: existingLeg, previous: previous, calendar: calendar)
+    try Txn.upsert { Txn.Draft(txn) }.execute(db)
   }
 
   public func deleteRecord(_ id: DebtRecord.ID) async throws {

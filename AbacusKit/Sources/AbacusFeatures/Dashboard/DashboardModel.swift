@@ -31,6 +31,8 @@ public final class DashboardModel {
   public private(set) var income: DashboardDonut?
   /// Income vs expenses, twelve months ending at `month` (R-HOME-6).
   public private(set) var incomeVsExpenses: DashboardIncomeExpenses?
+  /// The Debts widget (R-DEBT-6); nil without a debts repository.
+  public private(set) var debts: DashboardDebts?
   public private(set) var ratesAsOf: Day?
   public private(set) var ratesFetchFailed = false
   /// The expenses donut slice picked last (cleared when the month changes).
@@ -54,6 +56,9 @@ public final class DashboardModel {
     var refundsReduceSpending: Bool
     /// The built-in "Uncategorised" colour (D47).
     var uncategorisedColor: String = Uncategorised.defaultColorHex
+    /// Debts (C14): `accounts` / `txns` above already include `DebtBook.reportLedger()`.
+    var debts: DebtBook = .empty
+    var hasDebts = false
   }
 
   struct PlanEntry {
@@ -89,6 +94,16 @@ public final class DashboardModel {
       var loaded = try await LoadedData(
         accounts: accounts, categories: categories, txns: txns, refundsReduceSpending: refunds == "true")
       loaded.uncategorisedColor = await dependencies.settings.uncategorisedColor()
+      if let repository = dependencies.debts {
+        // R-DEBT-4: flagged records without a leg reach the donuts, budget and income vs
+        // expenses as synthetic archived accounts/transactions (never in net worth or lists).
+        let book = try await repository.book()
+        let ledger = book.reportLedger(calendar: format.calendar)
+        loaded.accounts += ledger.accounts
+        loaded.txns += ledger.txns.filter { Day($0.txn.occurredAt, calendar: format.calendar) <= today }
+        loaded.debts = book
+        loaded.hasDebts = true
+      }
       // A layout that can't be read is the default one, never a failed dashboard.
       layout = DashboardLayout(stored: (try? await dependencies.settings.value(.dashboardLayout)) ?? nil)
       data = loaded
@@ -246,6 +261,7 @@ public final class DashboardModel {
   public var missingRates: DashboardMissingRates {
     var all = DashboardMissingRates()
     if let netWorth { all.merge(netWorth.missing) }
+    if let debts { all.merge(debts.missing) }
     if let budget { all.merge(budget.missing) }
     if let expenses { all.merge(expenses.missing) }
     if let income { all.merge(income.missing) }
@@ -261,7 +277,11 @@ public final class DashboardModel {
     guard let data, let rates else { return }
     netWorth = DashboardNetWorth.make(
       accounts: data.accounts, txns: data.txns, currency: displayCurrency, converter: rates.converter,
-      today: today, format: format)
+      today: today, format: format, debts: data.debts)
+    debts =
+      data.hasDebts
+      ? DashboardDebts.make(book: data.debts, currency: displayCurrency, converter: rates.converter, format: format)
+      : nil
     recomputeMonth()
   }
 

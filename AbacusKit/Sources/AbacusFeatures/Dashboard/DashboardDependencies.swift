@@ -21,14 +21,19 @@ public struct DashboardDependencies: Sendable {
   public var requestRates: @Sendable (Set<Day>) async -> Void
   public var today: @Sendable () -> Day
   public var format: DashboardFormat
+  /// Debts (R-DEBT-6/7, C14): the net-worth term, flagged records without a leg in the
+  /// reports, and the Debts widget. nil = no debts (previews).
+  public var debts: (any DebtRepository)?
 
   public init(
     accounts: any AccountRepository, categories: any CategoryRepository, txns: any TxnRepository,
     budget: any BudgetRepository, settings: any SettingsRepository,
     rates: @escaping @Sendable () async -> DashboardRates,
     requestRates: @escaping @Sendable (Set<Day>) async -> Void = { _ in },
-    today: @escaping @Sendable () -> Day = { Day(Date()) }, format: DashboardFormat = DashboardFormat()
+    today: @escaping @Sendable () -> Day = { Day(Date()) }, format: DashboardFormat = DashboardFormat(),
+    debts: (any DebtRepository)? = nil
   ) {
+    self.debts = debts
     self.accounts = accounts
     self.categories = categories
     self.txns = txns
@@ -58,7 +63,8 @@ extension DashboardDependencies {
         return DashboardRates(converter: snapshot.table, fetchFailed: snapshot.status.failure != nil)
       },
       requestRates: { days in await refresher.ensureRates(for: days) },
-      today: { Day(Date(), calendar: calendar) }, format: format)
+      today: { Day(Date(), calendar: calendar) }, format: format,
+      debts: SQLiteDebtRepository(database: database, calendar: calendar))
   }
 
   /// In-memory fakes over `store` (default: `PreviewData`), rates from `rates`, today =

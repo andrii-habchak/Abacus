@@ -44,6 +44,8 @@ extension SampleData {
       for rule in rules { rule }
     }
     try ColorFill.fillAll(db)
+    // R-DEBT: the sample debt account becomes a debt, plus synthetic debts with records (C14).
+    try DebtSample.seed(db)
   }
 
   /// The sample categories still to insert, and every sample id → the id used in the database.
