@@ -162,6 +162,11 @@ public final class AppModel {
     section = .transactions
   }
 
+  /// The dashboard budget card's edit button (R-HOME-2): opens Budget management.
+  public func openBudget() {
+    section = .budget
+  }
+
   /// ⌘1…⌘9: the sections in sidebar order.
   public static let sectionsInOrder: [AppSection] = AppSection.overview + AppSection.manage
 }

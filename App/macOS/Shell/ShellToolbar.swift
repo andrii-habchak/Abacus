@@ -4,7 +4,7 @@ import SwiftUI
 
 extension View {
   /// The main window's toolbar: "NBU rates · <day>" (R-FX-4), display-currency segmented
-  /// control (R-HOME-4) and "New transaction" (⌘N). Screens add their own items next to it.
+  /// control on the sections that use it (R-HOME-4) and "New transaction" (⌘N). Screens add their own items next to it.
   func shellToolbar() -> some View {
     modifier(ShellToolbar())
   }
@@ -20,8 +20,11 @@ struct ShellToolbar: ViewModifier {
       }
       .sharedBackgroundVisibility(.hidden)
 
-      ToolbarItem(placement: .automatic) {
-        DisplayCurrencyPicker()
+      // Only where amounts follow the display currency (R-HOME-4).
+      if (app.section ?? .dashboard).usesDisplayCurrency {
+        ToolbarItem(placement: .automatic) {
+          DisplayCurrencyPicker()
+        }
       }
 
       ToolbarItem(placement: .primaryAction) {
