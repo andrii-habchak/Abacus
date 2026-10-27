@@ -8,7 +8,7 @@ statements.
 Everything is stored on your Mac. There are no bank connections, no accounts to sign up for and
 no telemetry; the only network traffic is fetching exchange rates.
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard with all six widgets: net worth, monthly budget, monthly expenses, income vs expenses, monthly income and debts](docs/screenshots/dashboard.png)
 
 ## Features
 
@@ -52,7 +52,8 @@ The full functional description is in the [tech assignment](docs/REQUIREMENTS.md
 
 ## Screenshots
 
-All screenshots show the built-in sample data: made-up accounts, people and amounts.
+All screenshots show the built-in sample data (made-up accounts, people and amounts) with EUR
+as the display currency.
 
 <table>
   <tr>

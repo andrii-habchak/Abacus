@@ -66,7 +66,7 @@ struct RootView: View {
         await StabilityProbe.runIfRequested(session: session)
       #endif
       #if DEBUG
-        await WindowSnapshot.runIfRequested()
+        await WindowSnapshot.runIfRequested(session: session)
       #endif
     }
   }
