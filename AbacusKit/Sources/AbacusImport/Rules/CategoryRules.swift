@@ -22,7 +22,7 @@ public struct RuleSubject: Hashable, Sendable {
 }
 
 /// Applies rules (R-IMP-8, R-EDIT-3, D44): description *contains* / *exactly matches* (folded
-/// for case, diacritics and whitespace), optionally AND amount bigger / smaller than, optionally
+/// for case, diacritics and whitespace) and/or amount bigger / smaller than, optionally
 /// only on one account → assign a category or turn into a transfer. Rules are tried in the given
 /// order (`RuleRepository.rules()` returns them in evaluation order); the first one that matches
 /// and can act on the transaction wins.
@@ -35,21 +35,26 @@ public struct RuleMatcher: Sendable {
   /// `categories` lets the matcher skip category rules whose category is missing, archived or of
   /// the wrong kind; `accounts` (when given) skips transfer rules to a missing or archived account.
   public init(rules: [CategoryRule], categories: [AbacusDomain.Category], accounts: [Account]? = nil) {
-    self.rules = rules.filter { $0.isEnabled && !RulePattern.normalized($0.pattern).isEmpty }
+    self.rules = rules.filter { $0.isEnabled && $0.hasCondition }
     self.kinds = Dictionary(
       categories.filter { !$0.isArchived }.map { ($0.id, $0.kind) }, uniquingKeysWith: { a, _ in a })
     self.activeAccounts = accounts.map { Set($0.filter { !$0.isArchived }.map(\.id)) }
   }
 
-  /// Whether the rule's conditions (text, amount, account) hold, whatever its action.
+  /// Whether the rule's conditions (text, amount, account) hold, whatever its action. A rule
+  /// without a description condition (empty pattern) is decided by its amount condition; a rule
+  /// with neither never matches (TA v1.6).
   public static func conditionsHold(_ rule: CategoryRule, for subject: RuleSubject) -> Bool {
+    guard rule.hasCondition else { return false }
     if let scope = rule.accountID, scope != subject.accountID { return false }
-    let text = RulePattern.normalized(subject.description)
     let pattern = RulePattern.normalized(rule.pattern)
-    guard !text.isEmpty, !pattern.isEmpty else { return false }
-    switch rule.matchKind {
-    case .contains: guard text.contains(pattern) else { return false }
-    case .exactly: guard text == pattern else { return false }
+    if !pattern.isEmpty {
+      let text = RulePattern.normalized(subject.description)
+      guard !text.isEmpty else { return false }
+      switch rule.matchKind {
+      case .contains: guard text.contains(pattern) else { return false }
+      case .exactly: guard text == pattern else { return false }
+      }
     }
     if let comparison = rule.amountComparison, let limit = rule.amountMinor {
       guard let amount = subject.amountMinor.map(abs) else { return false }
@@ -134,5 +139,16 @@ public enum RulePattern {
     }
     let pattern = run.joined(separator: " ")
     return pattern.count >= 3 ? pattern : ""
+  }
+}
+
+extension CategoryRule {
+  /// A short name for the rule in messages: its text, or its amount condition for an
+  /// amount-only rule ("amount > 100.00").
+  public var label: String {
+    if hasDescriptionCondition { return pattern }
+    guard let comparison = amountComparison, let amount = amountMinor else { return "" }
+    let sign = comparison == .biggerThan ? ">" : "<"
+    return "amount \(sign) \(amount / 100).\(String(format: "%02d", Int(amount % 100)))"
   }
 }

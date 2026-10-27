@@ -463,7 +463,7 @@ private struct Resolver {
       row.type = .transfer
       row.counterAccount = .existing(accountID)
       row.counterAmountMinor = otherAmount
-      transferRuleDetail = "Transfer by rule “\(rule.pattern)”"
+      transferRuleDetail = "Transfer by rule “\(rule.label)”"
     } else if shape.type != .transfer {
       let (category, from, rule) = resolveCategory(for: source, kind: shape.type == .income ? .income : .expense, account: account, explicit: nil)
       shape.category = category
@@ -556,7 +556,7 @@ private struct Resolver {
     if let rule = matcher.match(description: source.payee, accountID: accountID, kind: kind, amountMinor: abs(source.amountMinor)),
       let categoryID = rule.categoryID
     {
-      return (.existing(categoryID), .rule(rule.id, pattern: rule.pattern), rule.id)
+      return (.existing(categoryID), .rule(rule.id, pattern: rule.label), rule.id)
     }
     return (nil, .none, nil)
   }

@@ -123,6 +123,17 @@ public protocol RuleRepository: Sendable {
   /// are kept. Throws `notFound` (and writes nothing) when one of them no longer exists.
   /// `rule == nil` only replaces the transactions (undo).
   func save(_ rule: CategoryRule?, updating txns: [Txn]) async throws
+  /// "Update existing transactions" (R-MGMT-6, TA v1.6): saves the rule, writes each record's
+  /// `after` state onto its transaction and keeps the records for rollback — one database
+  /// transaction. Throws `notFound` (and writes nothing) when a transaction no longer exists.
+  func apply(_ rule: CategoryRule, records: [RuleApplication]) async throws
+  /// The rule's recorded applications, newest first.
+  func applications(of ruleID: CategoryRule.ID) async throws -> [RuleApplication]
+  /// Rolls back every recorded application of the rule, newest first: a transaction whose
+  /// rule-changed fields still hold the record's `after` gets `before` back (other edits stay);
+  /// one edited since — or whose old category/account no longer exists — is left alone. The
+  /// records are deleted. One database transaction.
+  func rollBack(_ ruleID: CategoryRule.ID) async throws -> RuleRollback
   func delete(_ id: CategoryRule.ID) async throws
   func recordHit(_ id: CategoryRule.ID) async throws
 }

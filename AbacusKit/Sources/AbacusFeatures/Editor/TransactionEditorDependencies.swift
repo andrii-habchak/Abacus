@@ -118,6 +118,13 @@ public actor EditorPreviewRules: RuleRepository {
     if let rule { try await save(rule) }
   }
 
+  /// Rules only (no transactions here); nothing to roll back.
+  public func apply(_ rule: CategoryRule, records: [RuleApplication]) async throws { try await save(rule) }
+
+  public func applications(of ruleID: CategoryRule.ID) async throws -> [RuleApplication] { [] }
+
+  public func rollBack(_ ruleID: CategoryRule.ID) async throws -> RuleRollback { RuleRollback() }
+
   public func delete(_ id: CategoryRule.ID) async throws { list.removeAll { $0.id == id } }
 
   public func recordHit(_ id: CategoryRule.ID) async throws {

@@ -464,13 +464,16 @@ public enum RuleAction: String, CaseIterable, Codable, Hashable, Sendable, Query
   case transfer
 }
 
-/// A rule (R-IMP-8, D44): a description condition (`matchKind` + `pattern`), an optional amount
-/// condition (`amountComparison` + `amountMinor`) and an optional account (`accountID`) → an
-/// action (`category` with `categoryID`, or `transfer` with `transferAccountID`). The table
-/// keeps its name from the category-only rules (schema v6 rebuilt it).
+/// A rule (R-IMP-8, D44): a description condition (`matchKind` + `pattern`) and/or an amount
+/// condition (`amountComparison` + `amountMinor`) — at least one of the two (TA v1.6) — and an
+/// optional account (`accountID`) → an action (`category` with `categoryID`, or `transfer` with
+/// `transferAccountID`). An empty `pattern` means "no description condition" (C9: the column
+/// stays NOT NULL, no table rebuild). The table keeps its name from the category-only rules
+/// (schema v6 rebuilt it).
 @Table("categoryRules")
 public struct CategoryRule: Hashable, Identifiable, Sendable {
   public let id: UUID
+  /// The description text; empty = no description condition (an amount-only rule).
   public var pattern: String
   /// Only on this account; nil = any account.
   public var accountID: Account.ID?
@@ -508,6 +511,123 @@ public struct CategoryRule: Hashable, Identifiable, Sendable {
     self.hitCount = hitCount
     self.position = position
     self.isEnabled = isEnabled
+  }
+}
+
+extension CategoryRule {
+  /// The rule has a description condition (a non-blank `pattern`).
+  public var hasDescriptionCondition: Bool { !pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+  /// The rule has an amount condition.
+  public var hasAmountCondition: Bool { amountComparison != nil && amountMinor != nil }
+
+  /// A rule needs a description condition, an amount condition or both (TA v1.6); a rule with
+  /// neither never matches.
+  public var hasCondition: Bool { hasDescriptionCondition || hasAmountCondition }
+}
+
+/// The fields a rule changes on a transaction (category, or the transfer conversion), as they
+/// were before or after one "Update existing transactions" (R-IMP-8 rollback, C9).
+public struct RuleTxnState: Codable, Hashable, Sendable {
+  public var type: TxnType
+  public var accountID: Account.ID
+  public var amountMinor: Int64
+  public var categoryID: Category.ID?
+  public var toAccountID: Account.ID?
+  public var toAmountMinor: Int64?
+  public var isRefund: Bool
+  public var originalAmountMinor: Int64?
+  public var originalCurrencyCode: String?
+
+  public init(_ txn: Txn) {
+    type = txn.type
+    accountID = txn.accountID
+    amountMinor = txn.amountMinor
+    categoryID = txn.categoryID
+    toAccountID = txn.toAccountID
+    toAmountMinor = txn.toAmountMinor
+    isRefund = txn.isRefund
+    originalAmountMinor = txn.originalAmountMinor
+    originalCurrencyCode = txn.originalCurrencyCode
+  }
+
+  /// `txn` with these fields; everything else (description, note, date, event…) stays.
+  public func applied(to txn: Txn) -> Txn {
+    var txn = txn
+    txn.type = type
+    txn.accountID = accountID
+    txn.amountMinor = amountMinor
+    txn.categoryID = categoryID
+    txn.toAccountID = toAccountID
+    txn.toAmountMinor = toAmountMinor
+    txn.isRefund = isRefund
+    txn.originalAmountMinor = originalAmountMinor
+    txn.originalCurrencyCode = originalCurrencyCode
+    return txn
+  }
+}
+
+/// One transaction changed by applying a rule to existing transactions (R-IMP-8, R-MGMT-6,
+/// TA v1.6 rollback): the rule-changed fields before and after. Rows of one "Save & apply" share
+/// `batchID`. Rolling the rule back restores `before` on transactions that still hold `after`
+/// and deletes the rows. Deleting the rule or the transaction deletes its rows (CASCADE).
+@Table("ruleApplications")
+public struct RuleApplication: Hashable, Identifiable, Sendable {
+  public let id: UUID
+  public var ruleID: CategoryRule.ID
+  public var batchID: UUID
+  public var txnID: Txn.ID
+  public var appliedAt: Date
+  @Column(as: RuleTxnState.JSONRepresentation.self)
+  public var before: RuleTxnState
+  @Column(as: RuleTxnState.JSONRepresentation.self)
+  public var after: RuleTxnState
+
+  public init(
+    id: UUID = UUID(), ruleID: CategoryRule.ID, batchID: UUID, txnID: Txn.ID, appliedAt: Date = Date(),
+    before: RuleTxnState, after: RuleTxnState
+  ) {
+    self.id = id
+    self.ruleID = ruleID
+    self.batchID = batchID
+    self.txnID = txnID
+    self.appliedAt = appliedAt
+    self.before = before
+    self.after = after
+  }
+
+  /// One record per changed transaction: `originals` as they are now, `changes` as the rule
+  /// leaves them (matched by id; changes without an original are skipped).
+  public static func records(
+    ruleID: CategoryRule.ID, originals: [Txn], changes: [Txn], batchID: UUID = UUID(), at date: Date = Date()
+  ) -> [RuleApplication] {
+    let byID = Dictionary(originals.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    return changes.compactMap { change in
+      byID[change.id].map {
+        RuleApplication(
+          ruleID: ruleID, batchID: batchID, txnID: change.id, appliedAt: date, before: RuleTxnState($0),
+          after: RuleTxnState(change))
+      }
+    }
+  }
+
+  /// The transaction restored, or nil when it was edited since (its rule-changed fields no
+  /// longer hold what the rule set).
+  public func restoring(_ current: Txn) -> Txn? {
+    guard current.id == txnID, RuleTxnState(current) == after else { return nil }
+    return before.applied(to: current)
+  }
+}
+
+/// What "Roll back" did: transactions restored, and those left alone because they were edited
+/// since the rule changed them (or what they referred to is gone).
+public struct RuleRollback: Hashable, Sendable {
+  public var restored: Int
+  public var skipped: Int
+
+  public init(restored: Int = 0, skipped: Int = 0) {
+    self.restored = restored
+    self.skipped = skipped
   }
 }
 

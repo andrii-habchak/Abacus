@@ -423,9 +423,55 @@ struct ManageRulesTests {
     #expect(edited.categoryID == PreviewData.id(205))
   }
 
-  @Test("R-MGMT-6: Save & apply shows how many transactions change, applies after confirmation and can be undone")
-  func applyToExisting() async throws {
+  /// Sample data plus three grocery-store purchases filed elsewhere (the owner's report: a new
+  /// rule "contains biedronka → Groceries", "3 transactions will change").
+  static func storeWithMisfiledPurchases() -> ManagePreviewStore {
+    let extra = [(931, 203, "BIEDRONKA 1234 WARSZAWA"), (932, 213, "Biedronka 77"), (933, 209, "biedronka online")].map {
+      Txn(
+        id: PreviewData.id($0.0), type: .expense, occurredAt: PreviewData.today.date(calendar: .current),
+        accountID: PreviewData.pkoPersonal.id, amountMinor: 25_00, categoryID: PreviewData.id($0.1), payee: $0.2)
+    }
+    return ManagePreviewStore(
+      accounts: PreviewData.accounts, categories: PreviewData.categories, txns: PreviewData.txns + extra,
+      rules: ManageSample.rules)
+  }
+
+  @Test("C9 bug: Save & apply applies although the alert clears its binding before the button's task runs")
+  func saveAndApplyThroughTheAlert() async throws {
+    let store = Self.storeWithMisfiledPurchases()
+    let model = RulesModel(dependencies: ManageFixture.dependencies(store))
+    await model.load()
+    var refreshed = 0
+    model.onTransactionsChange = { refreshed += 1 }
+    model.newRule()
+    model.editor?.pattern = "biedronka"
+    model.editor?.categoryID = PreviewData.id(202)
+    model.editor?.updateExisting = true
+    await model.loadEditorTransactions()
+    #expect(model.editorChangesText == "3 transactions will change")
+    await model.saveEditor()
+    // The sheet's alert captured the confirmation when it was shown; tapping "Save & apply"
+    // clears the alert's binding (→ cancelConfirmation) before the button's Task runs.
+    let pending = try #require(model.confirmation)
+    #expect(pending.title == "Update 3 transactions?")
+    model.cancelConfirmation()
+    #expect(model.confirmation == nil)
+    await model.confirmApply(pending)
+
+    #expect(model.editor == nil)
+    for n in [931, 932, 933] {
+      #expect(try await store.txnRepository.transaction(PreviewData.id(n))?.txn.categoryID == PreviewData.id(202))
+    }
+    #expect(model.notice == RuleApplyNotice(message: "3 transactions updated by the rule “biedronka”.", rollbackRuleID: pending.rule.id))
+    #expect(refreshed == 1)
+    #expect(model.rules.contains { $0.id == pending.rule.id })
+  }
+
+  @Test("R-MGMT-6, TA v1.6: Save & apply records the change; Roll back in the editor restores it and keeps the rule")
+  func applyThenRollBack() async throws {
     let model = await model()
+    var refreshed = 0
+    model.onTransactionsChange = { refreshed += 1 }
     model.newRule()
     model.editor?.pattern = "auchan"
     model.editor?.action = .transfer
@@ -436,27 +482,147 @@ struct ManageRulesTests {
     await model.saveEditor()
     let confirmation = try #require(model.confirmation)
     #expect(confirmation.title == "Update 1 transaction?")
+    #expect(confirmation.message.hasSuffix("You can roll this back later in the rule's editor."))
     #expect(model.editor != nil)
     // Nothing is written before the confirmation.
     #expect(try await store.txnRepository.transaction(PreviewData.id(416))?.txn.type == .expense)
 
-    await model.confirmApply()
-    #expect(model.editor == nil)
+    await model.confirmApply(confirmation)
     let auchan = try #require(try await store.txnRepository.transaction(PreviewData.id(416))?.txn)
     #expect(auchan.type == .transfer)
     #expect(auchan.accountID == PreviewData.pkoPersonal.id)
     #expect(auchan.toAccountID == PreviewData.cashPLN.id)
     #expect(auchan.toAmountMinor == 142_30)
     #expect(auchan.categoryID == nil)
-    #expect(model.rules.last?.pattern == "auchan")
-    #expect(model.lastApply?.message == "1 transaction updated by the rule.")
+    let rule = try #require(model.rules.last)
+    #expect(rule.pattern == "auchan")
 
-    await model.undoLastApply()
+    // The editor of the applied rule offers Roll back.
+    model.edit(rule.id)
+    await model.loadEditorApplications()
+    #expect(model.editorRollbackText?.hasPrefix("Applied to 1 transaction (last on ") == true)
+    model.requestRollback()
+    let ask = try #require(model.rollbackConfirmation)
+    #expect(ask.title == "Roll back 1 transaction?")
+    model.cancelRollback()  // the alert's binding, before the button's Task
+    await model.rollBack(ask.ruleID)
+    #expect(model.editor == nil)
     let restored = try #require(try await store.txnRepository.transaction(PreviewData.id(416))?.txn)
     #expect(restored.type == .expense)
     #expect(restored.categoryID == PreviewData.id(202))
-    #expect(!model.rules.contains { $0.pattern == "auchan" })
-    #expect(model.lastApply == nil)
+    #expect(restored.toAccountID == nil)
+    #expect(model.rules.contains { $0.id == rule.id })
+    #expect(model.notice?.message == "1 transaction restored.")
+    #expect(refreshed == 2)
+    // Nothing left to roll back.
+    model.edit(rule.id)
+    await model.loadEditorApplications()
+    #expect(model.editorRollbackText == nil)
+  }
+
+  @Test("TA v1.6: roll back leaves transactions edited since the rule changed them")
+  func rollBackSkipsEdited() async throws {
+    let store = Self.storeWithMisfiledPurchases()
+    let model = RulesModel(dependencies: ManageFixture.dependencies(store))
+    await model.load()
+    model.newRule()
+    model.editor?.pattern = "biedronka"
+    model.editor?.categoryID = PreviewData.id(202)
+    model.editor?.updateExisting = true
+    await model.loadEditorTransactions()
+    await model.saveEditor()
+    let pending = try #require(model.confirmation)
+    await model.confirmApply(pending)
+    var edited = try #require(try await store.txnRepository.transaction(PreviewData.id(932))?.txn)
+    edited.categoryID = PreviewData.id(209)
+    try await store.txnRepository.save(edited, lines: [])
+
+    // The banner's Roll back.
+    await model.rollBack(try #require(model.notice?.rollbackRuleID))
+    #expect(model.notice?.message == "2 transactions restored. 1 transaction edited since was left as it is.")
+    #expect(try await store.txnRepository.transaction(PreviewData.id(931))?.txn.categoryID == PreviewData.id(203))
+    #expect(try await store.txnRepository.transaction(PreviewData.id(932))?.txn.categoryID == PreviewData.id(209))
+    #expect(try await store.txnRepository.transaction(PreviewData.id(933))?.txn.categoryID == PreviewData.id(209))
+  }
+
+  @Test("TA v1.6: an amount-only rule — the first condition switches to amount, the description is optional")
+  func amountOnlyRule() async throws {
+    let model = await model()
+    model.newRule()
+    #expect(model.editor?.firstCondition == .descriptionContains)
+    #expect(model.editor?.firstConditionChoices.count == 4)
+    model.editor?.firstCondition = .amountBiggerThan
+    #expect(model.editor?.hasDescriptionCondition == false)
+    #expect(model.editor?.hasAmountCondition == true)
+    #expect(model.editor?.canRemoveAmount == false)
+    model.editor?.categoryID = PreviewData.id(205)
+    #expect(model.editorValidation == "Enter the amount.")
+    model.editor?.amountText = "3000"
+    #expect(model.editorValidation == nil)
+    model.editor?.updateExisting = true
+    await model.loadEditorTransactions()
+    // The only expense above 3000.00 ("Rent October") is in Rent already.
+    #expect(model.editorChangesText == "No existing transaction would change")
+    await model.saveEditor()
+    let saved = try #require(model.rules.last)
+    #expect(saved.pattern == "")
+    #expect(saved.amountComparison == .biggerThan && saved.amountMinor == 3_000_00)
+    #expect(model.rows.last?.summary == "Amount bigger than 3000.00 → Housing › Rent")
+    #expect(model.rows.last?.pattern == "amount > 3000.00")
+    model.probe = "Anything"
+    model.probeAmountText = "3500"
+    #expect(model.match?.id == saved.id)
+
+    // Adding a description condition back puts it first; either can be removed, not both.
+    model.edit(saved.id)
+    #expect(model.editor?.hasDescriptionCondition == false)
+    #expect(model.editor?.firstCondition == .amountBiggerThan)
+    model.addDescriptionCondition()
+    #expect(model.editor?.firstConditionChoices == [.descriptionContains, .descriptionExactly])
+    #expect(model.editorValidation == "Enter the description text.")
+    model.editor?.pattern = "rent"
+    #expect(model.editor?.canRemoveDescription == true && model.editor?.canRemoveAmount == true)
+    model.removeAmountCondition()
+    #expect(model.editor?.canRemoveDescription == false)
+    model.removeDescriptionCondition()
+    #expect(model.editor?.hasDescriptionCondition == true)
+    await model.saveEditor()
+    let edited = try #require(model.rules.first { $0.id == saved.id })
+    #expect(edited.pattern == "rent" && !edited.hasAmountCondition)
+  }
+
+  @Test("R-MGMT-11: the page search and the category filter narrow the list; dragging is off meanwhile")
+  func searchAndCategoryFilter() async throws {
+    let model = await model()
+    model.searchText = "FUEL"
+    #expect(model.rows.map(\.pattern) == ["orlen"])
+    #expect(model.isFiltered)
+    model.searchText = "bigger than 100"
+    #expect(model.rows.map(\.pattern) == ["zalando"])
+    model.searchText = ""
+    // Food covers Groceries and Eating out.
+    model.categoryFilter = PreviewData.id(201)
+    #expect(model.rows.map(\.pattern) == ["biedronka", "lidl", "pizzeria napoli"])
+    model.categoryFilter = PreviewData.id(202)
+    #expect(model.rows.map(\.pattern) == ["biedronka", "lidl"])
+    model.searchText = "nothing like this"
+    #expect(model.rows.isEmpty)
+    #expect(model.emptyText == "No rules match the search or the category.")
+    await model.move(fromOffsets: [1], toOffset: 0)
+    #expect(model.rules.first?.pattern == "biedronka")
+    model.searchText = ""
+    model.categoryFilter = nil
+    #expect(!model.isFiltered)
+    #expect(model.rows.count == model.rules.count)
+  }
+
+  @Test("TA v1.6: category pickers list categories A–Z, subcategories A–Z under their parent")
+  func categoryPickersAZ() async {
+    let model = await model()
+    let names = model.categoryFilterOptions.map(\.name)
+    #expect(Array(names.prefix(8)) == ["Bills", "Mobile", "Clothing", "Fees", "Food", "Eating out", "Groceries", "Health"])
+    #expect(Array(names.suffix(3)) == ["Cashback", "Refunds", "Salary"])
+    #expect(model.categoryOptions.map(\.name) == names)
   }
 
   @Test("R-MGMT-6: a category rule applied to existing transactions leaves transfers alone")

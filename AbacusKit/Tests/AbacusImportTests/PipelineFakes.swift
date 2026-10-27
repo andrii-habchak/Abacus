@@ -195,6 +195,9 @@ struct FakeRules: RuleRepository {
   func save(_ rule: CategoryRule?, updating txns: [Txn]) async throws {
     if let rule { try await save(rule) }
   }
+  func apply(_ rule: CategoryRule, records: [RuleApplication]) async throws { try await save(rule) }
+  func applications(of ruleID: CategoryRule.ID) async throws -> [RuleApplication] { [] }
+  func rollBack(_ ruleID: CategoryRule.ID) async throws -> RuleRollback { RuleRollback() }
   func delete(_ id: CategoryRule.ID) async throws {}
   func recordHit(_ id: CategoryRule.ID) async throws {}
 }
