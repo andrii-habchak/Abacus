@@ -85,8 +85,8 @@ struct DefaultCategoriesTests {
     #expect(s.sampleDataMessage?.hasPrefix("Sample data loaded") == true)
 
     let list = try await categories(database)
-    // Only "Clothing" is new; nothing is duplicated.
-    #expect(list.count == defaults.count + 1)
+    // Only "Clothing" and the sample debts' "Debts" category (C14) are new; nothing is duplicated.
+    #expect(list.count == defaults.count + 2)
     #expect(paths(list).count == list.count)
     #expect(list.contains { $0.name == "Clothing" && $0.parentID == nil })
 

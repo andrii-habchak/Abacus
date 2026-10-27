@@ -10,7 +10,8 @@ import Testing
 @Suite("Accounts · groups (v11)")
 struct AccountGroupsTests {
   typealias F = StoreFixture
-  static let v9 = "v9: category createdAt"
+  /// The last migration before v11 ("v10: debts" runs first; the Txn struct needs its column).
+  static let v9 = "v10: debts"
 
   /// Fixed rates for the net worth comparison: 1 EUR = 4 PLN.
   struct FixedRates: CurrencyConverter {

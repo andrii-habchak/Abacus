@@ -64,9 +64,14 @@ public struct SQLiteTxnRepository: TxnRepository {
     try await database.write { db in try Self.save(txn, lines: lines, db) }
   }
 
-  /// Deletes the transaction; attached records and fingerprints go with it (R-TX-6).
+  /// Deletes the transaction; attached records and fingerprints go with it (R-TX-6). A debt
+  /// record's leg takes its record with it (R-DEBT-3), so no record is left without its money.
   public func delete(_ id: Txn.ID) async throws {
     try await database.write { db in
+      if let recordID = try Txn.find(id).fetchOne(db)?.debtRecordID {
+        try DebtRecord.find(recordID).delete().execute(db)
+        return
+      }
       try Txn.find(id).delete().execute(db)
       guard db.changesCount > 0 else { throw RepositoryError.notFound }
     }

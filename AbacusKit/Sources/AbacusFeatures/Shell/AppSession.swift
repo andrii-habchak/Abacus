@@ -21,6 +21,8 @@ public final class AppSession {
   public let budget: BudgetEditorModel
   public let events: EventsModel
   public let rules: RulesModel
+  /// Debts tab (C14, R-DEBT-5).
+  public let debts: DebtsModel
   /// Import wizard (WP B6); nil in previews without a database.
   public let importWizard: ImportWizardModel?
   /// What the transaction editor (WP B4) reads and writes; its converter follows the rates.
@@ -42,7 +44,7 @@ public final class AppSession {
   init(
     app: AppModel, dashboard: DashboardModel, transactions: TransactionsViewModel,
     editorDependencies: TransactionEditorDependencies, manage: ManageDependencies,
-    database: (any DatabaseWriter)?, refresher: RateRefresher?
+    debts: DebtsDependencies, database: (any DatabaseWriter)?, refresher: RateRefresher?
   ) {
     self.app = app
     self.dashboard = dashboard
@@ -52,6 +54,7 @@ public final class AppSession {
     budget = BudgetEditorModel(dependencies: manage)
     events = EventsModel(dependencies: manage)
     rules = RulesModel(dependencies: manage)
+    self.debts = DebtsModel(dependencies: debts)
     importWizard = database.map { ImportWizardModel(dependencies: .live(database: $0)) }
     self.editorDependencies = editorDependencies
     self.database = database
@@ -79,6 +82,21 @@ public final class AppSession {
       await self.transactions.reload()
       await self.dashboard.load()
       await self.reloadManageScreens()
+    }
+    // A debt record saved or deleted: its leg changed balances, the list and the dashboard.
+    self.debts.onDataChange = { [weak self] in
+      guard let self else { return }
+      await self.transactions.reload()
+      await self.dashboard.load()
+      await self.reloadManageScreens()
+    }
+    // A debt leg opened from the transaction list shows its debt (R-DEBT-3).
+    app.openDebtLeg = { [weak self] id in
+      guard let self, let recordID = self.transactions.rows.first(where: { $0.txn.id == id })?.txn.debtRecordID
+      else { return false }
+      self.app.section = .debts
+      Task { await self.debts.show(recordID: recordID) }
+      return true
     }
     app.onRefundsChange = { [weak self] on in
       guard let self else { return }
@@ -136,7 +154,8 @@ public final class AppSession {
       app: AppModel(environment: environment),
       dashboard: DashboardModel(dependencies: .live(database: database, refresher: refresher)),
       transactions: transactions, editorDependencies: editor,
-      manage: .live(database: database, refresher: refresher), database: database, refresher: refresher)
+      manage: .live(database: database, refresher: refresher),
+      debts: .live(database: database, refresher: refresher), database: database, refresher: refresher)
     relay.session = session
     session.rebuild = { moved in
       live(
@@ -168,7 +187,7 @@ public final class AppSession {
       app: AppModel(environment: .preview(offline: offline)),
       dashboard: DashboardModel(dependencies: .preview(fetchFailed: offline)),
       transactions: .preview(displayCurrency: .UAH), editorDependencies: .preview(), manage: .preview(),
-      database: nil, refresher: nil)
+      debts: .preview(), database: nil, refresher: nil)
   }
 
   // MARK: Lifecycle
@@ -226,6 +245,7 @@ public final class AppSession {
     if events.phase == .loaded { await events.refreshRates() }
     if accounts.phase == .loaded { await accounts.refreshRates() }
     if budget.phase == .loaded { await budget.refreshRates() }
+    if debts.phase == .loaded { await debts.refreshRates() }
     await app.rates.load()
   }
 
@@ -269,6 +289,7 @@ public final class AppSession {
     if all { await budget.load() } else if budget.phase == .loaded { await budget.reappeared() }
     if all || events.phase == .loaded { await events.load() }
     if all || rules.phase == .loaded { await rules.load() }
+    if all || debts.phase == .loaded { await debts.load() }
   }
 
   /// Switching to a section re-reads it if it was shown before, so edits made on other screens
@@ -283,6 +304,7 @@ public final class AppSession {
     case .events: if events.phase == .loaded { await events.load() }
     case .rules: if rules.phase == .loaded { await rules.load() }
     case .rates: await app.rates.load()
+    case .debts: await debts.load()
     case .importFiles: break
     }
   }

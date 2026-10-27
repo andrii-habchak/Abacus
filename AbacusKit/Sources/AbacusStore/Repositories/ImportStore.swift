@@ -7,10 +7,14 @@ import SQLiteData
 public struct SQLiteImportStore: ImportStore {
   public let database: any DatabaseWriter
   public let calendar: Calendar
+  /// Converts what lands on debt-kind accounts into debt records after each commit (R-DEBT-8).
+  /// Off only in tests that need the pre-v10 shape (the real-data migration check).
+  public var convertsDebtAccounts: Bool
 
-  public init(database: any DatabaseWriter, calendar: Calendar = .current) {
+  public init(database: any DatabaseWriter, calendar: Calendar = .current, convertsDebtAccounts: Bool = true) {
     self.database = database
     self.calendar = calendar
+    self.convertsDebtAccounts = convertsDebtAccounts
   }
 
   var bounds: DayBounds { DayBounds(calendar: calendar) }
@@ -24,6 +28,11 @@ public struct SQLiteImportStore: ImportStore {
         let keys = Array(chunk)
         for fingerprint in try ImportFingerprint.where({ $0.id.in(keys) }).fetchAll(db) {
           found[fingerprint.id] = fingerprint.txnID
+        }
+        // A converted transaction that became a debt record without a leg keeps its
+        // fingerprint on the record (R-DEBT-8); the record's id stands in for the transaction.
+        for record in try DebtRecord.where({ $0.fingerprint.in(keys.map { Optional($0) }) }).fetchAll(db) {
+          if let fingerprint = record.fingerprint, found[fingerprint] == nil { found[fingerprint] = record.id }
         }
       }
       return found
@@ -80,6 +89,7 @@ public struct SQLiteImportStore: ImportStore {
   /// fingerprints are tagged with the batch. Mappings replace the previous mapping of the same
   /// (source, kind, external key); rules are upserted.
   public func commit(_ commit: ImportCommit) async throws {
+    let convertsDebtAccounts = self.convertsDebtAccounts
     try await database.write { db in
       let batchID = commit.batch.id
       try ImportBatch.insert { commit.batch }.execute(db)
@@ -147,6 +157,8 @@ public struct SQLiteImportStore: ImportStore {
       for rule in commit.rules {
         try CategoryRule.upsert { CategoryRule.Draft(rule) }.execute(db)
       }
+      // R-DEBT-8: what landed on debt-kind accounts (Saldo LIABILITIES) becomes debt records.
+      if convertsDebtAccounts { try DebtConversion.convertDebtAccounts(db, calendar: calendar) }
     }
   }
 
@@ -157,15 +169,24 @@ public struct SQLiteImportStore: ImportStore {
     }
   }
 
-  /// R-IMP-6: deletes the batch's transactions (their attached records and fingerprints go with
-  /// them) and the fingerprints it added to existing transactions (links, settled upgrades), then
+  /// R-IMP-6: deletes the batch's debt records and transactions (their legs, attached records and
+  /// fingerprints go with them) and the fingerprints it added to existing transactions (links, settled upgrades), then
   /// the accounts, categories and events the batch created that nothing else uses any more, and
   /// marks the batch undone. Field changes of upgraded transactions stay.
   public func undo(_ batchID: ImportBatch.ID) async throws {
     try await database.write { db in
       guard let batch = try ImportBatch.find(batchID).fetchOne(db) else { throw RepositoryError.notFound }
       guard !batch.isUndone else { return }
+      // Debt records converted from the batch's rows go first (their legs with them), then the
+      // debts the batch created that have no records left.
+      try DebtRecord.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
       try Txn.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
+      for debt in try Debt.where({ $0.importBatchID.eq(batchID) }).fetchAll(db) {
+        let debtID = debt.id
+        if try DebtRecord.where({ $0.debtID.eq(debtID) }).fetchCount(db) == 0 {
+          try Debt.find(debtID).delete().execute(db)
+        }
+      }
       try ImportFingerprint.where { $0.batchID.eq(batchID) }.delete().execute(db)
 
       let events = try Event.where { $0.importBatchID.eq(batchID) }.fetchAll(db)

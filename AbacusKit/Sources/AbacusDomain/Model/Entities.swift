@@ -179,6 +179,10 @@ public enum TxnSource: String, CaseIterable, Codable, Hashable, Sendable, QueryB
 /// comes from `type` and `isRefund`. A transfer moves `amountMinor` out of `accountID` and
 /// `toAmountMinor` (in the destination currency) into `toAccountID`. Attached records add to
 /// the effect on `accountID` (R-TX-6).
+///
+/// A debt record's leg (`debtRecordID` set, R-DEBT-3) that is not counted as an expense or
+/// income is a transfer without a destination (`toAccountID == nil`): money out of `accountID`,
+/// or into it when `isRefund` is set.
 @Table("txns")
 public struct Txn: Hashable, Identifiable, Sendable {
   public let id: UUID
@@ -208,6 +212,9 @@ public struct Txn: Hashable, Identifiable, Sendable {
   /// `YYYY-MM-DD` the bank booked it, when that differs from the purchase day `occurredAt`
   /// (PKO `Data operacji`, TA Q22). Reference only.
   public var bookedDay: String?
+  /// Set on the leg of a debt record: the money the record moved on this account (R-DEBT-3).
+  /// Deleting the record deletes the leg.
+  public var debtRecordID: DebtRecord.ID?
 
   public init(
     id: UUID = UUID(), type: TxnType, occurredAt: Date, accountID: Account.ID,
@@ -215,7 +222,8 @@ public struct Txn: Hashable, Identifiable, Sendable {
     toAmountMinor: Int64? = nil, isRefund: Bool = false, originalAmountMinor: Int64? = nil,
     originalCurrencyCode: String? = nil, payee: String = "", note: String = "",
     eventID: Event.ID? = nil, source: TxnSource = .manual, importBatchID: ImportBatch.ID? = nil,
-    isPendingAtBank: Bool = false, createdAt: Date = Date(), bookedDay: String? = nil
+    isPendingAtBank: Bool = false, createdAt: Date = Date(), bookedDay: String? = nil,
+    debtRecordID: DebtRecord.ID? = nil
   ) {
     self.id = id
     self.type = type
@@ -236,7 +244,12 @@ public struct Txn: Hashable, Identifiable, Sendable {
     self.isPendingAtBank = isPendingAtBank
     self.createdAt = createdAt
     self.bookedDay = bookedDay
+    self.debtRecordID = debtRecordID
   }
+
+  /// Money comes into `accountID` from outside the app's accounts: a debt leg without a
+  /// destination marked `isRefund` (They repaid, I borrowed).
+  public var isOneSidedInflow: Bool { type == .transfer && toAccountID == nil && isRefund }
 }
 
 /// A fee, cashback or split line belonging to a transaction (R-TX-6). Hits the parent's

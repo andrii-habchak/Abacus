@@ -152,6 +152,11 @@ public struct DashboardNetWorth: Sendable {
   public let changeText: String?
   /// "Net worth at the end of each month, November 2025 to October 2026".
   public let chartLabel: String
+  /// Debts counted in net worth (R-DEBT-7): owed to me − I owe, in `currency`; nil without such
+  /// debts. Already part of `assets` / `liabilities` and the total.
+  public internal(set) var debtsTotal: Money?
+  /// "+₴1,200"; nil without debts in net worth.
+  public internal(set) var debtsText: String?
 
   /// The plotted points: the ones with a value.
   public var plotted: [Point] { points.filter { $0.value != nil } }
@@ -170,19 +175,23 @@ public struct DashboardNetWorth: Sendable {
 
   static func make(
     accounts: [Account], txns: [TxnWithLines], currency: Currency, converter: any CurrencyConverter,
-    today: Day, format: DashboardFormat, groups: [AccountGroup] = []
+    today: Day, format: DashboardFormat, groups: [AccountGroup] = [], debts: DebtBook = .empty
   ) -> DashboardNetWorth {
     let calendar = format.calendar
     let series = Calc.netWorthSeries(
-      accounts: accounts, txns: txns, currency: currency, converter: converter, today: today, calendar: calendar)
+      accounts: accounts, txns: txns, currency: currency, converter: converter, today: today, debts: debts,
+      calendar: calendar)
     var missing = DashboardMissingRates()
 
     // A balance of zero needs no rate: only non-zero balances without one make a point
     // incomplete (the calculator counts zero balances too; see docs/status/B2.md).
     func gaps(_ point: NetWorthPoint) -> [MissingRate] {
-      point.netWorth.accounts.compactMap { value in
-        guard value.converted == nil, value.balance.minorUnits != 0 else { return nil }
-        return MissingRate(from: value.balance.currency, to: currency, day: point.isToday ? nil : point.day)
+      let balances =
+        point.netWorth.accounts.filter { $0.converted == nil }.map(\.balance)
+        + point.netWorth.debts.filter { $0.converted == nil }.map(\.balance)
+      return balances.compactMap { balance in
+        guard balance.minorUnits != 0 else { return nil }
+        return MissingRate(from: balance.currency, to: currency, day: point.isToday ? nil : point.day)
       }
     }
 
@@ -233,12 +242,18 @@ public struct DashboardNetWorth: Sendable {
     let last = series.points.last.map { format.month($0.day.yearMonth) } ?? ""
     let assets = now?.assets ?? .zero(currency)
     let liabilities = now?.liabilities ?? .zero(currency)
-    return DashboardNetWorth(
+    var result = DashboardNetWorth(
       currency: currency, total: total, isComplete: isComplete, assets: assets, liabilities: liabilities,
       change: change, changeFraction: fraction, points: points, accounts: rows,
       breakdown: breakdown(rows, accounts: accounts, groups: groups, currency: currency, format: format), missing: missing,
       totalText: format.money(total), assetsText: format.money(assets), liabilitiesText: format.owed(liabilities),
       changeText: changeText, chartLabel: "Net worth at the end of each month, \(first) to \(last)")
+    // R-DEBT-7: debts counted in net worth, one separate line (already inside assets/liabilities).
+    if let now, !now.debts.isEmpty {
+      result.debtsTotal = now.debtsTotal
+      result.debtsText = format.signed(now.debtsTotal)
+    }
+    return result
   }
 
   /// Groups (with the sum of their accounts in the display currency) and accounts in the custom

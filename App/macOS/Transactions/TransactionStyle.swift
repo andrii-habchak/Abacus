@@ -23,6 +23,7 @@ enum TxnPalette {
     case .pending: (dynamic(light: 0x8A4B00, dark: 0xFFC46B), dynamic(light: 0xFFF1D6, dark: 0x4A3410))
     case .refund: (dynamic(light: 0x1B6B3A, dark: 0x7FE0A8), dynamic(light: 0xE3F4EA, dark: 0x17402A))
     case .event: (dynamic(light: 0x5B34A8, dark: 0xCDB4FF), dynamic(light: 0xEFE8FB, dark: 0x35265A))
+    case .debt: (dynamic(light: 0x0A4FA8, dark: 0xA9CBFF), dynamic(light: 0xEAF2FD, dark: 0x13325C))
     }
   }
 

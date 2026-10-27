@@ -73,7 +73,9 @@ struct SectionDetail: View {
     switch section {
     case .dashboard:
       DashboardView(
-        model: session.dashboard, displayCurrency: app.displayCurrency, onEditBudget: { app.openBudget() }
+        model: session.dashboard, displayCurrency: app.displayCurrency,
+        debts: AnyView(DashboardDebtsCard(model: session.dashboard) { app.section = .debts }),
+        onEditBudget: { app.openBudget() }
       ) { target in
         app.showTransactions(.drillDown(target))
       }
@@ -102,6 +104,9 @@ struct SectionDetail: View {
       .shellToolbar()
     case .rules:
       RulesView(model: session.rules)
+        .shellToolbar()
+    case .debts:
+      DebtsView(model: session.debts, displayCurrency: app.displayCurrency)
         .shellToolbar()
     case .importFiles:
       if let wizard = session.importWizard {

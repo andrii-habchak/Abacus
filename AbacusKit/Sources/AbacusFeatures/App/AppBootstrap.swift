@@ -57,7 +57,7 @@ public enum AppBootstrap {
 
 /// Sidebar sections of the main window (approved prototype group 1).
 public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
-  case dashboard, transactions, events
+  case dashboard, transactions, events, debts
   case accounts, categories, budget, importFiles, rates, rules
 
   public var id: Self { self }
@@ -67,6 +67,7 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .dashboard: "Dashboard"
     case .transactions: "Transactions"
     case .events: "Events"
+    case .debts: "Debts"
     case .accounts: "Accounts"
     case .categories: "Categories"
     case .budget: "Budget"
@@ -81,6 +82,7 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .dashboard: "house"
     case .transactions: "list.bullet"
     case .events: "calendar"
+    case .debts: "person.2"
     case .accounts: "creditcard"
     case .categories: "square.grid.2x2"
     case .budget: "chart.pie"
@@ -91,23 +93,25 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
   }
 
   /// Whether the screen shows amounts in the display currency, so the toolbar offers the
-  /// currency switch there (R-HOME-4): Dashboard, Transactions, Accounts, Events, Budget.
+  /// currency switch there (R-HOME-4): Dashboard, Transactions, Events, Debts (its totals),
+  /// Accounts, Budget.
   public var usesDisplayCurrency: Bool {
     switch self {
-    case .dashboard, .transactions, .accounts, .events, .budget: true
+    case .dashboard, .transactions, .accounts, .events, .budget, .debts: true
     case .categories, .importFiles, .rates, .rules: false
     }
   }
 
-  /// Whether the toolbar offers "New transaction" (⌘N still works everywhere): not on Budget
-  /// and Rules, where it has nothing to do with the screen (R-SHELL, TA v1.6).
+  /// Whether the toolbar offers "New transaction" (⌘N still works everywhere): not on Budget,
+  /// Rules and Debts (which adds records instead), where it has nothing to do with the screen
+  /// (R-SHELL, TA v1.6).
   public var offersNewTransaction: Bool {
     switch self {
-    case .budget, .rules: false
+    case .budget, .rules, .debts: false
     case .dashboard, .transactions, .events, .accounts, .categories, .importFiles, .rates: true
     }
   }
 
-  public static let overview: [AppSection] = [.dashboard, .transactions, .events]
+  public static let overview: [AppSection] = [.dashboard, .transactions, .events, .debts]
   public static let manage: [AppSection] = [.accounts, .categories, .budget, .importFiles, .rates, .rules]
 }

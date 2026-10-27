@@ -65,6 +65,7 @@ struct DashboardNetWorthCard: View {
       HStack(spacing: 28) {
         figure("Assets", netWorth.assetsText, color: .primary)
         figure("Liabilities", netWorth.liabilitiesText, color: .red)
+        if let debts = netWorth.debtsText { figure("Debts (included)", debts, color: .secondary) }
       }
 
       Button(showsAccounts ? "Hide accounts" : "Show accounts") {

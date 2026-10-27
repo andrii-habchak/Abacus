@@ -49,9 +49,17 @@ struct PipelineIntegrationTests {
       try await accounts.balances(asOf: Day("2100-01-01")!)
     }
 
-    /// Balances by Saldo account key, via the remembered mappings.
+    /// Balances by Saldo account key, via the remembered mappings. A LIABILITIES account is
+    /// converted into a debt on import (R-DEBT-8): its balance is that debt's.
     func saldoBalances() async throws -> [String: Int64] {
-      let balances = try await balances()
+      var balances = try await balances()
+      let book = try await SQLiteDebtRepository(database: database, calendar: calendar).book()
+      let debtBalances = Calc.debtBalances(book)
+      for debt in book.debts {
+        if let account = debt.sourceAccountID {
+          balances[account, default: 0] += debtBalances[debt.id]?.minorUnits ?? 0
+        }
+      }
       var result: [String: Int64] = [:]
       for mapping in try await store.mappings(source: .saldo) where mapping.kind == .account {
         result[mapping.externalKey] = balances[mapping.targetID] ?? 0

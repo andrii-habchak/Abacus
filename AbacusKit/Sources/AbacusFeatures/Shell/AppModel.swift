@@ -156,8 +156,13 @@ public final class AppModel {
     editor = newTransactionCategory?().map(TransactionEditorMode.newInCategory) ?? .new
   }
 
+  /// Answers true when `id` is a debt record's leg and the session opened its debt instead
+  /// (R-DEBT-3: legs are edited as records on the Debts tab, never in the editor).
+  @ObservationIgnored public var openDebtLeg: (@MainActor (Txn.ID) -> Bool)?
+
   /// A transaction opened from a list (double-click / Return).
   public func editTransaction(_ id: Txn.ID) {
+    if openDebtLeg?(id) == true { return }
     editor = .edit(id)
   }
 
@@ -174,4 +179,9 @@ public final class AppModel {
 
   /// ⌘1…⌘9: the sections in sidebar order.
   public static let sectionsInOrder: [AppSection] = AppSection.overview + AppSection.manage
+
+  /// The ⌘-digit of each section in `sectionsInOrder`: 1…9, then 0 for the tenth; none after.
+  public static let shortcutKeys: [String] = sectionsInOrder.indices.compactMap { index in
+    index < 9 ? String(index + 1) : index == 9 ? "0" : nil
+  }
 }

@@ -63,7 +63,8 @@ public struct SQLiteReportQueries: Sendable {
 
   /// R-ACC-3, R-HOME-1: every account's balance at the end of each of `days` (opening balance
   /// counted from its opening date, plus all transaction effects up to that day; transfers move
-  /// `amountMinor` out and `toAmountMinor` in; attached records adjust the source account).
+  /// `amountMinor` out and `toAmountMinor` in — a debt leg without destination marked `isRefund`
+  /// moves it in; attached records adjust the source account).
   /// Archived accounts are left out unless `includeArchived` (R-ACC-4).
   public func balances(on days: [Day], includeArchived: Bool = false) async throws -> BalanceSeries {
     let days = Array(Set(days)).sorted()
@@ -80,7 +81,7 @@ public struct SQLiteReportQueries: Sendable {
           (CASE "t"."type"
             WHEN 'expense' THEN (CASE WHEN "t"."isRefund" THEN "t"."amountMinor" ELSE -"t"."amountMinor" END)
             WHEN 'income' THEN (CASE WHEN "t"."isRefund" THEN -"t"."amountMinor" ELSE "t"."amountMinor" END)
-            ELSE -"t"."amountMinor" END)
+            ELSE (CASE WHEN "t"."isRefund" AND "t"."toAccountID" IS NULL THEN "t"."amountMinor" ELSE -"t"."amountMinor" END) END)
           + COALESCE((SELECT SUM(CASE "r"."kind" WHEN 'income' THEN "r"."amountMinor" ELSE -"r"."amountMinor" END)
             FROM "attachedRecords" AS "r" WHERE "r"."txnID" = "t"."id"), 0) AS "delta"
         FROM "txns" AS "t" WHERE "t"."occurredAt" < \#(last)

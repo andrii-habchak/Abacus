@@ -22,7 +22,8 @@ struct AppSessionTests {
     #expect(try await SampleData.loadIfEmpty(into: database) == false)
     let (accounts, txns) = try await database.read { db in (try Account.fetchCount(db), try Txn.fetchCount(db)) }
     #expect(accounts == PreviewData.accounts.count)
-    #expect(txns == PreviewData.txns.count)
+    // Plus the legs of the sample debt records (C14).
+    #expect(txns == PreviewData.txns.count + DebtSample.records.filter { $0.1 != nil }.count)
   }
 
   @Test("Load Sample Data fills the screens; a second time it explains why not")

@@ -407,9 +407,10 @@ public final class RulesModel {
     }
   }
 
-  /// Loads every transaction for the "will change" count (each time the editor opens).
+  /// Loads every transaction for the "will change" count (each time the editor opens). Debt
+  /// legs are left out: rules never change them (R-DEBT-3, they follow their record).
   public func loadEditorTransactions() async {
-    editorTransactions = try? await dependencies.allTransactions()
+    editorTransactions = try? await dependencies.allTransactions().filter { $0.txn.debtRecordID == nil }
   }
 
   /// Loads what the edited rule changed before (the editor's "Roll back").

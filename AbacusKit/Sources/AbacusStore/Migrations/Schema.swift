@@ -76,6 +76,16 @@ extension AbacusDatabase {
       }
       try db.execute(sql: categoryCreatedAtV9)
     }
+    // R-DEBT (TA v1.7, C14): debts and their records, the leg link on transactions, then every
+    // account of kind `debt` converted into a debt (R-DEBT-8, docs/status/C14.md). Raw SQL only:
+    // later migrations may add columns to the entity structs. Registered before "v11: account
+    // groups" (C12); the two are independent.
+    migrator.registerMigration("v10: debts") { db in
+      for statement in debtsV10 {
+        try db.execute(sql: statement)
+      }
+      _ = try DebtConversion.convertDebtAccounts(db)
+    }
     // R-MGMT-9, D48: account groups as folders. Every distinct (trimmed) `groupName` becomes a
     // group; accounts point at it through `groupID` (ON DELETE SET NULL: deleting a group moves
     // its accounts to the top level). The `groupName` column stays, unused (append-only).
@@ -85,6 +95,49 @@ extension AbacusDatabase {
     }
     return migrator
   }
+
+  /// Debts and records (R-DEBT-1, R-DEBT-3). Single primary keys, no UNIQUE, only CASCADE /
+  /// SET NULL (CloudKit rules). A record's leg points at the record (`txns.debtRecordID`), so
+  /// deleting a record or a debt deletes its legs.
+  static let debtsV10: [String] = [
+    """
+    CREATE TABLE "debts" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "personName" TEXT NOT NULL,
+      "currency" TEXT NOT NULL,
+      "dueDay" TEXT,
+      "note" TEXT NOT NULL DEFAULT '',
+      "countsInNetWorth" INTEGER NOT NULL DEFAULT 1,
+      "isSettled" INTEGER NOT NULL DEFAULT 0,
+      "sourceAccountID" TEXT REFERENCES "accounts"("id") ON DELETE SET NULL,
+      "importBatchID" TEXT REFERENCES "importBatches"("id") ON DELETE SET NULL,
+      "createdAt" TEXT NOT NULL
+    ) STRICT
+    """,
+    """
+    CREATE TABLE "debtRecords" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "debtID" TEXT NOT NULL REFERENCES "debts"("id") ON DELETE CASCADE,
+      "kind" TEXT NOT NULL,
+      "day" TEXT NOT NULL,
+      "amountMinor" INTEGER NOT NULL,
+      "note" TEXT NOT NULL DEFAULT '',
+      "reportKind" TEXT,
+      "categoryID" TEXT REFERENCES "categories"("id") ON DELETE SET NULL,
+      "fingerprint" TEXT,
+      "importBatchID" TEXT REFERENCES "importBatches"("id") ON DELETE SET NULL,
+      "createdAt" TEXT NOT NULL
+    ) STRICT
+    """,
+    #"ALTER TABLE "txns" ADD COLUMN "debtRecordID" TEXT REFERENCES "debtRecords"("id") ON DELETE CASCADE"#,
+    #"CREATE INDEX "idx_txns_debtRecordID" ON "txns"("debtRecordID")"#,
+    #"CREATE INDEX "idx_debts_sourceAccountID" ON "debts"("sourceAccountID")"#,
+    #"CREATE INDEX "idx_debts_importBatchID" ON "debts"("importBatchID")"#,
+    #"CREATE INDEX "idx_debtRecords_debtID" ON "debtRecords"("debtID")"#,
+    #"CREATE INDEX "idx_debtRecords_categoryID" ON "debtRecords"("categoryID")"#,
+    #"CREATE INDEX "idx_debtRecords_importBatchID" ON "debtRecords"("importBatchID")"#,
+    #"CREATE INDEX "idx_debtRecords_fingerprint" ON "debtRecords"("fingerprint")"#,
+  ]
 
   /// Creates `accountGroups` and `accounts.groupID` (both only if missing), then turns the group
   /// names into groups. The custom order keeps what the Accounts page showed before: groups in
