@@ -67,6 +67,13 @@ public final class AppSession {
       else { return nil }
       return category.id
     }
+    // … and on the Accounts page with the selected account (D55).
+    app.newTransactionAccount = { [weak self] in
+      guard let self, self.app.section == .accounts, let account = self.accounts.selectedAccount,
+        !account.isArchived
+      else { return nil }
+      return account.id
+    }
     // A category, account or event edited (colour, name, archive): the list and the dashboard
     // follow at once (R-MGMT-7), without waiting for this screen.
     let referenceChanged: @MainActor () async -> Void = { [weak self] in

@@ -171,8 +171,8 @@ struct AccountsPageTests {
     await model.drop(cash, on: pko, position: .onto)
     #expect(model.account(cash)?.groupID == pko)
     #expect(model.sort == .nameAscending)
-    // Not onto a top-level account.
-    #expect(!model.canDrop(loan, on: deposit, position: .onto))
+    // Onto a top-level account: a new group of both, after a name prompt (D55, OutlineListsTests).
+    #expect(model.canDrop(loan, on: deposit, position: .onto))
     // Onto an account in a group: into that group.
     await model.drop(deposit, on: eur, position: .onto)
     #expect(model.account(deposit)?.groupID == revolut)
