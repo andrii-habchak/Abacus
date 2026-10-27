@@ -10,8 +10,10 @@ is not used (D37). The owner's real Saldo history and PKO statement are in the a
 
 _Updated 2026-10-27:_ C3 merged — the Import section no longer grows the window (root cause:
 a vertical `fixedSize` on the choose-file paragraph; see `docs/status/C3.md`). Every section now
-opens at the same default window height. Remaining: the v1.0.0 DMG and tag, then owner review of
-the app on real data and of the C2 interpretations (D40).
+opens at the same default window height. **v1.0.0 released 2026-10-27**: tag `v1.0.0`, DMG built
+locally with `scripts/build-dmg.sh` (`dist/Abacus-1.0.0.dmg`, not committed; `hdiutil verify`
+valid, app codesign valid). Remaining: owner review of the app on real data and of the C2
+interpretations (D40); deferred small items on request.
 
 ## Done
 
@@ -125,7 +127,7 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 - ~~Import window height~~ → fixed in C3 (2026-10-27). Note: the in-app snapshot of the
   default window is 1,018 pt on the owner's 1,117 pt-high screen for every section, not the
   860 pt in `.defaultSize`; that is the window default, not an Import leak.
-- **Release**: `scripts/build-dmg.sh` on final `main`; `hdiutil verify`; tag `v1.0.0`; push tag.
+- ~~Release~~ → v1.0.0 tagged and pushed 2026-10-27 (DMG local only).
 - **Deferred, small**: an open editor doesn't pick up rates fetched by other screens until its own
   request returns (C2); per-protocol count/balance queries for very large data (B5/C1 notes).
 - **Owner checks**: real-data look of every screen; 281 "Uncategorised" rows to review (Import /

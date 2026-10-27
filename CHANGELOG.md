@@ -2,7 +2,7 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
-## [1.0.0] — 2026-10-22
+## [1.0.0] — 2026-10-27
 
 First release: the macOS app, ad-hoc signed, distributed as a DMG.
 

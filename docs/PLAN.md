@@ -106,14 +106,14 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   full Saldo import → every account balance equals Saldo's; PKO import → balance equals the PKO
   file's latest "Saldo po transakcji"; re-import both → 0 new; PKO over a Saldo-covered period →
   possible duplicates flagged; undo import restores the previous state; performance (R-NF-2).
-- [ ] **I2 Release** — ad-hoc signed DMG from CI, README with screenshots, tag `v1.0.0`.
+- [x] **I2 Release** (2026-10-27, local DMG per D37) — ad-hoc signed DMG from CI, README with screenshots, tag `v1.0.0`.
 
 ### Phase 3b — Small items and release (2026-10-21)
 - [x] **C1 List filters** (merged 2026-10-22) — uncategorised and import-batch filters through store, list, dashboard
   drill-down and import "Show transactions".
 - [x] **C2 Settings, data, defaults** (merged 2026-10-22) — last backup date in the database, data folder Change…,
   default categories on first launch, editor fetches rates for old days.
-- [x] **R1 Release prep** (merged 2026-10-22; DMG build + tag still open) — app icon, version 1.0.0, `scripts/build-dmg.sh`, README with
+- [x] **R1 Release prep** (merged 2026-10-22; DMG built and `v1.0.0` tagged 2026-10-27) — app icon, version 1.0.0, `scripts/build-dmg.sh`, README with
   sample-data screenshots, CHANGELOG. Orchestrator then builds the DMG and tags `v1.0.0`.
 - [x] **C3 Import window height** (merged 2026-10-27) — the choose-file paragraph's vertical
   `fixedSize` set a 2,251 pt minimum window height; removed. DEBUG `-AbacusImportFile <csv>`.
