@@ -51,8 +51,8 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
 | C3 Import window height | background agent | `wp/C3-import-height` | **merged** 2026-10-27 |
 | C4 Navigation | background agent | `wp/C4-navigation` | **merged** 2026-10-27 (click-only donut drill-down, budget edit button, currency switch per section) |
 | C5 Colours | background agent | `wp/C5-colours` | **merged** 2026-10-27 (palette, random + manual colours, migration v4 fills uncoloured/grey rows once; notes `docs/status/C5.md`) |
-| C6 Budget currency | background agent | `wp/C6-budget-currency` | in progress (D43) |
-| C7 Rules | background agent | `wp/C7-rules` | in progress (D44) |
+| C6 Budget currency | background agent | `wp/C6-budget-currency` | **merged** 2026-10-27 (migration v5; interpretations to confirm in `docs/status/C6.md`) |
+| C7 Rules | background agent | `wp/C7-rules` | **merged** 2026-10-27 (migration v6 rebuilds `categoryRules`; interpretations to confirm in `docs/status/C7.md`) |
 
 ## Contract-change requests (orchestrator queue)
 
@@ -132,6 +132,10 @@ a new orchestrator session is `docs/NEXT.md` (`scripts/next-session.sh` prints a
   default window is 1,018 pt on the owner's 1,117 pt-high screen for every section, not the
   860 pt in `.defaultSize`; that is the window default, not an Import leak.
 - ~~Release~~ → v1.0.0 tagged and pushed 2026-10-27 (DMG local only).
+- **1.1.0 (owner review of 1.0.0, C4–C7)**: merged on `main`, version 1.1.0 (build 2), DMG built
+  locally for owner testing; **not tagged** until the owner has tested it. First launch runs
+  migrations v4–v6 on the real database (tested only on synthetic pre-change databases) — owner
+  backs up `abacus.sqlite` first. Owner to confirm the C6 and C7 interpretations (status notes).
 - **Deferred, small**: an open editor doesn't pick up rates fetched by other screens until its own
   request returns (C2); per-protocol count/balance queries for very large data (B5/C1 notes).
 - **Owner checks**: real-data look of every screen; 281 "Uncategorised" rows to review (Import /

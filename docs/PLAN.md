@@ -123,9 +123,9 @@ Each owns `App/macOS/<Feature>/**` and `AbacusFeatures/<Feature>/**`.
   currency switch only on Dashboard/Transactions/Accounts/Events.
 - [x] **C5 Colours** (merged 2026-10-27) — random + manual colours for categories, accounts, events; category-coloured
   transaction icons. Migration "v4: colours".
-- [ ] **C6 Budget currency** — per-category limit currency, no separate total. Migration "v5".
-- [ ] **C7 Rules** — Saldo-like conditions and category/transfer actions. Migration "v6: rules".
-- [ ] **Release 1.0.1** after C5–C7.
+- [x] **C6 Budget currency** (merged 2026-10-27) — per-category limit currency, no separate total. Migration "v5".
+- [x] **C7 Rules** (merged 2026-10-27) — Saldo-like conditions and category/transfer actions. Migration "v6: rules".
+- [ ] **Release 1.1.0** — DMG built for owner testing; tag after the owner's OK.
 
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple

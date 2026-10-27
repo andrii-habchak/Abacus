@@ -2,6 +2,34 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.1.0] — Unreleased
+
+Changes from the owner's review of 1.0.0. Opening this version updates the database (colours,
+budget currencies, rules); back up `abacus.sqlite` first.
+
+### Added
+
+- **Colours** for categories, accounts and events: a random distinct colour for new ones and once
+  for existing uncoloured or grey ones; palette swatches and a custom colour in each editor.
+- **Budget limits in any currency per category** (e.g. Groceries 400 EUR, Home 5 747 PLN). The
+  total is the sum of the limits in the display currency.
+- **Rules like Saldo's**: description *exactly matches* or *contains*, optionally AND amount
+  *bigger than* / *smaller than*, optionally one account; action *assign category* or *transfer
+  to/from an account*. "Update existing transactions" applies a rule to past transactions after
+  a confirmation, with Undo.
+- Edit button on the dashboard's budget widget, opening the Budget screen.
+
+### Changed
+
+- Transaction icons use their category's colour and follow a colour change immediately.
+- The display-currency switch shows only on Dashboard, Transactions, Accounts and Events.
+- The budget has no separate total or "unallocated" remainder any more.
+
+### Fixed
+
+- The app no longer switches to Transactions on its own: hovering the expenses donut only
+  highlights a slice; a click opens the transactions.
+
 ## [1.0.0] — 2026-10-27
 
 First release: the macOS app, ad-hoc signed, distributed as a DMG.
