@@ -87,6 +87,8 @@ struct EventRowView: View {
 
   var body: some View {
     HStack(spacing: 12) {
+      ManageDot(hex: row.colorHex)
+        .opacity(row.isArchived ? 0.45 : 1)
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 6) {
           Text(row.name).fontWeight(.medium)
@@ -151,6 +153,9 @@ struct EventInspectorView: View {
             .labelsHidden()
             .fixedSize()
           }
+        }
+        ManageField("Colour") {
+          ManageColorField(hex: binding(\.colorHex, nil))
         }
         Text("While the event's dates are active, new expenses are tagged with it by default.")
           .font(.system(size: 11))

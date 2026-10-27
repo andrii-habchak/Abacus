@@ -90,6 +90,15 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     }
   }
 
+  /// Whether the screen shows amounts in the display currency, so the toolbar offers the
+  /// currency switch there (R-HOME-4): Dashboard, Transactions, Accounts, Events.
+  public var usesDisplayCurrency: Bool {
+    switch self {
+    case .dashboard, .transactions, .accounts, .events: true
+    case .categories, .budget, .importFiles, .rates, .rules: false
+    }
+  }
+
   public static let overview: [AppSection] = [.dashboard, .transactions, .events]
   public static let manage: [AppSection] = [.accounts, .categories, .budget, .importFiles, .rates, .rules]
 }

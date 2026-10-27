@@ -46,6 +46,9 @@ public final class CategoriesModel {
   public private(set) var errorMessage: String?
 
   @ObservationIgnored public let dependencies: ManageDependencies
+  /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
+  /// so the transaction list and the dashboard re-read it.
+  @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
 
   public init(dependencies: ManageDependencies) {
     self.dependencies = dependencies
@@ -135,7 +138,9 @@ public final class CategoriesModel {
   public func newCategory() {
     selection = nil
     errorMessage = nil
-    draft = CategoryDraft(id: UUID(), isNew: true, kind: kind, name: "", parentID: nil, colorHex: ManageText.swatches[0])
+    let siblings = categories.filter { $0.kind == kind && $0.parentID == nil }.map(\.colorHex)
+    draft = CategoryDraft(
+      id: UUID(), isNew: true, kind: kind, name: "", parentID: nil, colorHex: ColorPalette.pick(avoiding: siblings))
   }
 
   /// "New subcategory": under the selected category (or under its parent).
@@ -144,8 +149,11 @@ public final class CategoriesModel {
     guard let parent, let parentCategory = category(parent) else { return }
     selection = nil
     errorMessage = nil
+    // R-MGMT-7: a random palette colour apart from the parent's and the siblings'.
+    let taken = [parentCategory.colorHex] + categories.filter { $0.parentID == parent }.map(\.colorHex)
     draft = CategoryDraft(
-      id: UUID(), isNew: true, kind: parentCategory.kind, name: "", parentID: parent, colorHex: parentCategory.colorHex)
+      id: UUID(), isNew: true, kind: parentCategory.kind, name: "", parentID: parent,
+      colorHex: ColorPalette.pick(avoiding: taken))
   }
 
   public var canAddSubcategory: Bool {
@@ -213,6 +221,7 @@ public final class CategoriesModel {
     let category = built(from: draft, base: draft.isNew ? nil : category(draft.id))
     do {
       try await dependencies.categories.save(category)
+      await onDataChange?()
       selection = category.id
       self.draft = nil
       await load()
@@ -286,6 +295,7 @@ public final class CategoriesModel {
     do {
       // Save a new parent first so the one-level rule holds while saving.
       for category in changed { try await dependencies.categories.save(category) }
+      await onDataChange?()
       await load()
     } catch {
       errorMessage = ManageFailure.message(error, doing: "move the category")
@@ -305,6 +315,7 @@ public final class CategoriesModel {
   private func setArchived(_ id: AbacusDomain.Category.ID, _ archived: Bool) async {
     do {
       try await dependencies.categories.setArchived(id, archived)
+      await onDataChange?()
       await load()
     } catch {
       errorMessage = ManageFailure.message(error, doing: archived ? "archive the category" : "unarchive the category")
@@ -368,6 +379,7 @@ public final class CategoriesModel {
     self.dialog = nil
     do {
       try await dependencies.categories.delete(id, reassignTo: dialog.offersArchive ? reassignTarget : nil)
+      await onDataChange?()
       selection = nil
       draft = nil
       await load()

@@ -99,6 +99,10 @@ public struct SQLiteImportStore: ImportStore {
       if !events.isEmpty {
         try Event.insert { events }.execute(db)
       }
+      // R-MGMT-7: created accounts, categories and events get palette colours.
+      if !accounts.isEmpty || !categories.isEmpty || !events.isEmpty {
+        try ColorFill.fillAll(db)
+      }
       for chunk in commit.txns.chunked(200) {
         let txns = chunk.map { item in
           var txn = item.txn

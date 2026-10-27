@@ -28,7 +28,10 @@ struct CategoryRepositoryTests {
     // A valid child.
     let coffee = AbacusDomain.Category(name: "Coffee", kind: .expense, parentID: F.food.id)
     try await f.categories.save(coffee)
-    #expect(try await f.categories.categories(kind: .expense, includeArchived: false).contains(coffee))
+    let saved = try await f.categories.categories(kind: .expense, includeArchived: false).first { $0.id == coffee.id }
+    #expect(saved?.name == "Coffee" && saved?.parentID == F.food.id)
+    // R-MGMT-7: saved without a colour, it gets a palette colour.
+    #expect(saved?.colorHex.map(ColorPalette.colors.contains) == true)
   }
 
   @Test("Archiving a parent archives its children; unarchiving a child restores the parent")

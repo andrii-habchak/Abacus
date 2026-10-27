@@ -31,6 +31,8 @@ public struct SQLiteAccountRepository: AccountRepository {
         throw StoreError.currencyLocked
       }
       try Account.upsert { Account.Draft(account) }.execute(db)
+      // R-MGMT-7: an account saved without a colour gets one apart from the other accounts'.
+      if ColorPalette.rgb(account.colorHex) == nil { try ColorFill.fillAccounts(db) }
     }
   }
 

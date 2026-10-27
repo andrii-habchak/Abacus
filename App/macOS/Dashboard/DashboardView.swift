@@ -10,25 +10,30 @@ import SwiftUI
 struct DashboardView: View {
   let displayCurrency: Currency
   let onDrillDown: (AbacusDomain.Category.ID?, Month) -> Void
+  /// The budget card's edit button: the shell opens Budget management (R-HOME-2).
+  let onEditBudget: () -> Void
   private let initiallyShowsAccounts: Bool
   @State private var model: DashboardModel
 
   init(
     displayCurrency: Currency, dependencies: DashboardDependencies,
+    onEditBudget: @escaping () -> Void = {},
     onDrillDown: @escaping (AbacusDomain.Category.ID?, Month) -> Void
   ) {
     self.init(
       model: DashboardModel(dependencies: dependencies, displayCurrency: displayCurrency),
-      displayCurrency: displayCurrency, onDrillDown: onDrillDown)
+      displayCurrency: displayCurrency, onEditBudget: onEditBudget, onDrillDown: onDrillDown)
   }
 
   /// With a model the shell keeps, so the selected month survives switching sections.
   init(
     model: DashboardModel, displayCurrency: Currency, initiallyShowsAccounts: Bool = false,
+    onEditBudget: @escaping () -> Void = {},
     onDrillDown: @escaping (AbacusDomain.Category.ID?, Month) -> Void
   ) {
     self.displayCurrency = displayCurrency
     self.onDrillDown = onDrillDown
+    self.onEditBudget = onEditBudget
     self.initiallyShowsAccounts = initiallyShowsAccounts
     _model = State(initialValue: model)
   }
@@ -73,7 +78,7 @@ struct DashboardView: View {
         }
         DashboardMonthBar(model: model)
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 340), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
-          DashboardBudgetCard(budget: model.budget, monthTitle: model.monthTitle)
+          DashboardBudgetCard(budget: model.budget, monthTitle: model.monthTitle, onEdit: onEditBudget)
           if let expenses = model.expenses {
             DashboardExpensesCard(expenses: expenses, monthTitle: model.monthTitle, selected: model.selectedSlice) { slice in
               if let target = model.select(slice) { onDrillDown(target.categoryID, target.month) }

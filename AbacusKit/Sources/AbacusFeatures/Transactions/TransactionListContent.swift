@@ -248,7 +248,7 @@ public struct TransactionListContent: Equatable, Sendable {
       }
       return Row(
         id: txn.id, type: txn.type,
-        icon: Icon(symbol: category.map { String($0.name.prefix(1)) } ?? "?", colorHex: category?.colorHex),
+        icon: Icon(symbol: category.map { String($0.name.prefix(1)) } ?? "?", colorHex: tree.color(txn.categoryID)),
         title: txn.payee.isEmpty ? (category?.name ?? "No description") : txn.payee,
         badges: badges, subtitle: subtitle, category: tree.path(txn.categoryID) ?? "Uncategorised",
         account: accountName,

@@ -111,14 +111,16 @@ public struct Event: Hashable, Identifiable, Sendable {
   public var endDay: String?
   public var budgetMinor: Int64?
   public var budgetCurrency: Currency?
+  /// `#RRGGBB` (R-EVT-1, R-MGMT-7); the store gives a new event a palette colour when nil.
+  public var colorHex: String?
   public var isArchived: Bool
   /// The import that created this event (Saldo tag); undoing it removes the event.
   public var importBatchID: ImportBatch.ID?
 
   public init(
     id: UUID = UUID(), name: String, startDay: String? = nil, endDay: String? = nil,
-    budgetMinor: Int64? = nil, budgetCurrency: Currency? = nil, isArchived: Bool = false,
-    importBatchID: ImportBatch.ID? = nil
+    budgetMinor: Int64? = nil, budgetCurrency: Currency? = nil, colorHex: String? = nil,
+    isArchived: Bool = false, importBatchID: ImportBatch.ID? = nil
   ) {
     self.id = id
     self.name = name
@@ -126,6 +128,7 @@ public struct Event: Hashable, Identifiable, Sendable {
     self.endDay = endDay
     self.budgetMinor = budgetMinor
     self.budgetCurrency = budgetCurrency
+    self.colorHex = colorHex
     self.isArchived = isArchived
     self.importBatchID = importBatchID
   }

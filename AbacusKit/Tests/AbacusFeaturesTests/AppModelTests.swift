@@ -94,6 +94,21 @@ struct AppModelTests {
     #expect(app.pendingTransactionFilters == filters)
   }
 
+  @Test("R-HOME-2 the budget card's edit button opens Budget")
+  func openBudget() {
+    let app = AppModel(environment: B1Fixture.setup().environment)
+    #expect(app.section == .dashboard)
+    app.openBudget()
+    #expect(app.section == .budget)
+    #expect(app.pendingTransactionFilters == nil)
+  }
+
+  @Test("R-HOME-4 the display-currency switch shows only on Dashboard, Transactions, Accounts, Events")
+  func displayCurrencySections() {
+    let shown = AppSection.allCases.filter(\.usesDisplayCurrency)
+    #expect(Set(shown) == [.dashboard, .transactions, .accounts, .events])
+  }
+
   @Test("Sidebar order: Overview then Manage, nine sections for ⌘1…⌘9")
   func sectionOrder() {
     #expect(AppModel.sectionsInOrder.map(\.title) == [

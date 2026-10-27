@@ -19,18 +19,19 @@ public enum DefaultCategories {
     Group(name: "Housing", kind: .expense, color: "#0A64D6", children: ["Rent", "Utilities"]),
     Group(name: "Transport", kind: .expense, color: "#7B4FCF", children: ["Fuel", "Taxi", "Public transport"]),
     Group(name: "Health", kind: .expense, color: "#C93B6E"),
-    Group(name: "Bills", kind: .expense, color: "#5C7B99", children: ["Mobile", "Internet"]),
+    Group(name: "Bills", kind: .expense, color: "#0F96B0", children: ["Mobile", "Internet"]),
     Group(name: "Shopping", kind: .expense, color: "#A35A2A"),
-    Group(name: "Travel", kind: .expense, color: "#C9A100"),
-    Group(name: "Fees", kind: .expense, color: "#8E8E93"),
-    Group(name: "Gifts", kind: .expense, color: "#D1495B"),
-    Group(name: "Salary", kind: .income, color: "#1B8A4A"),
-    Group(name: "Cashback", kind: .income, color: "#2E9E6A"),
-    Group(name: "Refunds", kind: .income, color: "#3FA7A0"),
-    Group(name: "Other income", kind: .income, color: "#6B8E23"),
+    Group(name: "Travel", kind: .expense, color: "#C99A00"),
+    Group(name: "Fees", kind: .expense, color: "#D4703C"),
+    Group(name: "Gifts", kind: .expense, color: "#E5484D"),
+    Group(name: "Salary", kind: .income, color: "#2E9E4F"),
+    Group(name: "Cashback", kind: .income, color: "#1E9E7E"),
+    Group(name: "Refunds", kind: .income, color: "#0A64D6"),
+    Group(name: "Other income", kind: .income, color: "#7A9E1F"),
   ]
 
-  /// The default set with fresh ids; children take their parent's colour.
+  /// The default set with fresh ids. Parents carry palette colours; subcategories have none
+  /// here and get a colour apart from their parent and siblings when seeded (R-MGMT-7).
   public static func make() -> [AbacusDomain.Category] {
     var categories: [AbacusDomain.Category] = []
     var position: [CategoryKind: Int] = [:]
@@ -42,7 +43,7 @@ public enum DefaultCategories {
       for (index, child) in group.children.enumerated() {
         categories.append(
           AbacusDomain.Category(
-            name: child, kind: group.kind, parentID: parent.id, colorHex: group.color, position: index))
+            name: child, kind: group.kind, parentID: parent.id, position: index))
       }
     }
     return categories
@@ -57,6 +58,7 @@ public enum DefaultCategories {
       try db.seed {
         for category in make() { category }
       }
+      try ColorFill.fillCategories(db)
       return true
     }
   }

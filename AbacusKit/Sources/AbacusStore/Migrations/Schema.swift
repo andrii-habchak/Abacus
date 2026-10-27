@@ -28,6 +28,15 @@ extension AbacusDatabase {
         )
       }
     }
+    // R-MGMT-7, D45: events get a colour; every category, account and event without a colour,
+    // or with a grey one, gets a palette colour once (siblings kept apart). Safe on a database
+    // that already has the column (checked), and the fill only touches uncoloured/grey rows.
+    migrator.registerMigration("v4: colours") { db in
+      if try !db.columns(in: "events").contains(where: { $0.name == "colorHex" }) {
+        try db.execute(sql: #"ALTER TABLE "events" ADD COLUMN "colorHex" TEXT"#)
+      }
+      try ColorFill.fillAll(db, replacingGrey: true)
+    }
     // D43: each budget limit has its own currency; existing limits take their plan's. The
     // plan's totalMinor / currency columns stay (append-only) but are no longer read. The
     // default only applies to rows written without the column (an older schema's records).
