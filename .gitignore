@@ -1,8 +1,9 @@
 # macOS
 .DS_Store
 
-# Xcode
+# Xcode (build.noindex: Spotlight skips it, so build copies of the app don't show up in Open With)
 build/
+build.noindex/
 DerivedData/
 *.xcuserstate
 *.xcscmblueprint

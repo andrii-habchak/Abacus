@@ -19,7 +19,7 @@ xcodebuild \
   -scheme Abacus \
   -configuration Release \
   -destination 'generic/platform=macOS' \
-  -derivedDataPath build \
+  -derivedDataPath build.noindex \
   -skipMacroValidation \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="-" \
@@ -27,7 +27,7 @@ xcodebuild \
   -quiet \
   build
 
-APP="build/Build/Products/Release/Abacus.app"
+APP="build.noindex/Build/Products/Release/Abacus.app"
 test -d "$APP" || { echo "error: $APP not found" >&2; exit 1; }
 codesign --verify --deep --strict "$APP"
 

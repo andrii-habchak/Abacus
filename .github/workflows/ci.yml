@@ -39,7 +39,7 @@ jobs:
             -scheme Abacus \
             -configuration Release \
             -destination 'generic/platform=macOS' \
-            -derivedDataPath build \
+            -derivedDataPath build.noindex \
             -skipMacroValidation \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="-" \

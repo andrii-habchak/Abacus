@@ -152,7 +152,7 @@ xcodegen generate --spec project.yml
 
 # Debug build of the app (macros need -skipMacroValidation on the command line)
 xcodebuild -project Abacus.xcodeproj -scheme Abacus -destination 'platform=macOS' \
-  -derivedDataPath build -skipMacroValidation build
+  -derivedDataPath build.noindex -skipMacroValidation build
 ```
 
 The app is a thin SwiftUI shell (`App/macOS`); domain, currency math, storage, importers and
