@@ -132,7 +132,7 @@ struct DashboardDonutCard: View {
       if indent {
         Color.clear.frame(width: 22, height: 1)
       } else if slice.children.isEmpty {
-        Color.clear.frame(width: 18, height: 1)
+        Color.clear.frame(width: 14, height: 14)
       } else {
         Button {
           withAnimation(.snappy) {
