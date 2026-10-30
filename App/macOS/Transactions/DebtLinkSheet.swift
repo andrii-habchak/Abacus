@@ -2,10 +2,10 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// The "Debt record" sheet (R-DEBT-10/11, docs/status/C17.md), shared by the import wizard and
-/// "Convert to debt record…" in the transaction list: person (existing or a new name), debt,
-/// kind, the expense/income flag where offered and, across currencies, the amount in the debt's
-/// currency. Save bottom-right.
+/// The "Transfer to debt account" sheet (R-DEBT-10/11/19, docs/status/C22.md), shared by the
+/// import wizard and "Transfer to Debt Account…" in the transaction list: person (existing,
+/// completed as you type, or a new name), the person's account (a linked one, or a new virtual
+/// account in a currency) and, across currencies, the amount on their side. Save bottom-right.
 struct DebtLinkSheet: View {
   /// The draft as the owner keeps it; the sheet edits a local copy and hands it back on Save, so
   /// the owner clearing its draft while the sheet closes never leaves a dangling binding (D54).
@@ -34,34 +34,39 @@ struct DebtLinkSheet: View {
         Text(draft.subtitle).font(.system(size: 12)).foregroundStyle(.secondary)
       }
       Form {
-        HStack(spacing: 6) {
-          TextField("Person", text: $draft.personName, prompt: Text("Name"))
-          if !draft.personOptions.isEmpty {
-            Menu {
-              ForEach(draft.personOptions, id: \.self) { name in
-                Button(name) { draft.personName = name }
+        VStack(alignment: .leading, spacing: 2) {
+          HStack(spacing: 6) {
+            TextField("Person", text: $draft.personName, prompt: Text("Name"))
+            if !draft.personOptions.isEmpty {
+              Menu {
+                ForEach(draft.personOptions, id: \.self) { name in
+                  Button(name) { draft.personName = name }
+                }
+              } label: {
+                Image(systemName: "person.crop.circle")
               }
-            } label: {
-              Image(systemName: "person.crop.circle")
+              .menuStyle(.borderlessButton)
+              .fixedSize()
+              .help("People with debts")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("People with debts")
+          }
+          if draft.createsDebt {
+            Text("New debt").font(.system(size: 11)).foregroundStyle(.secondary)
           }
         }
-        Picker("Debt", selection: $draft.debt) {
-          ForEach(draft.debtChoices) { choice in
+        Picker("Account", selection: $draft.account) {
+          ForEach(draft.accountChoices) { choice in
             Text(choice.label).tag(choice.option)
           }
         }
         .disabled(draft.trimmedPerson.isEmpty)
-        Picker("Kind", selection: $draft.kind) {
-          ForEach(draft.kindOptions, id: \.self) { kind in
-            Text(kind.title).tag(kind)
+        if draft.choosesCurrency {
+          Picker("Currency", selection: $draft.newAccountCurrency) {
+            ForEach(Currency.allCases, id: \.self) { currency in
+              Text(currency.rawValue).tag(currency)
+            }
           }
-        }
-        if let flag = draft.flagTitle {
-          Toggle(flag, isOn: $draft.countsInReports)
+          .disabled(draft.trimmedPerson.isEmpty)
         }
         if draft.needsAmount {
           TextField(draft.amountCaption, text: $draft.amountText, prompt: Text("0.00"))
@@ -72,7 +77,7 @@ struct DebtLinkSheet: View {
       if let validation = draft.validation, !draft.trimmedPerson.isEmpty || draft.needsAmount {
         Text(validation).font(.system(size: 11)).foregroundStyle(.secondary)
       }
-      Text("The transaction becomes the record's money on your account — it is not counted twice.")
+      Text("The transaction becomes a transfer between your account and the person's — it is not counted twice.")
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)

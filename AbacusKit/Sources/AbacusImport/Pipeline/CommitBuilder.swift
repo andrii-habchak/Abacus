@@ -12,9 +12,9 @@ public struct ImportSummary: Hashable, Sendable {
   public var settled = 0
   /// Existing transactions that got this import's fingerprints (link, other side of a transfer).
   public var linked = 0
-  /// Of those, debt records entered by hand that rows matched (R-DEBT-13).
+  /// Of those, transfers to a debt account entered by hand that rows matched (R-DEBT-13).
   public var debtRecordsMatched = 0
-  /// New transactions recorded as debt records (row action and rules, R-DEBT-10/12).
+  /// New transactions made transfers to a debt account (row action and rules, R-DEBT-10/12).
   public var debtRecords = 0
   /// Existing expenses/incomes turned into transfers.
   public var transfersCompleted = 0
@@ -50,10 +50,10 @@ public struct ImportSummary: Hashable, Sendable {
     if linked > 0 { matched.append("\(linked) linked to existing") }
     if transfersCompleted > 0 { matched.append("\(transfersCompleted) transfer\(transfersCompleted == 1 ? "" : "s") completed") }
     if debtRecordsMatched > 0 {
-      matched.append("\(debtRecordsMatched) matched debt record\(debtRecordsMatched == 1 ? "" : "s")")
+      matched.append("\(debtRecordsMatched) matched debt transfer\(debtRecordsMatched == 1 ? "" : "s")")
     }
     if !matched.isEmpty { lines.append(matched.joined(separator: " · ")) }
-    if debtRecords > 0 { lines.append("\(debtRecords) recorded as debt record\(debtRecords == 1 ? "" : "s")") }
+    if debtRecords > 0 { lines.append(debtRecords == 1 ? "1 transferred to a debt account" : "\(debtRecords) transferred to debt accounts") }
     var review: [String] = []
     if duplicatesSkipped > 0 { review.append("\(duplicatesSkipped) possible duplicate\(duplicatesSkipped == 1 ? "" : "s") skipped") }
     if duplicatesImported > 0 { review.append("\(duplicatesImported) possible duplicate\(duplicatesImported == 1 ? "" : "s") imported") }
@@ -215,13 +215,13 @@ struct CommitBuilder {
         fingerprints += shape.fingerprints.map { ImportFingerprint(id: $0, txnID: txn.id) }
         if let debt = shape.debt {
           // R-DEBT-10/12/19: the store turns the new transaction into a transfer to the person's
-          // virtual account (C22 reshapes the import choice; kind and report flag no longer apply).
+          // account (the chosen linked one, else the debt's virtual account in `currency`).
           debtLinks.append(
             ImportDebtLink(
               txnID: txn.id,
               link: DebtLink(
-                personName: debt.personName, debtID: debt.debtID, currency: debt.currency,
-                amountMinor: debt.amountMinor)))
+                personName: debt.personName, debtID: debt.debtID, accountID: debt.accountID,
+                currency: debt.currency, amountMinor: debt.amountMinor)))
           summary.debtRecords += 1
         }
         if let rule = shape.ruleID { ruleHits[rule, default: 0] += 1 }
@@ -248,7 +248,7 @@ struct CommitBuilder {
       case .link(let existing, let keys):
         fingerprints += keys.map { ImportFingerprint(id: $0, txnID: existing.id) }
         summary.linked += 1
-        if existing.debtRecordID != nil { summary.debtRecordsMatched += 1 }
+        if DebtLegMatch.debt(of: existing, in: preview.debtBook) != nil { summary.debtRecordsMatched += 1 }
       case .convert(var existing, let shape):
         existing.type = .transfer
         existing.accountID = accountID(shape.from)
@@ -348,7 +348,7 @@ struct CommitBuilder {
     parts.append("\(s.created) new")
     if s.settled > 0 { parts.append("\(s.settled) settled") }
     if s.linked > 0 { parts.append("\(s.linked) linked") }
-    if s.debtRecords > 0 { parts.append(s.debtRecords == 1 ? "1 debt record" : "\(s.debtRecords) debt records") }
+    if s.debtRecords > 0 { parts.append(s.debtRecords == 1 ? "1 to a debt account" : "\(s.debtRecords) to debt accounts") }
     if s.alreadyImported > 0 { parts.append("\(s.alreadyImported) skipped") }
     if s.duplicatesSkipped > 0 {
       parts.append(s.duplicatesSkipped == 1 ? "1 possible duplicate skipped" : "\(s.duplicatesSkipped) possible duplicates skipped")

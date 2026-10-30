@@ -5,7 +5,7 @@ import SQLiteData
 /// Categorisation rules (R-IMP-8): "description contains X → category Y".
 public struct SQLiteRuleRepository: RuleRepository {
   public let database: any DatabaseWriter
-  /// Days of debt records created by a debt rule (R-DEBT-12).
+  /// Calendar for the days of the transfers a debt rule makes (R-DEBT-12).
   public let calendar: Calendar
 
   public init(database: any DatabaseWriter, calendar: Calendar = .current) {

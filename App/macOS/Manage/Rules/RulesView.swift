@@ -495,7 +495,7 @@ struct RuleEditorSheet: View {
       Picker("Action", selection: binding(\.action, .category)) {
         Text("Assign category").tag(RuleAction.category)
         Text("Transfer to/from account").tag(RuleAction.transfer)
-        Text("Record as debt for").tag(RuleAction.debt)
+        Text("Transfer to debt of").tag(RuleAction.debt)
       }
       .labelsHidden()
       .fixedSize()
@@ -532,7 +532,7 @@ struct RuleEditorSheet: View {
       }
     }
     if draft.action == .debt {
-      Text("The transaction becomes a debt record for this person: the person's debt in the account's currency (created when missing); money out is I lent (I repaid while you owe them), money in is They repaid (I borrowed while they owe you nothing).")
+      Text("The transaction becomes a transfer between the account and this person's virtual account in the account's currency (the debt and the account are created when missing). Money out means they owe you more, money in means they repaid (or you borrowed).")
         .font(.caption)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)

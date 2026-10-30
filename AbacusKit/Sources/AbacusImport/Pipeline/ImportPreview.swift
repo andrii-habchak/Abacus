@@ -171,37 +171,11 @@ public struct ImportPreview: Sendable {
     row(id).flatMap { currency(of: $0.account) }
   }
 
-  /// The debt's balance before the row (positive = they owe me): the stored records plus this
-  /// import's debt rows dated earlier. `debtID` nil = the person's debt in `currency` (none = 0).
-  public func debtBalance(person: String, currency: Currency, debtID: Debt.ID?, beforeRow id: String) -> Int64 {
-    let target = debtID ?? context.debts.debt(person: person)?.id
-    let key = Self.debtKey(person: person, currency: currency, debtID: target)
-    var balance = target.map { context.debts.balance(of: $0, currency: currency) } ?? 0
-    guard let position = index[id] else { return balance }
-    let day = rows[position].day
-    for (j, other) in rows.enumerated() where j != position {
-      guard let debt = other.debt, let amount = debt.amountMinor,
-        Self.debtKey(person: debt.personName, currency: debt.currency, debtID: debt.debtID ?? context.debts.debt(person: debt.personName)?.id) == key,
-        (other.day, j) < (day, position)
-      else { continue }
-      balance += debt.kind.balanceSign * amount
-    }
-    return balance
-  }
-
-  /// What the sheet starts with for `person`: the person's debt in the account's currency (or a
-  /// new one), the kind suggested from the money's direction and the debt's balance.
+  /// What the sheet starts with for `person`: the person's debt (or a new one) and its virtual
+  /// account in the row account's currency (created when missing).
   public func suggestedDebtChoice(forRow id: String, person: String) -> ImportDebtChoice? {
-    guard let row = row(id), let currency = accountCurrency(ofRow: id) else { return nil }
-    let debt = context.debts.debt(person: person)
-    let balance = debtBalance(person: person, currency: currency, debtID: debt?.id, beforeRow: id)
-    return ImportDebtChoice(
-      personName: person, debtID: debt?.id, currency: currency,
-      kind: .suggested(inflow: row.isInflow, balance: balance))
-  }
-
-  static func debtKey(person: String, currency: Currency, debtID: Debt.ID?) -> String {
-    debtID.map(\.uuidString) ?? "new|\(Debt.personKey(person))|\(currency.rawValue)"
+    guard let currency = accountCurrency(ofRow: id) else { return nil }
+    return ImportDebtChoice(personName: person, debtID: context.debts.debt(person: person)?.id, currency: currency)
   }
 
   public mutating func setDuplicateAction(_ action: DuplicateAction, forRow id: String) {
@@ -453,7 +427,6 @@ private struct Resolver {
       plans.append(plan)
     }
     learnRules()
-    assignRuleDebtKinds()
     checkConflicts()
   }
 
@@ -506,7 +479,8 @@ private struct Resolver {
       // R-DEBT-13: a debt record entered by hand for this payment; never a second transaction.
       row.status = .alreadyImported
       row.linkedDebtLeg = leg
-      row.detail = "Matches the debt record “\(leg.payee)” of \(dayText(leg.occurredAt))"
+      let person = DebtLegMatch.debt(of: leg, in: preview.debtBook)?.personName
+      row.detail = "Matches the transfer to the debt of \(person ?? "a person") entered on \(dayText(leg.occurredAt))"
       return (row, .link(leg, source.fingerprints))
     }
     if let reason = found.review {
@@ -696,32 +670,35 @@ private struct Resolver {
       case .debt:
         guard let person = rule.debtPerson else { continue }
         let debt = preview.context.debts.debt(person: person)
-        // The kind is set from the running balance once every row is resolved.
-        let inflow = (shape.type == .income) != shape.isRefund
-        let balance = debt.map { preview.context.debts.balance(of: $0.id, currency: currency) } ?? 0
-        let choice = ImportDebtChoice(
-          personName: person, debtID: debt?.id, currency: currency, kind: .suggested(inflow: inflow, balance: balance))
+        let choice = ImportDebtChoice(personName: person, debtID: debt?.id, currency: currency)
         return (choice, rule.id)
       }
     }
     return nil
   }
 
-  /// Makes the row's new transaction a debt record's leg: expense/income without category
-  /// (money keeps its direction), the record's amount in the debt's currency.
+  /// Makes the row's new transaction a transfer to the person's debt account: money keeps its
+  /// direction, no category, the person's side in the account's currency (R-DEBT-19).
   private mutating func applyDebt(
     _ choice: ImportDebtChoice, ruleID: CategoryRule.ID?, source: NormalizedRow, shape: inout TxnShape,
     row: inout PreviewRow
   ) {
-    let inflow = (shape.type == .income) != shape.isRefund
-    let currency = choice.currency
+    var currency = choice.currency
     var debtID = choice.debtID
-    if let id = debtID {
-      // R-DEBT-16: a debt has no currency; `currency` is the one of the person's account the
-      // payment goes to (the choice's, by default the row account's).
-      if preview.context.debts.debt(id) == nil {
-        debtID = nil
-        issues.append("“\(source.payee)”: the chosen debt no longer exists")
+    var accountID = choice.accountID
+    let book = preview.context.debts
+    if let id = debtID, book.debt(id) == nil {
+      debtID = nil
+      accountID = nil
+      issues.append("“\(source.payee)”: the chosen debt no longer exists")
+    }
+    if let id = accountID {
+      // A linked account of the chosen debt; its currency is the person's side.
+      if let account = book.accounts.first(where: { $0.id == id }), book.debtID(ofAccount: id) == debtID {
+        currency = account.currency
+      } else {
+        accountID = nil
+        issues.append("“\(source.payee)”: the chosen account is not an account of that debt")
       }
     }
     let accountCurrency = preview.currency(of: shape.from)
@@ -739,14 +716,11 @@ private struct Resolver {
     {
       amount = converted.minorUnits
     } else {
-      issues.append("“\(source.payee)”: the amount in \(currency.rawValue) is unknown; enter it in the debt record")
+      issues.append("“\(source.payee)”: the amount in \(currency.rawValue) is unknown; enter it in the debt dialog")
     }
-    let kind = DebtRecordKind.linkable(inflow: inflow).contains(choice.kind)
-      ? choice.kind : DebtRecordKind.suggested(inflow: inflow, balance: 0)
     let debt = PreviewDebt(
       personName: choice.personName.trimmingCharacters(in: .whitespacesAndNewlines), debtID: debtID,
-      currency: currency, kind: kind, countsInReports: choice.countsInReports && kind.offeredReportKind != nil,
-      amountMinor: amount, ruleID: ruleID)
+      accountID: accountID, currency: currency, amountMinor: amount, ruleID: ruleID)
     shape.category = nil
     shape.ruleID = ruleID
     shape.debt = debt
@@ -758,39 +732,14 @@ private struct Resolver {
     row.detail = debtDetail(debt)
   }
 
-  /// "I lent · Ann (new debt in EUR) · by rule “ann”".
+  /// "Transfer to debt · Ann (new debt) · by rule “ann”".
   private func debtDetail(_ debt: PreviewDebt) -> String {
-    var detail = "\(debt.kind.title) · \(debt.personName)"
-    if debt.createsDebt { detail += " (new debt in \(debt.currency.rawValue))" }
+    var detail = "Transfer to debt · \(debt.personName)"
+    if debt.createsDebt { detail += " (new debt)" }
     if let ruleID = debt.ruleID, let rule = preview.context.rules.first(where: { $0.id == ruleID }) {
       detail += " · by rule “\(rule.label)”"
     }
     return detail
-  }
-
-  /// R-DEBT-12: kinds of rule-made debt rows from the running balance of their debt (rows in
-  /// date order, this import's earlier debt rows included), so "lent, then repaid" in one file
-  /// gives I lent and They repaid.
-  private mutating func assignRuleDebtKinds() {
-    let order = plans.indices.filter { rows[$0].debt != nil }.sorted { (rows[$0].day, $0) < (rows[$1].day, $1) }
-    var running: [String: Int64] = [:]
-    for i in order {
-      guard var debt = rows[i].debt else { continue }
-      let id = debt.debtID ?? preview.context.debts.debt(person: debt.personName)?.id
-      let key = ImportPreview.debtKey(person: debt.personName, currency: debt.currency, debtID: id)
-      let balance = running[key] ?? id.map { preview.context.debts.balance(of: $0, currency: debt.currency) } ?? 0
-      if debt.ruleID != nil {
-        debt.kind = .suggested(inflow: rows[i].isInflow, balance: balance)
-        debt.countsInReports = false
-        rows[i].debt = debt
-        rows[i].detail = debtDetail(debt)
-        if case .create(var shape) = plans[i] {
-          shape.debt = debt
-          plans[i] = .create(shape)
-        }
-      }
-      running[key] = balance + debt.kind.balanceSign * (debt.amountMinor ?? 0)
-    }
   }
 
   /// A user pick on a row the file and the rules left without a category becomes a rule.

@@ -70,7 +70,7 @@ public final class ImportWizardModel {
   /// Display values, rebuilt after every change of the preview.
   public private(set) var rowItems: [ImportRowItem] = []
   public private(set) var reviewItems: [ImportReviewItem] = []
-  /// The "Debt record" sheet of a row (R-DEBT-10); nil when closed.
+  /// The "Transfer to debt account" sheet of a row (R-DEBT-10); nil when closed.
   public var debtDraft: DebtLinkDraft?
   /// The row the sheet records.
   public private(set) var debtDraftRowID: String?
@@ -333,10 +333,10 @@ public final class ImportWizardModel {
     update { $0.setReviewChoice(.transfer(accountID: accountID), forRow: id) }
   }
 
-  // MARK: Debt records (R-DEBT-10, docs/status/C17.md)
+  // MARK: Transfer to a debt account (R-DEBT-10, R-DEBT-19, docs/status/C22.md)
 
   /// Opens the debt sheet for a row (a new expense/income or a Needs review row), starting from
-  /// its current debt record or the person's debt in the account's currency.
+  /// its current choice or the person's debt and virtual account in the account's currency.
   public func openDebt(forRow id: String) async {
     guard let preview, let row = preview.row(id), row.canRecordDebt,
       let currency = preview.accountCurrency(ofRow: id)
@@ -354,28 +354,27 @@ public final class ImportWizardModel {
     } else if let original = row.source.original, let other = Currency(rawValue: original.currencyCode) {
       converted[other] = original.minorUnits
     }
-    // Earlier debt rows of this file move the balance the kind is suggested from.
     let book = preview.debtBook
-    var pending: [String: Int64] = [:]
-    if let position = preview.rows.firstIndex(where: { $0.id == id }) {
-      for (j, other) in preview.rows.enumerated() where j != position {
-        guard let debt = other.debt, let amount = debt.amountMinor, (other.day, j) < (row.day, position) else { continue }
-        let debtID = debt.debtID ?? book.debt(person: debt.personName)?.id
-        pending[DebtLinkDraft.key(person: debt.personName, currency: debt.currency, debtID: debtID), default: 0] +=
-          debt.kind.balanceSign * amount
-      }
-    }
     let existing = row.debt
-    let option: DebtLinkDraft.DebtOption? = existing.map { debt in
-      debt.debtID.map { .existing($0) } ?? .new(debt.currency)
+    var account: DebtLinkDraft.AccountOption?
+    if let existing {
+      if let id = existing.accountID {
+        account = .existing(id)
+      } else if let debtID = existing.debtID,
+        let virtual = DebtLinkDraft.virtualAccount(in: book, debtID: debtID, currency: existing.currency)
+      {
+        account = .existing(virtual.id)
+      } else {
+        account = .newVirtual
+      }
     }
     debtDraftRowID = id
     debtDraft = DebtLinkDraft(
-      title: row.source.payee.isEmpty ? "Debt record" : "Debt record: “\(row.source.payee)”",
+      title: row.source.payee.isEmpty ? "Transfer to debt account" : "Transfer “\(row.source.payee)” to a debt account",
       subtitle: "\(format.amount(row.amountMinor, currency.rawValue, inflow: row.isInflow)) on \(preview.name(of: row.account)) · \(format.day(row.day))",
       inflow: row.isInflow, accountCurrency: currency, accountAmountMinor: row.amountMinor, book: book,
-      pendingEffects: pending, convertedAmounts: converted, personName: existing?.personName ?? "", debt: option,
-      kind: existing?.kind, countsInReports: existing?.countsInReports ?? false,
+      convertedAmounts: converted, personName: existing?.personName ?? "", account: account,
+      newAccountCurrency: existing?.currency,
       amountMinor: existing.flatMap { $0.currency == currency ? nil : $0.amountMinor })
   }
 
@@ -384,15 +383,15 @@ public final class ImportWizardModel {
     debtDraftRowID = nil
   }
 
-  /// Saves the sheet: the row becomes a debt record on commit (Needs review rows: their
+  /// Saves the sheet: the row becomes a transfer to the person's account on commit (Needs review rows: their
   /// decision). Takes the draft the sheet showed (SwiftUI may clear the binding first).
   public func saveDebt(_ draft: DebtLinkDraft? = nil) {
     guard let draft = draft ?? debtDraft, let id = debtDraftRowID, let link = draft.link else { return }
     debtDraft = nil
     debtDraftRowID = nil
     let choice = ImportDebtChoice(
-      personName: link.personName, debtID: link.debtID, currency: link.currency ?? draft.debtCurrency, kind: draft.kind,
-      countsInReports: draft.countsInReports && draft.flagTitle != nil, amountMinor: link.amountMinor)
+      personName: link.personName, debtID: link.debtID, accountID: link.accountID,
+      currency: link.currency ?? draft.personCurrency, amountMinor: link.amountMinor)
     let isReview = preview?.row(id)?.review != nil
     update { preview in
       if isReview {
@@ -403,7 +402,7 @@ public final class ImportWizardModel {
     }
   }
 
-  /// "Not a debt record": back to an ordinary row (also against a "Record as debt" rule); a
+  /// "Not a debt": back to an ordinary row (also against a "Transfer to debt" rule); a
   /// Needs review row loses its decision.
   public func removeDebt(forRow id: String) {
     let isReview = preview?.row(id)?.review != nil

@@ -284,7 +284,7 @@ struct ImportReviewCard: View {
       .fixedSize()
     case .debt:
       HStack(spacing: 6) {
-        Text(item.debtLabel ?? "Debt record").font(.system(size: 12)).lineLimit(1)
+        Text(item.debtLabel ?? "Transfer to debt").font(.system(size: 12)).lineLimit(1)
         Button("Edit…") { Task { await model.openDebt(forRow: item.id) } }
           .buttonStyle(.link)
           .font(.system(size: 11))

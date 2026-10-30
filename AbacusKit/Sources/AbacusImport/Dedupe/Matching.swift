@@ -106,16 +106,29 @@ public enum FuzzyDuplicate {
   }
 }
 
-/// A bank row for a payment already recorded by hand as a debt record (R-DEBT-13): the
-/// record's leg on an account the row touches, same amount in the account's currency, same
-/// direction, at most three days apart, any description. The leg must come from another source
-/// than the row: a leg made from this bank's own row carries its fingerprint (an exact match),
-/// and two equal repayments a day apart must not swallow each other.
+/// A bank row for a payment already entered as a transfer to a person's account (R-DEBT-13,
+/// R-DEBT-19): a transfer between one of my accounts and a linked account of a debt, on the
+/// account the row touches, same amount in that account's currency, same direction, at most
+/// three days apart, any description. The transfer must come from another source than the row: one
+/// made from this bank's own row carries its fingerprint (an exact match), and two equal
+/// payments a day apart must not swallow each other.
 public enum DebtLegMatch {
   public static let dayWindow = 3
 
-  public static func matches(rowSource: ImportSource, rowDay: Day, candidate: Txn, candidateDay: Day, calendar: Calendar) -> Bool {
-    guard candidate.debtRecordID != nil, candidate.source.rawValue != rowSource.rawValue else { return false }
+  /// The debt a transfer moves money to or from: one side is a linked account of a debt, the
+  /// other is not (mine). Nil for anything else.
+  public static func debt(of txn: Txn, in book: DebtBook) -> Debt? {
+    guard txn.type == .transfer, let toAccountID = txn.toAccountID else { return nil }
+    let from = book.debtID(ofAccount: txn.accountID)
+    let to = book.debtID(ofAccount: toAccountID)
+    guard (from == nil) != (to == nil), let id = from ?? to else { return nil }
+    return book.debt(id)
+  }
+
+  public static func matches(
+    rowSource: ImportSource, rowDay: Day, candidate: Txn, candidateDay: Day, book: DebtBook, calendar: Calendar
+  ) -> Bool {
+    guard debt(of: candidate, in: book) != nil, candidate.source.rawValue != rowSource.rawValue else { return false }
     return abs(rowDay.distance(to: candidateDay, calendar: calendar)) <= dayWindow
   }
 }

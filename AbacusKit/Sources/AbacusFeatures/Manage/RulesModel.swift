@@ -68,7 +68,7 @@ public struct RuleDraft: Equatable, Sendable {
   public var action: RuleAction
   public var categoryID: AbacusDomain.Category.ID?
   public var transferAccountID: Account.ID?
-  /// "Record as debt for <person>" (R-DEBT-12).
+  /// "Transfer to debt of <person>" (R-DEBT-12).
   public var debtPersonName: String
   /// Apply the rule to matching existing transactions on save (R-MGMT-6).
   public var updateExisting: Bool
@@ -186,6 +186,9 @@ public final class RulesModel {
   public private(set) var categories: [AbacusDomain.Category] = []
   /// People with debts: the debt action's name suggestions (R-DEBT-12).
   public private(set) var debtPeople: [String] = []
+  /// Debts, their accounts and transactions: what a debt rule's "will change" count skips and
+  /// where it sends the money (R-DEBT-12/19).
+  public private(set) var debtBook: DebtBook = .empty
   /// Page search (R-MGMT-11): the rule in words (condition and action).
   public var searchText = ""
   /// Only rules assigning this category or one of its subcategories (R-MGMT-11); nil = all.
@@ -220,7 +223,8 @@ public final class RulesModel {
       accounts = try await dependencies.accounts.accounts(includeArchived: true)
       accountGroups = (try? await dependencies.accounts.groups()) ?? []
       categories = try await dependencies.categories.categories(kind: nil, includeArchived: true)
-      debtPeople = (try? await dependencies.debts?.book().personNames) ?? []
+      debtBook = (try? await dependencies.debts?.book()) ?? .empty
+      debtPeople = debtBook.personNames
       if let selection, !rules.contains(where: { $0.id == selection }) { self.selection = nil }
       if let categoryFilter, !categories.contains(where: { $0.id == categoryFilter }) { self.categoryFilter = nil }
       phase = .loaded
@@ -267,7 +271,7 @@ public final class RulesModel {
     case .transfer:
       return "Transfer to/from \(rule.transferAccountID.map(accountName) ?? "no account")"
     case .debt:
-      return "Debt record for \(rule.debtPerson ?? "no one")"
+      return "Transfer to debt of \(rule.debtPerson ?? "no one")"
     }
   }
 
@@ -408,10 +412,10 @@ public final class RulesModel {
     }
   }
 
-  /// Loads every transaction for the "will change" count (each time the editor opens). Debt
-  /// legs are left out: rules never change them (R-DEBT-3, they follow their record).
+  /// Loads every transaction for the "will change" count (each time the editor opens).
   public func loadEditorTransactions() async {
-    editorTransactions = try? await dependencies.allTransactions().filter { $0.txn.debtRecordID == nil }
+    editorTransactions = try? await dependencies.allTransactions()
+    if let book = try? await dependencies.debts?.book() { debtBook = book }
   }
 
   /// Loads what the edited rule changed before (the editor's "Roll back").
@@ -504,7 +508,7 @@ public final class RulesModel {
   /// The existing transactions the editor's rule would change (nil while loading or invalid).
   public var editorChanges: [Txn]? {
     guard let rule = editorRule, let editorTransactions else { return nil }
-    return RuleEffect.changes(rule, in: editorTransactions, accounts: accounts, categories: categories)
+    return RuleEffect.changes(rule, in: editorTransactions, accounts: accounts, categories: categories, debts: debtBook)
   }
 
   /// "Update existing transactions" caption: "3 transactions will change" / "No existing
@@ -546,8 +550,8 @@ public final class RulesModel {
           let name = rule.transferAccountID.map(accountName) ?? ""
           message += "\(them) will become \(changes.count == 1 ? "a transfer" : "transfers") to or from \(name). "
         case .debt:
-          message += "\(them) will become debt record\(changes.count == 1 ? "" : "s") for \(rule.debtPerson ?? ""), "
-            + "in the person's debt in each account's currency. "
+          message += "\(them) will become \(changes.count == 1 ? "a transfer" : "transfers") to the debt of \(rule.debtPerson ?? ""), "
+            + "to their virtual account in each account's currency (created when missing). "
         }
         message += "Transfers are never changed. You can roll this back later in the rule's editor."
         confirmation = RuleApplyConfirmation(
