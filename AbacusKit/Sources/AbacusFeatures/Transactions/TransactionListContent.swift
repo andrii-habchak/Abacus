@@ -97,6 +97,33 @@ public struct TransactionListContent: Equatable, Sendable {
     public var rows: [Row]
   }
 
+  public struct DayHeader: Hashable, Sendable {
+    public var day: Day
+    public var title: String
+    public var netText: String
+  }
+
+  /// One line of the flat list.
+  public enum Item: Identifiable, Hashable, Sendable {
+    public enum ID: Hashable, Sendable {
+      case day(Day)
+      case transaction(Txn.ID)
+      case line(AttachedRecord.ID)
+    }
+
+    case header(DayHeader)
+    case row(Row)
+    case line(Line)
+
+    public var id: ID {
+      switch self {
+      case .header(let header): .day(header.day)
+      case .row(let row): .transaction(row.id)
+      case .line(let line): .line(line.id)
+      }
+    }
+  }
+
   public struct Totals: Hashable, Sendable {
     public var count: Int
     public var income: Money
@@ -109,6 +136,10 @@ public struct TransactionListContent: Equatable, Sendable {
   }
 
   public var days: [DaySection]
+  /// The same content as one flat list (day header, its rows, each row's attached records): the
+  /// list view shows this, because a nested `ForEach` costs SwiftUI far more per row to diff when a
+  /// page is appended (C28).
+  public var items: [Item]
   public var totals: Totals
   public var incomeText: String
   public var expenseText: String
@@ -142,7 +173,8 @@ public struct TransactionListContent: Equatable, Sendable {
     self = builder.content(rows: rows)
   }
 
-  fileprivate init(days: [DaySection], totals: Totals, format: TransactionMoneyFormat) {
+  fileprivate init(days: [DaySection], items: [Item] = [], totals: Totals, format: TransactionMoneyFormat) {
+    self.items = items
     self.days = days
     self.totals = totals
     incomeText = format.string(totals.income)
@@ -245,11 +277,13 @@ public struct TransactionListContent: Equatable, Sendable {
           content.days[last].rows.append(row)
         } else {
           let net = dayNets[day] ?? .zero(displayCurrency)
-          content.days.append(
-            DaySection(
-              day: day, title: titles.title(day), net: net, netText: format.string(net, sign: .always),
-              rows: [row]))
+          let title = titles.title(day)
+          let netText = format.string(net, sign: .always)
+          content.days.append(DaySection(day: day, title: title, net: net, netText: netText, rows: [row]))
+          content.items.append(.header(DayHeader(day: day, title: title, netText: netText)))
         }
+        content.items.append(.row(row))
+        for line in row.lines { content.items.append(.line(line)) }
       }
     }
   }

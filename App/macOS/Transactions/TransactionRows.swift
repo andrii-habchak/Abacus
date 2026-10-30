@@ -21,7 +21,7 @@ struct TransactionColumnHeader: View {
 
 /// "Wednesday, 21 October" with the day's net on the right.
 struct TransactionDayHeader: View {
-  let day: TransactionListContent.DaySection
+  let day: TransactionListContent.DayHeader
 
   var body: some View {
     HStack(alignment: .firstTextBaseline) {

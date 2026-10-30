@@ -32,8 +32,9 @@ public final class TransactionsViewModel {
   /// More rows of the filtered set than `rows` holds.
   public var hasMoreRows: Bool { !exhausted && rows.count < summary.count }
   public private(set) var isLoadingMore = false
-  /// The row whose appearance loads the next page (about 100 rows before the end).
-  public private(set) var loadMoreTriggerID: Txn.ID?
+  /// The last rows loaded (about 100): when any of them appears the next page loads. A set, not one
+  /// row: dragging the scroller can jump past a single trigger row without realising it.
+  public private(set) var loadMoreTriggerIDs: Set<Txn.ID> = []
   @ObservationIgnored private var exhausted = false
   @ObservationIgnored private var builder: TransactionListContent.Builder?
   /// Per dimension, how many rows each value has under the other filters (cascading filters,
@@ -214,17 +215,17 @@ public final class TransactionsViewModel {
 
   /// The list calls this when a row appears: the trigger row loads the next page.
   public func rowAppeared(_ id: Txn.ID) {
-    guard id == loadMoreTriggerID else { return }
+    guard loadMoreTriggerIDs.contains(id) else { return }
     Task { await loadMore() }
   }
 
   private func updateLoadMoreTrigger() {
     guard hasMoreRows, !rows.isEmpty else {
-      loadMoreTriggerID = nil
+      loadMoreTriggerIDs = []
       return
     }
     let lead = max(1, min(100, pageSize / 5))
-    loadMoreTriggerID = rows[max(0, rows.count - lead)].txn.id
+    loadMoreTriggerIDs = Set(rows.suffix(lead).map(\.txn.id))
   }
 
   /// The repository query of the current filters (nil: no type is on, nothing matches).
