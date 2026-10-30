@@ -59,6 +59,12 @@ public struct TransactionFilters: Hashable, Sendable {
   /// `categoryIDs` (dashboard drill-down, R-HOME-3).
   public var includeUncategorised: Bool
   public var accountIDs: Set<Account.ID>
+  /// Selected debts (R-DEBT-22). A debt stands for its linked accounts, which sit in `accountIDs`
+  /// as removable entries; the debt stays selected when the user un-ticks one of them.
+  public var debtIDs: Set<Debt.ID>
+  /// The accounts each selected debt added to `accountIDs` (not accounts the user had selected
+  /// on their own): clearing the debt removes exactly these.
+  public var debtAccountIDs: [Debt.ID: Set<Account.ID>]
   /// Type toggles; all three on by default. None on matches nothing.
   public var types: Set<TxnType>
   public var eventID: Event.ID?
@@ -74,8 +80,11 @@ public struct TransactionFilters: Hashable, Sendable {
     dateRange: DateRange = .preset(.last30Days), categoryIDs: Set<AbacusDomain.Category.ID> = [],
     accountIDs: Set<Account.ID> = [], types: Set<TxnType> = Set(TxnType.allCases),
     eventID: Event.ID? = nil, search: String = "", newestFirst: Bool = true,
-    includeUncategorised: Bool = false, importBatch: ImportBatch? = nil
+    includeUncategorised: Bool = false, importBatch: ImportBatch? = nil, debtIDs: Set<Debt.ID> = [],
+    debtAccountIDs: [Debt.ID: Set<Account.ID>] = [:]
   ) {
+    self.debtIDs = debtIDs
+    self.debtAccountIDs = debtAccountIDs
     self.dateRange = dateRange
     self.categoryIDs = categoryIDs
     self.includeUncategorised = includeUncategorised
@@ -121,6 +130,14 @@ public struct TransactionFilters: Hashable, Sendable {
     TransactionFilters(dateRange: allDates, importBatch: batch)
   }
 
+  /// A debt's "Show transactions" (R-DEBT-22): the debt selected with all its linked accounts as
+  /// account entries, any date.
+  public static func debt(_ id: Debt.ID, accountIDs: Set<Account.ID>) -> TransactionFilters {
+    var filters = TransactionFilters(dateRange: allDates)
+    filters.addDebt(id, accountIDs: accountIDs)
+    return filters
+  }
+
   // MARK: State
 
   /// Whether anything other than the sort order differs from the default ("Clear filters").
@@ -158,9 +175,39 @@ public struct TransactionFilters: Hashable, Sendable {
     if types.contains(type) { types.remove(type) } else { types.insert(type) }
   }
 
+  /// Un-ticking an account that a debt added keeps the debt selected (R-DEBT-22); ticking it
+  /// again makes it an independent selection.
   public mutating func toggleAccount(_ id: Account.ID) {
-    if accountIDs.contains(id) { accountIDs.remove(id) } else { accountIDs.insert(id) }
+    if accountIDs.contains(id) {
+      accountIDs.remove(id)
+      for debt in debtAccountIDs.keys { debtAccountIDs[debt]?.remove(id) }
+    } else {
+      accountIDs.insert(id)
+    }
   }
+
+  /// R-DEBT-22: selects the debt and expands it to its accounts. Accounts the user had already
+  /// selected stay theirs (clearing the debt does not remove them).
+  public mutating func addDebt(_ id: Debt.ID, accountIDs linked: Set<Account.ID>) {
+    debtIDs.insert(id)
+    debtAccountIDs[id] = linked.subtracting(accountIDs)
+    accountIDs.formUnion(linked)
+  }
+
+  /// R-DEBT-22: clears the debt and removes the account entries it added, not those selected
+  /// independently.
+  public mutating func removeDebt(_ id: Debt.ID) {
+    debtIDs.remove(id)
+    accountIDs.subtract(debtAccountIDs[id] ?? [])
+    debtAccountIDs[id] = nil
+  }
+
+  /// Account entries that came from a debt and are still selected.
+  public var debtAddedAccountIDs: Set<Account.ID> {
+    debtAccountIDs.values.reduce(into: Set<Account.ID>()) { $0.formUnion($1) }.intersection(accountIDs)
+  }
+
+  public var isDebtFiltered: Bool { !debtIDs.isEmpty }
 
   // MARK: Query
 
@@ -169,6 +216,8 @@ public struct TransactionFilters: Hashable, Sendable {
   /// repository expands parents to their children (`TxnQuery.categoryIDs`).
   public func query(today: Day, calendar: Calendar = .current) -> TxnQuery? {
     guard !types.isEmpty else { return nil }
+    // A debt with every account entry un-ticked (or no linked account) matches nothing, not all.
+    if !debtIDs.isEmpty && accountIDs.isEmpty { return nil }
     let days = days(today: today, calendar: calendar)
     return TxnQuery(
       fromDay: days.lowerBound, toDay: days.upperBound, categoryIDs: categoryIDs,

@@ -48,6 +48,9 @@ public final class TransactionsViewModel {
   /// A conversion changed balances: the dashboard and other screens re-read.
   @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
 
+  /// Debts the debt filter offers (R-DEBT-22), A–Z; loaded by `loadDebtOptions()`.
+  public private(set) var debtOptions: [DebtFilterOption] = []
+
   public init(
     transactions: any TxnRepository, accounts: any AccountRepository,
     categories: any CategoryRepository, events: any EventRepository,
@@ -116,6 +119,7 @@ public final class TransactionsViewModel {
     hasUncategorised =
       (try? await transactions.transactions(matching: TxnQuery(includeUncategorised: true)).isEmpty == false)
       ?? false
+    if !filters.debtIDs.isEmpty { await loadDebtOptions() }
     await reload()
   }
 
@@ -309,4 +313,78 @@ public final class TransactionsViewModel {
     await reload()
     await onDataChange?()
   }
+
+  // MARK: Debt filter (R-DEBT-22, docs/status/C21.md)
+
+  /// The debt filter is offered when the model has a debt repository.
+  public var offersDebtFilter: Bool { debts != nil }
+
+  /// Reads the debts and their linked account ids (no per-row lookups: the account set of a debt
+  /// is computed once here). Safe to call repeatedly; keeps the old options when the read fails.
+  public func loadDebtOptions() async {
+    guard let debts, let book = try? await debts.book() else { return }
+    let ids = Dictionary(grouping: book.links, by: \.debtID).mapValues { Set($0.map(\.accountID)) }
+    debtOptions = book.debts
+      .map { DebtFilterOption(id: $0.id, name: $0.personName, accountIDs: ids[$0.id] ?? [], isSettled: $0.isSettled) }
+      .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
+
+  /// The options whose name contains `text` (case and diacritics ignored); all for blank text.
+  public func debtOptions(matching text: String) -> [DebtFilterOption] {
+    let needle = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !needle.isEmpty else { return debtOptions }
+    return debtOptions.filter { $0.name.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+  }
+
+  /// Ticks or un-ticks a debt: its linked accounts appear as (or leave) the account entries.
+  public func toggleDebt(_ id: Debt.ID) {
+    if filters.debtIDs.contains(id) {
+      filters.removeDebt(id)
+    } else if let option = debtOptions.first(where: { $0.id == id }) {
+      filters.addDebt(id, accountIDs: option.accountIDs)
+    }
+  }
+
+  public func isDebtChecked(_ id: Debt.ID) -> Bool { filters.debtIDs.contains(id) }
+
+  public func debtName(_ id: Debt.ID) -> String { debtOptions.first { $0.id == id }?.name ?? "Unknown" }
+
+  /// "All debts", "Debt: <name>", or "N debts".
+  public var debtLabel: String {
+    switch filters.debtIDs.count {
+    case 0: "All debts"
+    case 1: filters.debtIDs.first.map { "Debt: " + debtName($0) } ?? "1 debt"
+    default: "\(filters.debtIDs.count) debts"
+    }
+  }
+
+  /// Selected debts, A–Z, for the removable debt chips.
+  public var selectedDebts: [DebtFilterOption] { debtOptions.filter { filters.debtIDs.contains($0.id) } }
+
+  /// Account entries added by a debt and still selected, A–Z, for the removable account chips.
+  public var debtAccountChips: [Account] {
+    filters.debtAddedAccountIDs.compactMap { reference.accountsByID[$0] }.sorted {
+      $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+    }
+  }
+
+  /// Removes one account entry; its debt stays selected.
+  public func removeAccountEntry(_ id: Account.ID) { filters.toggleAccount(id) }
+
+  /// Filters for "Show transactions" of a debt: every date, the debt and its accounts selected.
+  /// Nil when the debt is unknown or there is no debt repository.
+  public func filters(showingDebt id: Debt.ID) async -> TransactionFilters? {
+    await loadDebtOptions()
+    guard let option = debtOptions.first(where: { $0.id == id }) else { return nil }
+    return .debt(id, accountIDs: option.accountIDs)
+  }
+}
+
+/// One debt in the debt filter's picker.
+public struct DebtFilterOption: Hashable, Identifiable, Sendable {
+  public let id: Debt.ID
+  public let name: String
+  /// The debt's linked accounts (R-DEBT-17).
+  public let accountIDs: Set<Account.ID>
+  public let isSettled: Bool
 }
