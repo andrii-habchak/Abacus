@@ -2,6 +2,33 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.5.1] — Unreleased
+
+Opening this version updates the database (migration v16: estimated transfer amounts and import snapshots);
+back up `abacus.sqlite` first.
+
+### Added
+
+- Import: a transfer between your own accounts in different currencies can now be made from a row whose
+  received amount is unknown: "Find the other side…" lists transactions of the other account within
+  5 days (ranked by the rate), or type the received amount, or estimate it at the NBU rate (shown as
+  "estimated amount"). Choosing an existing transaction absorbs it into one transfer; undo restores it.
+  A later import row matching an estimated transfer is offered as its other side and completes it.
+- Every account picker has search (name, currency, group), including the Transactions "Accounts" filter.
+- Categories: the Re-assign target has search and offers the built-in "Uncategorised (no category)".
+
+### Changed
+
+- Import: "Needs review" holds the rows to decide and the rows needing a category (All / Decisions /
+  Categories); the separate "Category assignment" tab is gone; the tab and card show the total.
+- Import: a rule whose category kind matches the sign resolves an "Unknown operation type" row on its
+  own instead of sending it to Needs review. The bulk Category is a searchable picker.
+- The Edit rule sheet is laid out at a fixed width (the title and checkbox were clipped).
+
+### Fixed
+
+- Import: clicking, Cmd+clicking or Shift+clicking anywhere on a Needs review card selects it.
+
 ## [1.5.0] — Unreleased
 
 Opening this version updates the database (migration v15: refund links); back up `abacus.sqlite` first.

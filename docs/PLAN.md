@@ -175,6 +175,10 @@ Owner paths per lane (no edits outside them; contract changes through the orches
 - [x] **C33 Categories actions** (merged 2026-10-30) — Show all transactions, Re-assign, import filter chip.
 - [x] **C34 Searchable category picker** (merged 2026-10-30) — shared control and search everywhere.
 - [x] **C35 Import refund suggestion** (merged 2026-10-30) — "Looks like a refund of …" with Accept / Choose another / Not a refund.
+- [x] **C36 Import review fixes** (merged 2026-10-31) — card selection, merged Needs review tab, rules resolve unknown types.
+- [x] **C37 Account picker** (merged 2026-10-31) — searchable account pickers, Edit rule sheet layout.
+- [x] **C38 Transfer counterpart** (merged 2026-10-31; migration v16) — other side of own-account transfers, estimates.
+- [x] **C39 Re-assign picker** (merged 2026-10-31) — search and built-in Uncategorised target.
 
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
 - [x] **S1 Stability and performance** (merged 2026-10-27) — crashes (binding force-unwrap, Escape), hangs, reload storms, timing on owner-size data.

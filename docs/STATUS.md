@@ -4,14 +4,13 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
-_Updated 2026-10-30 (orchestrator, latest)._ **1.5.0 is on `main`** (build 10, not tagged): C30 refund links
-(migration v15), C31 import bulk assignment and Category assignment tab, C32 rules editor (kind select, debt
-picker), C33 categories actions and import chip, C34 searchable category picker, C35 refund suggestion in
-import. Gate green (swift test with real samples, app build); the large-data timing test can flake in a full
-parallel run, rerun it alone. Not checked visually: all new sheets, popovers, bulk bar, import refund controls.
-Back up `abacus.sqlite` first. Open: no badge for correction transactions; debt edit form can still save
-"settled" without the archive prompt; headless `abacus-import` never links refunds; a rule "Transfer to debt"
-whose debt is gone is skipped (no auto-create).
+_Updated 2026-10-31 (orchestrator, latest)._ **1.5.1 is on `main`** (build 11, not tagged): C36 import review
+(selection fix, merged Needs review tab, rules resolve unknown types), C37 searchable account pickers and Edit
+rule layout, C38 own-account transfer counterparts (migration v16), C39 re-assign search and built-in target.
+Gate green (swift test with real samples, app build); the large-data timing test can flake in a full parallel
+run, rerun it alone. Not checked visually: all new sheets, pickers, segmented control, counterpart sheet.
+Back up `abacus.sqlite` first. Open: no badge for correction transactions; headless `abacus-import` neither
+links refunds nor offers counterparts; undoing the batch that created an absorbed transaction deletes the transfer.
 
 _Updated 2026-10-30 (orchestrator, earlier)._ **1.4.1 is on `main`** (build 8, not tagged): owner-test fixes C24–C27
 on top of 1.4.0 (debt filter freeze and chips, one total on widget and rows, Edit debt sheet, debt link on
