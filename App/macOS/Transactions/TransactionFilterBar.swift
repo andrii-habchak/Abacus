@@ -17,7 +17,7 @@ struct TransactionFilterBar: View {
   @State private var debtSearch = ""
   @State private var categorySearch = ""
 
-  enum Popover: Hashable { case date, categories, accounts, debts, types, event, importBatch }
+  enum Popover: Hashable { case date, categories, accounts, debts, types, event }
 
   /// Below this width the full labels do not fit next to each other.
   private static let compactBelow: CGFloat = 1_120
@@ -47,7 +47,7 @@ struct TransactionFilterBar: View {
       chip(.types, active: model.filters.isTypeFiltered, label: labels.types)
       chip(.event, active: model.filters.eventID != nil, label: labels.event)
       if model.filters.importBatch != nil {
-        chip(.importBatch, active: true, label: labels.importFile, systemImage: "square.and.arrow.down")
+        importChip(label: labels.importFile)
       }
       Spacer(minLength: 12)
       if model.filters.hasActiveFilters {
@@ -81,6 +81,26 @@ struct TransactionFilterBar: View {
     .popover(isPresented: isOpen(popover), arrowEdge: .bottom) { content(for: popover) }
   }
 
+  /// "Import: <file> · <date>" (R-IMP-6, C33): a single closable chip like the debt one used to be,
+  /// with no menu; the × removes only the import filter, the other filters stay.
+  private func importChip(label: String) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: "square.and.arrow.down").font(.system(size: 12))
+      Text(label).lineLimit(1).truncationMode(.middle)
+      Button {
+        model.clearImportFilter()
+      } label: {
+        Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+      }
+      .buttonStyle(.plain)
+      .help("Show all transactions, not only this import")
+      .accessibilityLabel("Remove the import filter")
+    }
+    .fixedSize()
+    .modifier(TxnChipLook(isActive: true))
+    .accessibilityElement(children: .contain)
+  }
+
   private func isOpen(_ popover: Popover) -> Binding<Bool> {
     Binding(get: { open == popover }, set: { if !$0, open == popover { open = nil } })
   }
@@ -112,7 +132,6 @@ struct TransactionFilterBar: View {
     case .debts: debtsPopover
     case .types: typesPopover
     case .event: eventPopover
-    case .importBatch: importPopover
     }
   }
 
@@ -379,19 +398,5 @@ struct TransactionFilterBar: View {
     }
     .padding(6)
     .frame(width: 230)
-  }
-
-  /// "Import: <file> · <date>" (R-IMP-6): the menu removes only this filter.
-  private var importPopover: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(model.importLabel ?? "Import").font(.system(size: 12)).foregroundStyle(.secondary)
-      Button("Show all transactions, not only this import") {
-        model.clearImportFilter()
-        open = nil
-      }
-      .buttonStyle(TxnMenuItemStyle(isChosen: false))
-    }
-    .padding(10)
-    .frame(width: 300)
   }
 }

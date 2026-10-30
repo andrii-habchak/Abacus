@@ -99,6 +99,63 @@ public struct SQLiteCategoryRepository: CategoryRepository {
     }
   }
 
+  /// The category and, for a parent, its subcategories: the rows "Re-assign…" moves (C33).
+  private static func sourceIDs(of id: AbacusDomain.Category.ID, _ db: Database) throws -> [AbacusDomain.Category.ID] {
+    [id] + (try AbacusDomain.Category.where { $0.parentID.eq(id) }.fetchAll(db).map(\.id))
+  }
+
+  private static func impact(of ids: [AbacusDomain.Category.ID], _ db: Database) throws -> CategoryReassignImpact {
+    let set = Set(ids)
+    let optional = set.map(Optional.some)
+    return CategoryReassignImpact(
+      transactions: try Txn.where { $0.categoryID.in(optional) }.fetchCount(db),
+      attachedRecords: try AttachedRecord.where { $0.categoryID.in(optional) }.fetchCount(db),
+      rules: try CategoryRule.where { $0.categoryID.in(optional) }.fetchCount(db),
+      importMappings: try ImportMapping.where { $0.kind.eq(MappingKind.category) && $0.targetID.in(set) }.fetchCount(db),
+      budgetLimits: try BudgetAllocation.where { $0.categoryID.in(set) }.fetchCount(db))
+  }
+
+  public func reassignImpact(of id: AbacusDomain.Category.ID) async throws -> CategoryReassignImpact {
+    try await database.read { db in
+      guard try AbacusDomain.Category.find(id).fetchOne(db) != nil else { throw RepositoryError.notFound }
+      return try Self.impact(of: try Self.sourceIDs(of: id, db), db)
+    }
+  }
+
+  @discardableResult
+  public func reassign(
+    from id: AbacusDomain.Category.ID, to target: AbacusDomain.Category.ID, repointRules: Bool, archiveAfterwards: Bool
+  ) async throws -> CategoryReassignImpact {
+    try await database.write { db in
+      guard let source = try AbacusDomain.Category.find(id).fetchOne(db),
+        let targetCategory = try AbacusDomain.Category.find(target).fetchOne(db)
+      else { throw RepositoryError.notFound }
+      guard targetCategory.kind == source.kind else { throw RepositoryError.kindMismatch }
+      let ids = try Self.sourceIDs(of: id, db)
+      guard !ids.contains(target) else { throw RepositoryError.invalidReassignTarget }
+      let set = Set(ids)
+      let optional = set.map(Optional.some)
+      var moved = try Self.impact(of: ids, db)
+      try Txn.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(Optional(target)) }.execute(db)
+      try AttachedRecord.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(Optional(target)) }.execute(db)
+      if repointRules {
+        try CategoryRule.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(target) }.execute(db)
+        try ImportMapping
+          .where { $0.kind.eq(MappingKind.category) && $0.targetID.in(set) }
+          .update { $0.targetID = target }
+          .execute(db)
+      } else {
+        moved.rules = 0
+        moved.importMappings = 0
+      }
+      if archiveAfterwards {
+        try AbacusDomain.Category.find(id).update { $0.isArchived = true }.execute(db)
+        try AbacusDomain.Category.where { $0.parentID.eq(id) }.update { $0.isArchived = true }.execute(db)
+      }
+      return moved
+    }
+  }
+
   private static func reassign(
     from id: AbacusDomain.Category.ID, to target: AbacusDomain.Category.ID, _ db: Database
   ) throws {

@@ -221,6 +221,60 @@ public final class ManagePreviewStore: Sendable {
         state.categories.removeAll { $0.id == id }
       }
     }
+
+    private static func sources(_ id: AbacusDomain.Category.ID, _ state: State) -> Set<AbacusDomain.Category.ID> {
+      Set([id] + state.categories.filter { $0.parentID == id }.map(\.id))
+    }
+
+    private static func impact(_ ids: Set<AbacusDomain.Category.ID>, _ state: State) -> CategoryReassignImpact {
+      CategoryReassignImpact(
+        transactions: state.txns.filter { $0.txn.categoryID.map(ids.contains) ?? false }.count,
+        attachedRecords: state.txns.flatMap(\.lines).filter { $0.categoryID.map(ids.contains) ?? false }.count,
+        rules: state.rules.filter { $0.categoryID.map(ids.contains) ?? false }.count,
+        budgetLimits: state.allocations.filter { ids.contains($0.categoryID) }.count)
+    }
+
+    public func reassignImpact(of id: AbacusDomain.Category.ID) async throws -> CategoryReassignImpact {
+      try store.state.withLock { state in
+        guard state.categories.contains(where: { $0.id == id }) else { throw RepositoryError.notFound }
+        return Self.impact(Self.sources(id, state), state)
+      }
+    }
+
+    public func reassign(
+      from id: AbacusDomain.Category.ID, to target: AbacusDomain.Category.ID, repointRules: Bool, archiveAfterwards: Bool
+    ) async throws -> CategoryReassignImpact {
+      try store.state.withLock { state in
+        guard let source = state.categories.first(where: { $0.id == id }),
+          let targetCategory = state.categories.first(where: { $0.id == target })
+        else { throw RepositoryError.notFound }
+        guard targetCategory.kind == source.kind else { throw RepositoryError.kindMismatch }
+        let ids = Self.sources(id, state)
+        guard !ids.contains(target) else { throw RepositoryError.invalidReassignTarget }
+        var moved = Self.impact(ids, state)
+        for index in state.txns.indices {
+          if let current = state.txns[index].txn.categoryID, ids.contains(current) { state.txns[index].txn.categoryID = target }
+          for line in state.txns[index].lines.indices {
+            if let current = state.txns[index].lines[line].categoryID, ids.contains(current) {
+              state.txns[index].lines[line].categoryID = target
+            }
+          }
+        }
+        if repointRules {
+          for index in state.rules.indices {
+            if let current = state.rules[index].categoryID, ids.contains(current) { state.rules[index].categoryID = target }
+          }
+        } else {
+          moved.rules = 0
+        }
+        if archiveAfterwards {
+          for index in state.categories.indices where ids.contains(state.categories[index].id) {
+            state.categories[index].isArchived = true
+          }
+        }
+        return moved
+      }
+    }
   }
 
   // MARK: Transactions
