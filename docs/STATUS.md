@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-10-27 (orchestrator, late)_
+_Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
@@ -78,6 +78,7 @@ and copies it).
 | C13 Dashboard | background agent | `wp/C13-dashboard` | **merged** 2026-10-27 (income donut, income vs expenses, widget reorder; Debts slot `DashboardView(debts:)`; notes `docs/status/C13.md`) |
 | C12 Accounts | background agent | `wp/C12-accounts` | **merged** 2026-10-27 (account groups via migration v11, grouped pickers, net worth hierarchy; interpretations in `docs/status/C12.md`) |
 | S3 Budget/rules polish | background agent | `wp/S3-polish` | **merged** 2026-10-27 (Save button states, rules tester removed; notes `docs/status/S3.md`) |
+| C15 Rule conditions | background agent | `wp/C15-rule-match` | **merged** 2026-10-30 (Description starts with; "exactly" shown as Description equals; no migration; notes `docs/status/C15.md`) |
 | S2 Lists | background agent | `wp/S2-lists` | **merged** 2026-10-27 (NSOutlineView lists, sheet editors, split New account; real mouse drag not tested; notes `docs/status/S2.md`) |
 | S1 Stability | background agent | `wp/S1-stability` | **merged** 2026-10-27 (debts binding crash reproduced and fixed, safe bindings, Day/Month speed-up, soak + hang watch tools; timings in `docs/status/S1.md`) |
 | C14 Debts | background agent | `wp/C14-debts` | **merged** 2026-10-27 (debts separate from accounts, migration v10 converts debt accounts — real-data invariants hold; follow-up: dashboard opens scrolled when Debts is first; interpretations in `docs/status/C14.md`) |

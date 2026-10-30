@@ -142,6 +142,7 @@ Wave 2:
   net worth hierarchy.
 - [x] **C13 Dashboard widgets** (merged 2026-10-27) — income donut, income vs expenses, drag-reorder widgets.
 - [x] **C14 Debts** (merged 2026-10-27; migration v10; widget scroll fix pending) — `R-DEBT` (TA v1.7, D51).
+- [x] **C15 Rule conditions** (merged 2026-10-30) — Description starts with / equals (R-IMP-8, D57).
 - [x] **Release 1.2.0** — test build only; superseded by 1.2.1.
 
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
