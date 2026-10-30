@@ -170,6 +170,9 @@ struct ImportRowActions: View {
             .strokeBorder(needsCategory ? ImportPalette.attentionBorder : .clear)
         )
       }
+      if let refund = row.refund {
+        refundControls(refund)
+      }
       if let debt = row.debt, row.status != .needsReview {
         // R-DEBT-10/12/19: the transfer to a debt account this row becomes.
         Text(debt)
@@ -208,6 +211,39 @@ struct ImportRowActions: View {
         }
         if row.status == .needsReview {
           Button("Open") { model.tab = .review }
+            .buttonStyle(.link)
+            .font(.system(size: 11))
+        }
+      }
+    }
+  }
+
+  /// C35: "Looks like a refund of …" with Accept / Choose another… / Not a refund; once accepted
+  /// "Refund of …" with Change… / Not a refund; after "Not a refund" a quiet Undo.
+  @ViewBuilder
+  private func refundControls(_ refund: ImportRefundItem) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      switch refund.state {
+      case .offered, .accepted:
+        Text(refund.text)
+          .font(.system(size: 11))
+          .foregroundStyle(refund.state == .accepted ? ImportPalette.inflow : .secondary)
+          .lineLimit(2)
+          .fixedSize(horizontal: false, vertical: true)
+          .help(refund.text)
+        HStack(spacing: 8) {
+          if refund.state == .offered {
+            Button("Accept") { model.acceptRefundOffer(forRow: row.id) }
+          }
+          Button(refund.state == .offered ? "Choose another…" : "Change…") { model.beginRefundPicker(forRow: row.id) }
+          Button("Not a refund") { model.declineRefund(forRow: row.id) }
+        }
+        .buttonStyle(.link)
+        .font(.system(size: 11))
+      case .declined:
+        HStack(spacing: 6) {
+          Text(refund.text).font(.system(size: 11)).foregroundStyle(.secondary)
+          Button("Undo") { model.resetRefund(forRow: row.id) }
             .buttonStyle(.link)
             .font(.system(size: 11))
         }

@@ -160,6 +160,53 @@ public struct ReviewInfo: Hashable, Sendable {
   public var choice: ReviewChoice?
 }
 
+/// The expense an incoming row may be the refund of (C35): an existing transaction, or another
+/// row of the same file (a failed purchase and its refund in one statement).
+public struct ImportRefundOriginal: Hashable, Sendable {
+  public enum Ref: Hashable, Sendable {
+    case existing(Txn.ID)
+    /// Another row of this import (its `PreviewRow.id`); linked when the commit creates it.
+    case row(String)
+  }
+
+  public var ref: Ref
+  public var payee: String
+  public var occurredAt: Date
+  /// The expense's amount in its account currency.
+  public var amountMinor: Int64
+  public var currency: Currency
+  /// What can still be refunded (the amount for a row of this file).
+  public var remainingMinor: Int64
+  /// An existing expense's category; for a row of this file the commit uses that row's category.
+  public var categoryID: AbacusDomain.Category.ID?
+  public var score: Int
+  /// The refund equals what is still open, in the expense's currency.
+  public var isSameAmount: Bool
+
+  public init(
+    ref: Ref, payee: String, occurredAt: Date, amountMinor: Int64, currency: Currency, remainingMinor: Int64,
+    categoryID: AbacusDomain.Category.ID? = nil, score: Int = 0, isSameAmount: Bool = false
+  ) {
+    self.ref = ref
+    self.payee = payee
+    self.occurredAt = occurredAt
+    self.amountMinor = amountMinor
+    self.currency = currency
+    self.remainingMinor = remainingMinor
+    self.categoryID = categoryID
+    self.score = score
+    self.isSameAmount = isSameAmount
+  }
+}
+
+/// The user's decision about an incoming row that may be a refund (C35).
+public enum ImportRefundDecision: Hashable, Sendable {
+  /// The row becomes an expense refund linked to this expense.
+  case accepted(ImportRefundOriginal)
+  /// "Not a refund": an ordinary row, no suggestion again.
+  case declined
+}
+
 /// One source row in the preview.
 public struct PreviewRow: Identifiable, Hashable, Sendable {
   public var id: String { source.id }
@@ -192,11 +239,22 @@ public struct PreviewRow: Identifiable, Hashable, Sendable {
   public internal(set) var createsTransaction: Bool
   /// The user excluded the row (C31 bulk "Skip"); `setExcluded(false, …)` brings it back.
   public internal(set) var excludedByUser = false
+  /// C35: the expense the row is accepted as a refund of (the row is then an expense refund in
+  /// that expense's category).
+  public internal(set) var refundOf: ImportRefundOriginal?
+  /// C35: the expense the row looks like a refund of, waiting for Accept / Not a refund.
+  public internal(set) var refundOffer: ImportRefundOriginal?
+  /// C35: the user said "Not a refund".
+  public internal(set) var refundDeclined = false
+  /// C35: the row can be offered, or already is, as a refund (a new money-in row without
+  /// attached records, not a transfer or debt record).
+  public internal(set) var canBeRefund = false
 
   public var warnings: [String] { source.warnings }
   public var day: Date { source.occurredAt }
   public var needsCategory: Bool {
     createsTransaction && debt == nil && (type == .expense || type == .income) && category == nil
+      && refundOf == nil
   }
 
   /// The row can be recorded as a debt record: a new expense/income (also a possible duplicate

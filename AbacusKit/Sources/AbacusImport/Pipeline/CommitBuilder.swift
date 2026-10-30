@@ -14,6 +14,8 @@ public struct ImportSummary: Hashable, Sendable {
   public var linked = 0
   /// Of those, transfers to a debt account entered by hand that rows matched (R-DEBT-13).
   public var debtRecordsMatched = 0
+  /// New transactions linked as refunds of an expense (C35).
+  public var refundsLinked = 0
   /// New transactions made transfers to a debt account (row action and rules, R-DEBT-10/12).
   public var debtRecords = 0
   /// Existing expenses/incomes turned into transfers.
@@ -53,6 +55,9 @@ public struct ImportSummary: Hashable, Sendable {
       matched.append("\(debtRecordsMatched) matched debt transfer\(debtRecordsMatched == 1 ? "" : "s")")
     }
     if !matched.isEmpty { lines.append(matched.joined(separator: " · ")) }
+    if refundsLinked > 0 {
+      lines.append(refundsLinked == 1 ? "1 linked as the refund of an expense" : "\(refundsLinked) linked as refunds of expenses")
+    }
     if debtRecords > 0 { lines.append(debtRecords == 1 ? "1 transferred to a debt account" : "\(debtRecords) transferred to debt accounts") }
     var review: [String] = []
     if duplicatesSkipped > 0 { review.append("\(duplicatesSkipped) possible duplicate\(duplicatesSkipped == 1 ? "" : "s") skipped") }
@@ -191,20 +196,31 @@ struct CommitBuilder {
     var updated: [Txn] = []
     var debtLinks: [ImportDebtLink] = []
     var ruleHits: [CategoryRule.ID: Int] = [:]
+    // C35: ids first, so a refund can point at an expense of the same file whatever the row order.
+    var txnIDs: [String: Txn.ID] = [:]
+    for (row, plan) in zip(preview.rows, preview.plans) {
+      if case .create = plan { txnIDs[row.id] = UUID() }
+    }
     for (row, plan) in zip(preview.rows, preview.plans) {
       switch plan {
       case .nothing, .openingBalance:
         break
       case .create(let shape):
+        let refundOfID: Txn.ID? = switch shape.refundOf {
+        case .existing(let id)?: id
+        case .row(let rowID)?: txnIDs[rowID]
+        case nil: nil
+        }
         let txn = Txn(
-          type: shape.type, occurredAt: shape.occurredAt, accountID: accountID(shape.from),
+          id: txnIDs[row.id] ?? UUID(), type: shape.type, occurredAt: shape.occurredAt, accountID: accountID(shape.from),
           amountMinor: shape.amountMinor,
           categoryID: shape.type == .transfer ? nil : categoryID(shape.category),
           toAccountID: shape.to.map(accountID), toAmountMinor: shape.type == .transfer ? shape.toAmountMinor : nil,
           isRefund: shape.isRefund, originalAmountMinor: shape.original?.minorUnits,
           originalCurrencyCode: shape.original?.currencyCode, payee: shape.payee, note: shape.note,
           eventID: shape.tag.flatMap { eventIDs[$0] }, source: source, isPendingAtBank: shape.isPending,
-          createdAt: now, bookedDay: shape.bookedDay?.string)
+          createdAt: now, bookedDay: shape.bookedDay?.string, refundOfID: refundOfID)
+        if refundOfID != nil { summary.refundsLinked += 1 }
         let lines = shape.lines.enumerated().map { index, line in
           AttachedRecord(
             txnID: txn.id, kind: line.kind, categoryID: categoryID(preview.categoryRef(line.category)),

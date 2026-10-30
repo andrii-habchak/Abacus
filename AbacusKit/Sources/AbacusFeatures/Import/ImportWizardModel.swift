@@ -70,6 +70,8 @@ public final class ImportWizardModel {
   public var ruleSheet: RuleSuggestionSheet?
   /// C31: the "New category" sheet; nil when closed.
   public var newCategoryDraft: NewCategoryDraft?
+  /// C35: the "This is a refund of…" search of a row; nil when closed.
+  public var refundPicker: ImportRefundPicker?
   /// C31: what the last bulk action did ("Category set on 12 rows"), shown in the bulk bar.
   public internal(set) var bulkMessage: String?
   /// C31: the state before the last bulk action (undo of one step).
@@ -235,6 +237,7 @@ public final class ImportWizardModel {
     clearSelection()
     ruleSheet = nil
     newCategoryDraft = nil
+    refundPicker = nil
     bulkUndo = nil
     bulkMessage = nil
     noRuleRows = []

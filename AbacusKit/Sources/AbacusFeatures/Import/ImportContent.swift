@@ -95,6 +95,8 @@ public struct ImportRowItem: Identifiable, Hashable, Sendable {
   public var canRecordDebt: Bool = false
   /// The user excluded this row (bulk "Skip"); it offers "Include".
   public var excludedByUser: Bool = false
+  /// C35: the row looks like, or was accepted as, the refund of an expense.
+  public var refund: ImportRefundItem? = nil
 
   /// An expense/income row that still has no category.
   public var needsCategory: Bool {
@@ -402,6 +404,13 @@ extension ImportWizardModel {
       guard row.duplicate?.action == .importAnyway else { return item }
     case .new:
       break
+    }
+    item.refund = refundItem(row)
+    if row.refundOf != nil {
+      // C35: an accepted refund has no category choice of its own: it follows the expense.
+      item.statusLabel = "New refund"
+      item.note = ImportNote("Category follows the expense", .info)
+      return item
     }
     switch row.type {
     case .transfer:
