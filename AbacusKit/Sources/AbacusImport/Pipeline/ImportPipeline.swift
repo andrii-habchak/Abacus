@@ -19,15 +19,19 @@ public struct ImportPipeline: Sendable {
   /// Finds the expense an incoming row may be the refund of (C35); nil = no suggestions among
   /// existing expenses (rows of the file are still matched with each other).
   public let refunds: (any RefundRepository)?
+  /// Finds the other side of a transfer to an own account in another currency and the estimated
+  /// transfers a later row completes (C38); nil = no search and no such offers.
+  public let counterparts: (any TransferCounterpartRepository)?
 
   public init(
     store: any ImportStore, accounts: any AccountRepository, categories: any CategoryRepository,
     events: any EventRepository, rules: any RuleRepository, calendar: Calendar = .current,
     now: @escaping @Sendable () -> Date = { Date() },
     converter: @escaping @Sendable () async -> (any CurrencyConverter)? = { nil },
-    refunds: (any RefundRepository)? = nil
+    refunds: (any RefundRepository)? = nil, counterparts: (any TransferCounterpartRepository)? = nil
   ) {
     self.refunds = refunds
+    self.counterparts = counterparts
     self.converter = converter
     self.store = store
     self.accounts = accounts
@@ -103,6 +107,7 @@ public struct ImportPipeline: Sendable {
       targetRemembered: remembered, context: context, calendar: calendar, analysis: analysis,
       accountMappings: accountMappings, categoryMappings: categoryMappings, converter: await converter())
     await suggestRefunds(&built)
+    await suggestEstimateMatches(&built)
     return built
   }
 
@@ -130,6 +135,7 @@ public struct ImportPipeline: Sendable {
       target: preview.targetAccountID)
     updated.recompute()
     await suggestRefunds(&updated)
+    await suggestEstimateMatches(&updated)
     return updated
   }
 

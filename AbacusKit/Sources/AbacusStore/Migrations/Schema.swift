@@ -126,6 +126,29 @@ extension AbacusDatabase {
       }
       try db.execute(sql: #"CREATE INDEX IF NOT EXISTS "idx_txns_refundOfID" ON "txns"("refundOfID") WHERE "refundOfID" IS NOT NULL"#)
     }
+    // R-TX-5 (C38): `txns.isEstimatedTransferAmount` flags a transfer whose other side is an estimate
+    // at the day's rate (the other statement was not imported yet), and `importTxnSnapshots` keeps an
+    // existing transaction as it was before an import absorbed it as one side of a transfer or
+    // completed its estimate, so undo of the batch can restore it. Append-only and CloudKit-safe: a
+    // column with a default (`ON CONFLICT REPLACE DEFAULT 0` as in v14), one new table with a single
+    // primary key and ON DELETE CASCADE only. Safe to run again (checked, IF NOT EXISTS).
+    migrator.registerMigration("v16: estimated transfer amounts") { db in
+      if try !db.columns(in: "txns").contains(where: { $0.name == "isEstimatedTransferAmount" }) {
+        try db.execute(
+          sql: #"ALTER TABLE "txns" ADD COLUMN "isEstimatedTransferAmount" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
+      }
+      try db.execute(
+        sql: #"""
+          CREATE TABLE IF NOT EXISTS "importTxnSnapshots" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "batchID" TEXT NOT NULL REFERENCES "importBatches"("id") ON DELETE CASCADE,
+            "txnID" TEXT NOT NULL,
+            "json" TEXT NOT NULL
+          ) STRICT
+          """#)
+      try db.execute(
+        sql: #"CREATE INDEX IF NOT EXISTS "idx_importTxnSnapshots_batchID" ON "importTxnSnapshots"("batchID")"#)
+    }
     return migrator
   }
 

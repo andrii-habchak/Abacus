@@ -364,6 +364,8 @@ public struct TransactionListContent: Equatable, Sendable {
           detail = "→ " + destination.name
         }
       }
+      // C38: the other side's amount is an estimate until the other statement is imported.
+      if txn.isEstimatedTransferAmount { detail = (detail.map { $0 + " · " } ?? "") + "estimated amount" }
       return Row(
         id: txn.id, type: .transfer, icon: Icon(symbol: "⇄", colorHex: nil),
         title: txn.payee.isEmpty ? "Transfer" : txn.payee, badges: badges, subtitle: subtitle,

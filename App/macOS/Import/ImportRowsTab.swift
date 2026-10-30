@@ -173,6 +173,12 @@ struct ImportRowActions: View {
       if let refund = row.refund {
         refundControls(refund)
       }
+      if let estimate = row.estimate {
+        ImportEstimateControls(model: model, rowID: row.id, estimate: estimate)
+      }
+      if let counterpart = row.counterpart, row.status != .needsReview {
+        ImportCounterpartLine(model: model, rowID: row.id, counterpart: counterpart)
+      }
       if let debt = row.debt, row.status != .needsReview {
         // R-DEBT-10/12/19: the transfer to a debt account this row becomes.
         Text(debt)

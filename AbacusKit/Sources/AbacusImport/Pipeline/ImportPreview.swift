@@ -52,6 +52,9 @@ public struct ImportPreview: Sendable {
   /// C35: the existing expenses incoming rows look like the refund of (by row id), found by
   /// the pipeline.
   var existingRefundSuggestions: [String: ImportRefundOriginal] = [:]
+  /// C38: the existing estimated transfers incoming/outgoing rows look like the other side of (by
+  /// row id), found by the pipeline.
+  var existingEstimateOffers: [String: ImportEstimatedTransfer] = [:]
   // Outputs for the commit.
   private(set) var plans: [RowPlan] = []
   private var index: [String: Int] = [:]
@@ -77,6 +80,10 @@ public struct ImportPreview: Sendable {
     var defaultHalves: Set<String> = []
     /// C35: accepted and declined refund suggestions.
     var refunds: [String: ImportRefundDecision] = [:]
+    /// C38: the other side the user gave a transfer to an own account in another currency.
+    var counterparts: [String: TransferCounterpart] = [:]
+    /// C38: accepted and declined matches with an estimated transfer.
+    var estimates: [String: ImportEstimateDecision] = [:]
   }
 
   init(
@@ -331,7 +338,7 @@ public struct ImportPreview: Sendable {
     recompute()
   }
 
-  private mutating func applyReviewChoice(_ choice: ReviewChoice?, forRow id: String) {
+  mutating func applyReviewChoice(_ choice: ReviewChoice?, forRow id: String) {
     decisions.defaultHalves.remove(id)
     if case .pair(let old) = decisions.reviews[id], decisions.reviews[old] == .pair(rowID: id) {
       decisions.reviews[old] = nil
@@ -411,6 +418,15 @@ public struct ImportPreview: Sendable {
     }
   }
 
+  /// The row's amount in `currency` when the file gives it: the amount itself, the in-transit
+  /// amount or the original amount.
+  static func knownAmount(of source: NormalizedRow, in currency: Currency, accountCurrency: Currency?) -> Int64? {
+    if currency == accountCurrency { return source.amountMinor }
+    if let transit = source.transferHalf?.transit, transit.currencyCode == currency.rawValue { return transit.minorUnits }
+    if let original = source.original, original.currencyCode == currency.rawValue { return original.minorUnits }
+    return nil
+  }
+
   func accountRef(_ account: ExternalAccount) -> AccountRef {
     if let id = account.resolvedID { return .existing(id) }
     switch accountMappings.first(where: { $0.id == account.key })?.target {
@@ -460,7 +476,15 @@ struct TxnShape: Hashable, Sendable {
   var debt: PreviewDebt?
   /// C35: the expense this refund is linked to (the commit stores the link on the new row).
   var refundOf: ImportRefundOriginal.Ref?
+  /// C38: the other side's amount is an estimate (the transfer is flagged).
+  var isEstimated = false
+  /// C38: a `.convert` plan that absorbs an existing income/expense as one side of the transfer
+  /// (checked and kept for undo by the commit).
+  var absorbs = false
 }
+
+/// Which side of a transfer an amount belongs to.
+enum TransferSide: Hashable, Sendable { case from, to }
 
 /// What the commit does with a row.
 enum RowPlan: Hashable, Sendable {
@@ -474,6 +498,9 @@ enum RowPlan: Hashable, Sendable {
   case link(Txn, [String])
   /// Turns an existing expense/income into the transfer (other side already imported).
   case convert(Txn, TxnShape)
+  /// C38: the row is the real figure of one side of an existing transfer with an estimated amount:
+  /// the amount is set, the flag cleared, the row's fingerprints stored on the transfer.
+  case completeEstimate(Txn, TransferSide, Int64, [String])
 }
 
 /// Turns parsed rows + analysis + decisions into preview rows and commit plans.
@@ -511,6 +538,7 @@ private struct Resolver {
       rows.append(row)
       plans.append(plan)
     }
+    applyEstimateOffers()
     applyRefunds()
     learnRules()
     finishRefundCategories()
@@ -632,6 +660,17 @@ private struct Resolver {
       row.detail = "Matches the transfer to the debt of \(person ?? "a person") entered on \(dayText(leg.occurredAt))"
       return (row, .link(leg, source.fingerprints))
     }
+    if case .accepted(let estimated)? = decisions.estimates[source.id],
+      let (side, _) = estimateCompletion(estimated, source: source, account: account)
+    {
+      // C38: the real figure of one side of an existing transfer with an estimated amount; the row
+      // creates nothing, it completes that transfer.
+      row.status = .alreadyImported
+      row.estimateLink = estimated
+      row.type = .transfer
+      row.detail = "Completes the transfer of \(dayText(estimated.txn.occurredAt)) (estimated amount)"
+      return (row, .completeEstimate(estimated.txn, side, source.amountMinor, source.fingerprints))
+    }
     if let reason = found.review {
       return review(i, row, reason)
     }
@@ -648,10 +687,16 @@ private struct Resolver {
     var transferRuleDetail: String?
     // C31: a transfer the user chose for this row wins over rules and debt decisions.
     var userTransfer: (CategoryRule?, Account.ID, Int64)?
-    if shape.type != .transfer, let target = decisions.transfers[source.id], let other = preview.context.account(target),
-      let amount = amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account))
-    {
-      userTransfer = (nil, target, amount)
+    // C38: the other side the user gave (found transaction, typed or estimated amount) wins over
+    // what the file says about the amount.
+    var counterpart: TransferCounterpart?
+    if shape.type != .transfer, let target = decisions.transfers[source.id], let other = preview.context.account(target) {
+      counterpart = decisions.counterparts[source.id].flatMap { $0.accountID == target ? $0 : nil }
+      if let amount = counterpart?.amountMinor
+        ?? amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account))
+      {
+        userTransfer = (nil, target, amount)
+      }
     }
     if shape.type != .transfer, userTransfer == nil, let (debt, ruleID) = debtDecision(for: source, shape: shape, account: account) {
       applyDebt(debt, ruleID: ruleID, source: source, shape: &shape, row: &row)
@@ -677,6 +722,7 @@ private struct Resolver {
       row.counterAccount = .existing(accountID)
       row.counterAmountMinor = otherAmount
       transferRuleDetail = rule.map { "Transfer by rule “\($0.label)”" } ?? "Transfer to “\(preview.name(of: AccountRef.existing(accountID)))” (chosen)"
+      if rule == nil, let counterpart { applyCounterpart(counterpart, shape: &shape, row: &row, flow: inflow ? .in : .out) }
     } else if shape.type != .transfer {
       let (category, from, rule) = resolveCategory(for: source, kind: shape.type == .income ? .income : .expense, account: account, explicit: nil)
       shape.category = category
@@ -701,6 +747,10 @@ private struct Resolver {
         row.createsTransaction = true
         return (row, .create(shape))
       }
+    }
+    if shape.absorbs, let absorbed = row.absorbedTxn {
+      row.createsTransaction = false
+      return (row, .convert(absorbed, shape))
     }
     if let other = found.completesTransfer {
       row.detail = "Completes the transfer imported from the other account on \(dayText(other.occurredAt))"
@@ -806,6 +856,57 @@ private struct Resolver {
     if inflow, !shape.lines.isEmpty { return nil }
     guard let amount = amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account)) else { return nil }
     return (target, amount)
+  }
+
+  // MARK: Counterparts and estimates (C38)
+
+  /// Marks the shape and the row with the other side the user gave: a found transaction is
+  /// absorbed (the plan becomes a conversion of it), an estimate flags the transfer.
+  private func applyCounterpart(_ counterpart: TransferCounterpart, shape: inout TxnShape, row: inout PreviewRow, flow: Flow) {
+    row.counterpart = counterpart
+    switch counterpart.kind {
+    case .manual:
+      break
+    case .estimated:
+      shape.isEstimated = true
+    case .existing(let txn):
+      // The found transaction must still be on the chosen account and move money the other way.
+      guard txn.accountID == counterpart.accountID || txn.toAccountID == counterpart.accountID, row.source.lines.isEmpty,
+        let direction = Flow.of(txn, on: counterpart.accountID), direction != flow
+      else { return }
+      shape.absorbs = true
+      row.absorbedTxn = txn
+      row.detail = "Takes over “\(txn.payee)” of \(dayText(txn.occurredAt)) on “\(preview.name(of: AccountRef.existing(counterpart.accountID)))” as the other side of the transfer"
+    }
+  }
+
+  /// The side of `estimated`'s transfer the row is the real figure of, with the estimated amount
+  /// still there; nil when the row no longer fits (another account or direction).
+  private func estimateCompletion(
+    _ estimated: ImportEstimatedTransfer, source: NormalizedRow, account: AccountRef
+  ) -> (TransferSide, Int64)? {
+    guard case .existing(let accountID) = account, let flow = source.flow,
+      let side = EstimatedTransferMatcher.side(of: estimated.txn, accountID: accountID, flow: flow)
+    else { return nil }
+    return (side, source.amountMinor)
+  }
+
+  /// Offers an existing transfer with an estimated amount to the rows the pipeline matched with
+  /// one (not declined, not accepted), and marks the rows that can be matched at all.
+  private mutating func applyEstimateOffers() {
+    for i in rows.indices {
+      let waiting = rows[i].status == .new && rows[i].createsTransaction && rows[i].debt == nil && rows[i].refundOf == nil
+        && (rows[i].type == .expense || rows[i].type == .income) && rows[i].source.lines.isEmpty
+      var isTransferReview = false
+      if let info = rows[i].review, case .transferAmountUnknown = info.reason { isTransferReview = true }
+      guard waiting || isTransferReview else { continue }
+      rows[i].canMatchEstimate = preview.existingEstimateOffers[rows[i].id] != nil
+      switch decisions.estimates[rows[i].id] {
+      case .declined?: rows[i].estimateDeclined = true
+      case .accepted?: break
+      case nil: rows[i].estimateOffer = preview.existingEstimateOffers[rows[i].id]
+      }
+    }
   }
 
   // MARK: Debts (R-DEBT-10/12)
@@ -1028,9 +1129,11 @@ private struct Resolver {
         issues.append("“\(source.payee)”: choose another account for the transfer")
         return (row, .nothing)
       }
-      let otherAmount = amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account))
+      let counterpart = decisions.counterparts[source.id].flatMap { $0.accountID == accountID ? $0 : nil }
+      let otherAmount = counterpart?.amountMinor
+        ?? amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account))
       guard let otherAmount else {
-        issues.append("“\(source.payee)”: the amount in \(other.currency.rawValue) is unknown; record it instead")
+        issues.append("“\(source.payee)”: the amount in \(other.currency.rawValue) is unknown; give it, find the other side, or record it instead")
         return (row, .nothing)
       }
       shape.type = .transfer
@@ -1049,6 +1152,13 @@ private struct Resolver {
       row.counterAccount = .existing(accountID)
       row.counterAmountMinor = otherAmount
       row.createsTransaction = true
+      if let counterpart {
+        applyCounterpart(counterpart, shape: &shape, row: &row, flow: flow)
+        if shape.absorbs, let absorbed = row.absorbedTxn {
+          row.createsTransaction = false
+          return (row, .convert(absorbed, shape))
+        }
+      }
       return (row, .create(shape))
 
     case .pair(let otherID):
@@ -1099,10 +1209,7 @@ private struct Resolver {
 
   /// The row's amount in `currency`: itself, the in-transit amount or the original amount.
   private func amount(of source: NormalizedRow, in currency: Currency, accountCurrency: Currency?) -> Int64? {
-    if currency == accountCurrency { return source.amountMinor }
-    if let transit = source.transferHalf?.transit, transit.currencyCode == currency.rawValue { return transit.minorUnits }
-    if let original = source.original, original.currencyCode == currency.rawValue { return original.minorUnits }
-    return nil
+    ImportPreview.knownAmount(of: source, in: currency, accountCurrency: accountCurrency)
   }
 
   // MARK: Conflicts
@@ -1112,7 +1219,7 @@ private struct Resolver {
     var seen: [Txn.ID: Int] = [:]
     for plan in plans {
       let id: Txn.ID? = switch plan {
-      case .settle(let txn, _), .link(let txn, _), .convert(let txn, _): txn.id
+      case .settle(let txn, _), .link(let txn, _), .convert(let txn, _), .completeEstimate(let txn, _, _, _): txn.id
       case .nothing, .openingBalance, .create: nil
       }
       if let id { seen[id, default: 0] += 1 }

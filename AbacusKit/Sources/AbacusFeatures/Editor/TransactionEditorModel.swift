@@ -672,6 +672,12 @@ public final class TransactionEditorModel {
     txn.eventID = effectiveEventID
     switch draft.type {
     case .transfer:
+      // C38: an estimated amount stays flagged until the user changes an amount or an account.
+      let unchanged = draft.stored.map {
+        $0.type == .transfer && $0.accountID == account.id && $0.amountMinor == amountMinor
+          && $0.toAccountID == toAccount?.id && $0.toAmountMinor == toAmountMinor
+      } ?? false
+      if !unchanged { txn.isEstimatedTransferAmount = false }
       txn.amountMinor = amountMinor
       txn.toAccountID = toAccount?.id
       txn.toAmountMinor = toAmountMinor
@@ -680,6 +686,7 @@ public final class TransactionEditorModel {
       txn.originalAmountMinor = nil
       txn.originalCurrencyCode = nil
     case .expense, .income:
+      txn.isEstimatedTransferAmount = false
       txn.categoryID = effectiveCategoryID
       txn.toAccountID = nil
       txn.toAmountMinor = nil

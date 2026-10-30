@@ -97,6 +97,10 @@ public struct ImportRowItem: Identifiable, Hashable, Sendable {
   public var excludedByUser: Bool = false
   /// C35: the row looks like, or was accepted as, the refund of an expense.
   public var refund: ImportRefundItem? = nil
+  /// C38: the other side of the row's transfer (found transaction, typed or estimated amount).
+  public var counterpart: ImportCounterpartItem? = nil
+  /// C38: the row looks like, or was accepted as, the real figure of an estimated transfer.
+  public var estimate: ImportEstimateItem? = nil
 
   /// An expense/income row that still has no category.
   public var needsCategory: Bool {
@@ -205,6 +209,10 @@ public struct ImportReviewItem: Identifiable, Hashable, Sendable {
   public var selectedTransferAccount: Account.ID?
   /// "Transfer to debt · Ann" when sent to a debt account.
   public var debtLabel: String? = nil
+  /// C38: the other side of the chosen transfer.
+  public var counterpart: ImportCounterpartItem? = nil
+  /// C38: the row looks like the real figure of an estimated transfer.
+  public var estimate: ImportEstimateItem? = nil
 }
 
 // MARK: - History
@@ -369,15 +377,18 @@ extension ImportWizardModel {
     }
     if row.status == .new, row.type == .transfer { label = "New transfer" }
     if row.status == .new, row.debt != nil { label = "Transfer to debt" }
+    if row.estimateLink != nil { label = "Completes transfer" }
     if row.status == .new, row.source.kind == .openingBalance { label = "Opening balance" }
 
     var item = ImportRowItem(
       id: row.id, status: row.status, statusLabel: label, date: format.day(row.day),
       payee: row.source.payee.isEmpty ? "—" : row.source.payee, detail: detail(row), account: accountText,
       amount: format.amount(row.amountMinor, code, inflow: row.isInflow), isInflow: row.isInflow,
-      isDimmed: row.status == .alreadyImported || row.status == .skipped || (row.status == .possibleDuplicate && row.duplicate?.action == .skip),
+      isDimmed: (row.status == .alreadyImported && row.estimateLink == nil) || row.status == .skipped || (row.status == .possibleDuplicate && row.duplicate?.action == .skip),
       category: .none, duplicateAction: row.duplicate?.action, note: nil, savesRule: nil)
     item.canRecordDebt = row.canRecordDebt && row.review == nil
+    item.estimate = estimateItem(row)
+    item.counterpart = counterpartItem(row)
     item.excludedByUser = row.excludedByUser
     item.debt = row.debt.map(debtLabel)
     if let debt = row.debt, row.review == nil, row.status != .alreadyImported, row.status != .skipped {
@@ -388,7 +399,8 @@ extension ImportWizardModel {
 
     switch row.status {
     case .alreadyImported:
-      item.note = ImportNote(row.linkedDebtLeg != nil ? "Linked to the transfer to the debt" : "Skipped")
+      item.note = ImportNote(
+        row.estimateLink != nil ? "Linked to the estimated transfer" : row.linkedDebtLeg != nil ? "Linked to the transfer to the debt" : "Skipped")
       return item
     case .skipped:
       item.note = ImportNote(row.excludedByUser ? "Skipped by you" : "Not imported")
@@ -414,7 +426,7 @@ extension ImportWizardModel {
     }
     switch row.type {
     case .transfer:
-      item.note = ImportNote("Transfer — no category")
+      item.note = ImportNote(row.counterpart == nil ? "Transfer — no category" : "Transfer — other side given", .info)
     case nil:
       item.note = ImportNote("Opening balance — no category")
     case .expense, .income:
@@ -760,7 +772,7 @@ extension ImportWizardModel {
       categoryOptions: [ImportCategoryOption(choice: .none, label: "No category", isChild: false)] + categoryOptions(recordKind)
         + [ImportCategoryOption(choice: .createNew, label: "+ New category…", isChild: false)],
       selectedCategory: selectedCategory, transferAccounts: transferAccounts, selectedTransferAccount: selectedTransfer,
-      debtLabel: row.debt.map(debtLabel))
+      debtLabel: row.debt.map(debtLabel), counterpart: counterpartItem(row), estimate: estimateItem(row))
   }
 
   /// "Transfer to debt · Ann · €46.50 (new debt)".
@@ -808,6 +820,7 @@ extension ImportWizardModel {
       || preview.rows.contains { $0.source.kind == .openingBalance && $0.status == .new }
       || preview.rows.contains { $0.duplicate?.action == .link }
       || preview.rows.contains { $0.linkedDebtLeg != nil }
+      || preview.rows.contains { $0.absorbedTxn != nil || $0.estimateLink != nil }
       || preview.rows.contains { $0.status == .alreadyImported && $0.type == .transfer && $0.counterAccount != nil }
   }
 

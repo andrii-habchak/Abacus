@@ -230,6 +230,12 @@ struct ImportReviewCard: View {
         detailPicker
         Spacer(minLength: 0)
       }
+      if let estimate = item.estimate {
+        ImportEstimateControls(model: model, rowID: item.id, estimate: estimate)
+      }
+      if item.selected == .transfer, let counterpart = item.counterpart {
+        ImportCounterpartLine(model: model, rowID: item.id, counterpart: counterpart)
+      }
       if item.selected == nil {
         Text("Needs a decision — the suggestion is marked.")
           .font(.system(size: 11))

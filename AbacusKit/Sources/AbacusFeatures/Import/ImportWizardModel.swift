@@ -72,6 +72,8 @@ public final class ImportWizardModel {
   public var newCategoryDraft: NewCategoryDraft?
   /// C35: the "This is a refund of…" search of a row; nil when closed.
   public var refundPicker: ImportRefundPicker?
+  /// C38: the "Find the other side…" sheet of a row's transfer; nil when closed.
+  public var counterpartPicker: ImportCounterpartPicker?
   /// C31: what the last bulk action did ("Category set on 12 rows"), shown in the bulk bar.
   public internal(set) var bulkMessage: String?
   /// C31: the state before the last bulk action (undo of one step).
@@ -238,6 +240,7 @@ public final class ImportWizardModel {
     ruleSheet = nil
     newCategoryDraft = nil
     refundPicker = nil
+    counterpartPicker = nil
     bulkUndo = nil
     bulkMessage = nil
     noRuleRows = []
@@ -351,7 +354,13 @@ public final class ImportWizardModel {
     case .record(let kind):
       choice = .record(kind, categoryID: item.recordKind == kind ? item.selectedCategory : nil)
     case .transfer:
-      choice = (item.selectedTransferAccount ?? item.transferAccounts.first?.id).map { .transfer(accountID: $0) }
+      guard let accountID = item.selectedTransferAccount ?? item.transferAccounts.first?.id else { return }
+      // C38: another currency and no amount in the file: the other side comes from the sheet.
+      if needsCounterpart(forRow: id, to: accountID) {
+        beginCounterpart(forRow: id, to: accountID)
+        return
+      }
+      choice = .transfer(accountID: accountID)
     case .debt:
       // The sheet decides (`openDebt(forRow:)`); a debt already chosen stays.
       return
@@ -375,6 +384,10 @@ public final class ImportWizardModel {
 
   /// The other own account of a review row recorded as a transfer.
   public func selectTransferAccount(_ accountID: Account.ID, forRow id: String) {
+    if needsCounterpart(forRow: id, to: accountID) {
+      beginCounterpart(forRow: id, to: accountID)
+      return
+    }
     update { $0.setReviewChoice(.transfer(accountID: accountID), forRow: id) }
   }
 

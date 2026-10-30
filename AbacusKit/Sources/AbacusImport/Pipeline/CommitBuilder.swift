@@ -20,6 +20,11 @@ public struct ImportSummary: Hashable, Sendable {
   public var debtRecords = 0
   /// Existing expenses/incomes turned into transfers.
   public var transfersCompleted = 0
+  /// Of those, ones that took over an existing transaction as the other side of the row's transfer
+  /// (C38 "Find the other side…").
+  public var counterpartsAbsorbed = 0
+  /// Transfers with an estimated amount that rows completed with the real figure (C38).
+  public var estimatesCompleted = 0
   public var alreadyImported = 0
   public var duplicatesSkipped = 0
   public var duplicatesImported = 0
@@ -55,6 +60,11 @@ public struct ImportSummary: Hashable, Sendable {
       matched.append("\(debtRecordsMatched) matched debt transfer\(debtRecordsMatched == 1 ? "" : "s")")
     }
     if !matched.isEmpty { lines.append(matched.joined(separator: " · ")) }
+    if estimatesCompleted > 0 {
+      lines.append(
+        estimatesCompleted == 1
+          ? "1 transfer with an estimated amount completed" : "\(estimatesCompleted) transfers with an estimated amount completed")
+    }
     if refundsLinked > 0 {
       lines.append(refundsLinked == 1 ? "1 linked as the refund of an expense" : "\(refundsLinked) linked as refunds of expenses")
     }
@@ -101,7 +111,7 @@ struct CommitBuilder {
         need(shape.to)
         need(shape.category)
         shape.lines.forEach { need(preview.categoryRef($0.category)) }
-      case .nothing, .openingBalance, .settle, .link: break
+      case .nothing, .openingBalance, .settle, .link, .completeEstimate: break
       }
     }
 
@@ -194,6 +204,8 @@ struct CommitBuilder {
     var txns: [TxnWithLines] = []
     var fingerprints: [ImportFingerprint] = []
     var updated: [Txn] = []
+    var absorbedOriginals: [Txn] = []
+    var completedOriginals: [Txn] = []
     var debtLinks: [ImportDebtLink] = []
     var ruleHits: [CategoryRule.ID: Int] = [:]
     // C35: ids first, so a refund can point at an expense of the same file whatever the row order.
@@ -219,7 +231,8 @@ struct CommitBuilder {
           isRefund: shape.isRefund, originalAmountMinor: shape.original?.minorUnits,
           originalCurrencyCode: shape.original?.currencyCode, payee: shape.payee, note: shape.note,
           eventID: shape.tag.flatMap { eventIDs[$0] }, source: source, isPendingAtBank: shape.isPending,
-          createdAt: now, bookedDay: shape.bookedDay?.string, refundOfID: refundOfID)
+          createdAt: now, bookedDay: shape.bookedDay?.string, refundOfID: refundOfID,
+          isEstimatedTransferAmount: shape.type == .transfer && shape.isEstimated)
         if refundOfID != nil { summary.refundsLinked += 1 }
         let lines = shape.lines.enumerated().map { index, line in
           AttachedRecord(
@@ -266,6 +279,20 @@ struct CommitBuilder {
         summary.linked += 1
         if DebtLegMatch.debt(of: existing, in: preview.debtBook) != nil { summary.debtRecordsMatched += 1 }
       case .convert(var existing, let shape):
+        if shape.absorbs {
+          // C38: the row's transfer takes over this transaction. The row is the sending side when
+          // the transaction is on the receiving account: then the transfer has the row's date and
+          // description. The transaction as it was is restored when the batch is undone.
+          absorbedOriginals.append(existing)
+          if case .existing(let receiving)? = shape.to, receiving == existing.accountID {
+            existing.occurredAt = shape.occurredAt
+            existing.bookedDay = shape.bookedDay?.string
+            if !shape.payee.isEmpty { existing.payee = shape.payee }
+            if !shape.note.isEmpty { existing.note = shape.note }
+          }
+        }
+        existing.isEstimatedTransferAmount = shape.type == .transfer && shape.isEstimated
+        if shape.absorbs { summary.counterpartsAbsorbed += 1 }
         existing.type = .transfer
         existing.accountID = accountID(shape.from)
         existing.amountMinor = shape.amountMinor
@@ -278,6 +305,17 @@ struct CommitBuilder {
         updated.append(existing)
         fingerprints += shape.fingerprints.map { ImportFingerprint(id: $0, txnID: existing.id) }
         summary.transfersCompleted += 1
+      case .completeEstimate(var transfer, let side, let amount, let keys):
+        completedOriginals.append(transfer)
+        switch side {
+        case .from: transfer.amountMinor = amount
+        case .to: transfer.toAmountMinor = amount
+        }
+        transfer.isEstimatedTransferAmount = false
+        updated.append(transfer)
+        fingerprints += keys.map { ImportFingerprint(id: $0, txnID: transfer.id) }
+        summary.linked += 1
+        summary.estimatesCompleted += 1
       }
       if let review = row.review {
         if review.choice == .skip { summary.reviewedSkipped += 1 } else { summary.reviewedImported += 1 }
@@ -338,7 +376,7 @@ struct CommitBuilder {
     let commit = ImportCommit(
       batch: summary.batch, newAccounts: newAccounts, newCategories: newCategories, newEvents: newEvents,
       txns: txns, fingerprints: fingerprints, updatedTxns: updated, mappings: mappings, rules: rules,
-      debtLinks: debtLinks)
+      debtLinks: debtLinks, absorbedOriginals: absorbedOriginals, completedOriginals: completedOriginals)
     return (commit, summary)
   }
 

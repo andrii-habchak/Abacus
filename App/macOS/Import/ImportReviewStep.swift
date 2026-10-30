@@ -45,6 +45,15 @@ struct ImportReviewStep: View {
     }
     .sheet(
       isPresented: Binding(
+        get: { model.counterpartPicker != nil },
+        set: { if !$0 { model.cancelCounterpart() } })
+    ) {
+      if let picker = model.counterpartPicker {
+        ImportCounterpartSheet(model: model, picker: picker.model)
+      }
+    }
+    .sheet(
+      isPresented: Binding(
         get: { model.ruleSheet != nil },
         set: { if !$0 { model.dismissRuleSheet() } })
     ) {

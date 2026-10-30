@@ -62,6 +62,8 @@ struct AccountGroupsTests {
       try db.execute(
         sql: #"ALTER TABLE "txns" ADD COLUMN "isBalanceCorrection" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
       try db.execute(sql: #"ALTER TABLE "txns" ADD COLUMN "refundOfID" TEXT"#)
+      try db.execute(
+        sql: #"ALTER TABLE "txns" ADD COLUMN "isEstimatedTransferAmount" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
       #expect(try !db.columns(in: "accounts").contains { $0.name == "groupID" })
       for row in rows {
         try db.execute(

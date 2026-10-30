@@ -107,7 +107,7 @@ struct RefundMatcher {
     var folded: [Int: String] = [:]
     for (j, plan) in plans.enumerated() {
       switch plan {
-      case .settle(let txn, _), .link(let txn, _), .convert(let txn, _):
+      case .settle(let txn, _), .link(let txn, _), .convert(let txn, _), .completeEstimate(let txn, _, _, _):
         touched.insert(txn.id)
       case .create(let shape):
         guard Self.isOriginal(shape, rows[j]) else { continue }
