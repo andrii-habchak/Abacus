@@ -32,10 +32,16 @@ public struct RuleMatcher: Sendable {
   private let kinds: [AbacusDomain.Category.ID: CategoryKind]
   /// Active accounts a transfer rule may point at; nil = not checked.
   private let activeAccounts: Set<Account.ID>?
+  /// The debts a debt rule may point at; nil = not checked.
+  private let debts: DebtBook?
 
   /// `categories` lets the matcher skip category rules whose category is missing, archived or of
   /// the wrong kind; `accounts` (when given) skips transfer rules to a missing or archived account.
-  public init(rules: [CategoryRule], categories: [AbacusDomain.Category], accounts: [Account]? = nil) {
+  /// `debts` (when given) skips debt rules whose person has no debt any more (renamed or deleted).
+  public init(
+    rules: [CategoryRule], categories: [AbacusDomain.Category], accounts: [Account]? = nil, debts: DebtBook? = nil
+  ) {
+    self.debts = debts
     self.rules = rules.filter { $0.isEnabled && $0.hasCondition }
     self.kinds = Dictionary(
       categories.filter { !$0.isArchived }.map { ($0.id, $0.kind) }, uniquingKeysWith: { a, _ in a })
@@ -80,7 +86,8 @@ public struct RuleMatcher: Sendable {
       if let own = subject.accountID, own == target { return false }
       return activeAccounts.map { $0.contains(target) } ?? true
     case .debt:
-      return rule.debtPerson != nil
+      guard let person = rule.debtPerson else { return false }
+      return debts.map { $0.debt(person: person) != nil } ?? true
     }
   }
 

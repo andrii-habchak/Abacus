@@ -214,11 +214,19 @@ struct RuleRowView: View {
         .toggleStyle(.checkbox)
         .labelsHidden()
       Text(row.condition).lineLimit(2)
-      HStack(spacing: 4) {
-        Image(systemName: row.action.hasPrefix("Transfer") ? "arrow.left.arrow.right" : "tag")
-          .font(.system(size: 11))
-          .foregroundStyle(.secondary)
-        Text(row.action).lineLimit(2)
+      VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 4) {
+          Image(systemName: row.action.hasPrefix("Transfer") ? "arrow.left.arrow.right" : "tag")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+          Text(row.action).lineLimit(2)
+        }
+        if let warning = row.warning {
+          Label("Debt missing", systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 11))
+            .foregroundStyle(ManagePalette.negative)
+            .help(warning)
+        }
       }
       Text(row.origin).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
       Text("\(row.hits)").foregroundStyle(.secondary).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing)
@@ -227,7 +235,7 @@ struct RuleRowView: View {
     .foregroundStyle(row.isEnabled ? Color.primary : Color.secondary)
     .padding(.vertical, 4)
     .accessibilityElement(children: .combine)
-    .accessibilityLabel(row.summary)
+    .accessibilityLabel(row.warning.map { "\(row.summary). \($0)" } ?? row.summary)
   }
 }
 
@@ -237,6 +245,8 @@ struct RuleRowView: View {
 struct RuleEditorSheet: View {
   @Bindable var model: RulesModel
   @State private var confirmsDelete = false
+  @State private var isCreatingDebt = false
+  @State private var newDebtName = ""
 
   private func binding<Value>(_ keyPath: WritableKeyPath<RuleDraft, Value>, _ fallback: Value) -> Binding<Value> {
     draftBinding({ model.editor }, { model.editor = $0 }, keyPath, fallback: fallback)
@@ -332,9 +342,14 @@ struct RuleEditorSheet: View {
     if draft.hasDescriptionCondition {
       conditionRow(isFirst: true, remove: draft.canRemoveDescription ? { model.removeDescriptionCondition() } : nil) {
         firstConditionPicker
-        TextField("Text", text: binding(\.pattern, ""), prompt: Text("e.g. biedronka"))
-          .labelsHidden()
-          .textFieldStyle(.roundedBorder)
+        VStack(alignment: .leading, spacing: 3) {
+          TextField("Text", text: binding(\.pattern, ""), prompt: Text("e.g. biedronka"))
+            .labelsHidden()
+            .textFieldStyle(.roundedBorder)
+          Text("Not case sensitive; accents ignored")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
       }
     }
     if draft.hasAmountCondition {
@@ -468,15 +483,21 @@ struct RuleEditorSheet: View {
       Picker("Action", selection: binding(\.action, .category)) {
         Text("Assign category").tag(RuleAction.category)
         Text("Transfer to/from account").tag(RuleAction.transfer)
-        Text("Transfer to debt of").tag(RuleAction.debt)
+        Text("Transfer to debt").tag(RuleAction.debt)
       }
       .labelsHidden()
       .fixedSize()
       switch draft.action {
       case .category:
+        Picker("Category kind", selection: Binding(get: { draft.categoryKind }, set: { model.setCategoryKind($0) })) {
+          Text("Expense").tag(CategoryKind.expense)
+          Text("Income").tag(CategoryKind.income)
+        }
+        .labelsHidden()
+        .fixedSize()
         CategoryPicker(
-          items: model.categoryPickerItems(model.categoryOptions), selection: binding(\.categoryID, nil),
-          noneTitle: "Choose…", width: 200)
+          items: model.categoryPickerItems(model.categoryOptions(kind: draft.categoryKind), kinds: [draft.categoryKind]),
+          selection: binding(\.categoryID, nil), noneTitle: "Choose…", width: 200)
       case .transfer:
         Picker("Account", selection: binding(\.transferAccountID, nil)) {
           Text("Choose…").tag(Account.ID?.none)
@@ -484,33 +505,76 @@ struct RuleEditorSheet: View {
         }
         .labelsHidden()
       case .debt:
-        TextField("Person", text: binding(\.debtPersonName, ""), prompt: Text("Person's name"))
-          .frame(minWidth: 160)
-        if !model.debtPeople.isEmpty {
-          Menu {
-            ForEach(model.debtPeople, id: \.self) { name in
-              Button(name) { model.editor?.debtPersonName = name }
-            }
-          } label: {
-            Image(systemName: "person.crop.circle")
-          }
-          .menuStyle(.borderlessButton)
-          .fixedSize()
-          .help("People with debts")
-        }
+        debtPicker
       }
     }
-    if draft.action == .debt {
-      Text("The transaction becomes a transfer between the account and this person's virtual account in the account's currency (the debt and the account are created when missing). Money out means they owe you more, money in means they repaid (or you borrowed).")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+    Text(actionHelp)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+    if draft.action == .debt, model.editorDebtIsMissing {
+      Label(
+        "The debt “\(draft.debtPersonName)” no longer exists (renamed or deleted). Choose a debt, or the rule is skipped.",
+        systemImage: "exclamationmark.triangle.fill"
+      )
+      .font(.caption)
+      .foregroundStyle(ManagePalette.negative)
+      .fixedSize(horizontal: false, vertical: true)
     }
-    if draft.action == .transfer {
-      Text("The transaction stays on its account and becomes a transfer: money out goes to this account, money in comes from it. Existing transfers are never changed.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
+  }
+
+  /// One sentence per action (R-MGMT-6).
+  private var actionHelp: String {
+    switch draft.action {
+    case .category:
+      "Assign category: sets the category of matching expenses or income, whichever kind you pick."
+    case .transfer:
+      "Transfer to/from account: money out becomes a transfer to that account, money in a transfer from it — for moves between your own accounts."
+    case .debt:
+      "Transfer to debt: a transfer to the person's account in the right currency (created when missing). Money out means they owe you more, money in means they repaid."
+    }
+  }
+
+  /// A menu of the existing debts A–Z and "+ New debt…" (a name prompt).
+  @ViewBuilder private var debtPicker: some View {
+    Menu {
+      ForEach(model.debtOptions) { debt in
+        Button {
+          model.selectDebt(debt.id)
+        } label: {
+          if model.editorDebt?.id == debt.id {
+            Label(debt.personName, systemImage: "checkmark")
+          } else {
+            Text(debt.personName)
+          }
+        }
+      }
+      if !model.debtOptions.isEmpty { Divider() }
+      Button("+ New debt…") {
+        newDebtName = ""
+        isCreatingDebt = true
+      }
+    } label: {
+      if let debt = model.editorDebt {
+        Text(debt.personName)
+      } else if model.editorDebtIsMissing {
+        Text("\(draft.debtPersonName) (missing)")
+      } else {
+        Text("Choose…")
+      }
+    }
+    .menuStyle(.button)
+    .fixedSize()
+    .accessibilityLabel("Debt")
+    .alert("New debt", isPresented: $isCreatingDebt) {
+      TextField("Person's name", text: $newDebtName)
+      Button("Cancel", role: .cancel) {}
+      Button("Create") {
+        let name = newDebtName
+        Task { await model.createDebt(named: name) }
+      }
+    } message: {
+      Text("Creates a debt with this name and picks it for the rule.")
     }
   }
 }

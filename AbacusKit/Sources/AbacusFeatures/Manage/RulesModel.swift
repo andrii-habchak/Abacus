@@ -16,6 +16,8 @@ public struct RuleRow: Identifiable, Equatable, Sendable {
   public let origin: String
   public let hits: Int
   public let isEnabled: Bool
+  /// Set when the rule cannot work any more (its debt was renamed or deleted): shown in the list.
+  public let warning: String?
 
   /// "Description contains “lidl” → Food › Groceries".
   public var summary: String { "\(condition) → \(action)" }
@@ -67,8 +69,11 @@ public struct RuleDraft: Equatable, Sendable {
   public var accountID: Account.ID?
   public var action: RuleAction
   public var categoryID: AbacusDomain.Category.ID?
+  /// Which kind of category the picker lists (expense by default; taken from the category of an
+  /// existing rule).
+  public var categoryKind: CategoryKind
   public var transferAccountID: Account.ID?
-  /// "Transfer to debt of <person>" (R-DEBT-12).
+  /// "Transfer to debt": the picked debt's person name (R-DEBT-12); blank = none picked.
   public var debtPersonName: String
   /// Apply the rule to matching existing transactions on save (R-MGMT-6).
   public var updateExisting: Bool
@@ -78,9 +83,10 @@ public struct RuleDraft: Equatable, Sendable {
     matchKind: RuleMatchKind = .contains, pattern: String = "",
     hasAmountCondition: Bool = false, amountComparison: RuleAmountComparison = .biggerThan, amountText: String = "",
     hasAccountCondition: Bool = false, accountID: Account.ID? = nil, action: RuleAction = .category,
-    categoryID: AbacusDomain.Category.ID? = nil, transferAccountID: Account.ID? = nil, debtPersonName: String = "",
-    updateExisting: Bool = false
+    categoryID: AbacusDomain.Category.ID? = nil, categoryKind: CategoryKind = .expense,
+    transferAccountID: Account.ID? = nil, debtPersonName: String = "", updateExisting: Bool = false
   ) {
+    self.categoryKind = categoryKind
     self.debtPersonName = debtPersonName
     self.id = id
     self.isNew = isNew
@@ -263,7 +269,7 @@ public final class RulesModel {
     return text
   }
 
-  /// "Food › Groceries" / "Transfer to/from Loan from friend".
+  /// "Food › Groceries" / "Transfer to/from Loan from friend" / "Transfer to debt · Anna".
   public func actionText(_ rule: CategoryRule) -> String {
     switch rule.action {
     case .category:
@@ -271,7 +277,7 @@ public final class RulesModel {
     case .transfer:
       return "Transfer to/from \(rule.transferAccountID.map(accountName) ?? "no account")"
     case .debt:
-      return "Transfer to debt of \(rule.debtPerson ?? "no one")"
+      return "Transfer to debt · \(rule.debtPerson ?? "none chosen")"
     }
   }
 
@@ -295,12 +301,26 @@ public final class RulesModel {
     }
   }
 
+  /// A debt rule whose person has no debt any more (renamed or deleted): it is skipped on import
+  /// and when applying, and the list says so.
+  public func hasMissingDebt(_ rule: CategoryRule) -> Bool {
+    guard rule.action == .debt else { return false }
+    guard let person = rule.debtPerson else { return true }
+    return debtBook.debt(person: person) == nil
+  }
+
+  public func warning(_ rule: CategoryRule) -> String? {
+    hasMissingDebt(rule)
+      ? "The debt “\(rule.debtPerson ?? "")” no longer exists (renamed or deleted), so this rule is skipped. Edit it and choose a debt."
+      : nil
+  }
+
   public var rows: [RuleRow] {
     visibleRules.map { rule in
       RuleRow(
         id: rule.id, pattern: rule.label, condition: conditionText(rule), action: actionText(rule),
         origin: rule.origin == .imported ? "Learned from an import" : "Manual", hits: rule.hitCount,
-        isEnabled: rule.isEnabled)
+        isEnabled: rule.isEnabled, warning: warning(rule))
     }
   }
 
@@ -351,11 +371,13 @@ public final class RulesModel {
 
   /// Categories A–Z (TA v1.6): expense then income, top-level categories A–Z, each followed by
   /// its subcategories A–Z; archived ones only when `including` names them.
-  private func categoriesAZ(including kept: Set<AbacusDomain.Category.ID> = []) -> [AbacusDomain.Category] {
+  private func categoriesAZ(
+    kinds: [CategoryKind] = CategoryKind.allCases, including kept: Set<AbacusDomain.Category.ID> = []
+  ) -> [AbacusDomain.Category] {
     let byName: (AbacusDomain.Category, AbacusDomain.Category) -> Bool = {
       $0.name.localizedStandardCompare($1.name) == .orderedAscending
     }
-    return CategoryKind.allCases.flatMap { kind -> [AbacusDomain.Category] in
+    return kinds.flatMap { kind -> [AbacusDomain.Category] in
       let ofKind = categories.filter { $0.kind == kind && (!$0.isArchived || kept.contains($0.id)) }
       let ids = Set(ofKind.map(\.id))
       return ofKind.filter { $0.parentID.map { !ids.contains($0) } ?? true }.sorted(by: byName).flatMap { parent in
@@ -380,6 +402,80 @@ public final class RulesModel {
       }
       return item
     }
+  }
+
+  /// The editor's category choices of one kind (the Expense / Income select above the picker).
+  public func categoryOptions(kind: CategoryKind) -> [AbacusDomain.Category] { categoriesAZ(kinds: [kind]) }
+
+  /// The page filter's categories under "Expense" and "Income" headings.
+  public var categoryFilterSections: [(kind: CategoryKind, categories: [AbacusDomain.Category])] {
+    let kept = Set(rules.compactMap(\.categoryID))
+    return CategoryKind.allCases.compactMap { kind in
+      let options = categoriesAZ(kinds: [kind], including: kept)
+      return options.isEmpty ? nil : (kind, options)
+    }
+  }
+
+  /// Changing the kind select: a chosen category of the other kind is cleared.
+  public func setCategoryKind(_ kind: CategoryKind) {
+    guard var draft = editor else { return }
+    draft.categoryKind = kind
+    if let id = draft.categoryID, categories.first(where: { $0.id == id })?.kind != kind { draft.categoryID = nil }
+    editor = draft
+  }
+
+  // MARK: Debt picker
+
+  /// The debts to pick from: one per person, A–Z.
+  public var debtOptions: [Debt] {
+    var seen: Set<String> = []
+    return debtBook.debts
+      .filter { seen.insert($0.personKey).inserted }
+      .sorted { $0.personName.localizedStandardCompare($1.personName) == .orderedAscending }
+  }
+
+  /// The debt the editor's rule points at; nil when none is picked or it no longer exists.
+  public var editorDebt: Debt? {
+    guard let editor, editor.action == .debt else { return nil }
+    let name = editor.debtPersonName.trimmingCharacters(in: .whitespacesAndNewlines)
+    return name.isEmpty ? nil : debtBook.debt(person: name)
+  }
+
+  /// The editor's rule names a debt that is gone (shown next to the picker).
+  public var editorDebtIsMissing: Bool {
+    guard let editor, editor.action == .debt else { return false }
+    return !editor.debtPersonName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && editorDebt == nil
+  }
+
+  public func selectDebt(_ id: Debt.ID?) {
+    editor?.debtPersonName = id.flatMap { debtBook.debt($0)?.personName } ?? ""
+  }
+
+  /// "+ New debt": creates the debt by name (the existing repository) and picks it; a person who
+  /// already has a debt just gets it picked.
+  public func createDebt(named name: String) async {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty else { return }
+    if let known = debtBook.debt(person: name) {
+      selectDebt(known.id)
+      return
+    }
+    guard let repository = dependencies.debts else {
+      errorMessage = "Couldn't create the debt: debts are unavailable."
+      return
+    }
+    do {
+      try await repository.save(Debt(personName: name))
+      errorMessage = nil
+    } catch {
+      // `personExists` (a race): the book below has it.
+      if (error as? DebtRepositoryError) == nil { errorMessage = ManageFailure.message(error, doing: "create the debt") }
+    }
+    if let book = try? await repository.book() {
+      debtBook = book
+      debtPeople = book.personNames
+    }
+    if let created = debtBook.debt(person: name) { selectDebt(created.id) }
   }
 
   /// The page's category filter: categories A–Z, archived ones too when a rule uses them.
@@ -412,7 +508,12 @@ public final class RulesModel {
       amountComparison: rule.amountComparison ?? .biggerThan,
       amountText: hasAmount ? rule.amountMinor.map(dependencies.format.amountInput) ?? "" : "",
       hasAccountCondition: rule.accountID != nil, accountID: rule.accountID, action: rule.action,
-      categoryID: rule.categoryID, transferAccountID: rule.transferAccountID, debtPersonName: rule.debtPersonName ?? ""))
+      categoryID: rule.categoryID, categoryKind: editorKind(of: rule.categoryID), transferAccountID: rule.transferAccountID, debtPersonName: rule.debtPersonName ?? ""))
+  }
+
+  /// The kind an existing rule's category has (expense when it has none).
+  private func editorKind(of categoryID: AbacusDomain.Category.ID?) -> CategoryKind {
+    categoryID.flatMap { id in categories.first { $0.id == id }?.kind } ?? .expense
   }
 
   private func open(_ draft: RuleDraft) {
@@ -483,14 +584,18 @@ public final class RulesModel {
     if editor.hasAccountCondition, editor.accountID == nil { return "Choose the account." }
     switch editor.action {
     case .category:
-      if editor.categoryID == nil { return "Choose a category." }
+      guard let id = editor.categoryID else { return "Choose a category." }
+      if let category = categories.first(where: { $0.id == id }), category.kind != editor.categoryKind {
+        return "Choose \(editor.categoryKind == .income ? "an income" : "an expense") category."
+      }
     case .transfer:
       guard let target = editor.transferAccountID else { return "Choose the account to transfer to or from." }
       if editor.hasAccountCondition, editor.accountID == target {
         return "The transfer account must differ from the account in the condition."
       }
     case .debt:
-      if editor.debtPersonName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Enter the person's name." }
+      if editor.debtPersonName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Choose a debt." }
+      if editorDebt == nil { return "This debt no longer exists. Choose another debt." }
     }
     return nil
   }

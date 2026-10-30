@@ -23,7 +23,7 @@ public enum RuleEffect {
     // The rule is applied on its own, whatever its position (the user asked for it).
     var single = rule
     single.isEnabled = true
-    guard RuleMatcher(rules: [single], categories: categories, accounts: accounts).match(subject) != nil else { return nil }
+    guard RuleMatcher(rules: [single], categories: categories, accounts: accounts, debts: debts).match(subject) != nil else { return nil }
 
     switch rule.action {
     case .category:

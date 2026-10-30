@@ -390,6 +390,7 @@ struct DebtTransferImportTests {
     try await env.accounts.save(F.pkoAccount)
     let rule = CategoryRule(pattern: "anna nowak", action: .debt, debtPersonName: "Anna")
     try await env.rules.save(rule)
+    try await env.debts.save(Debt(personName: "Anna"))  // C32: the rule's debt must exist
     let preview = try await env.pko([
       Self.incoming("2026-01-20", "100.00", ref: "back"),
       Self.outgoing("2026-01-10", "100.00", ref: "loan"),
@@ -423,6 +424,7 @@ struct DebtTransferImportTests {
     let only = try Env()
     try await only.accounts.save(F.pkoAccount)
     try await only.rules.save(CategoryRule(pattern: "nowak", action: .debt, debtPersonName: "Anna"))
+    try await only.debts.save(Debt(personName: "Anna"))  // C32: the rule's debt must exist
     var preview = try await only.pko([Self.outgoing("2026-01-10", "10.00")])
     let id = try #require(preview.rows.first?.id)
     #expect(preview.rows.first?.debt != nil)
@@ -441,7 +443,9 @@ struct DebtTransferImportTests {
     let items = try await env.txns.transactions(matching: TxnQuery())
     let originals = items.map(\.txn)
     let rule = CategoryRule(pattern: "anna nowak", action: .debt, debtPersonName: "Anna")
-    let changes = RuleEffect.changes(rule, in: items, accounts: [F.pkoAccount], categories: [])
+    try await env.debts.save(Debt(personName: "Anna"))  // C32: the rule's debt must exist
+    let debtBook = try await env.debts.book()
+    let changes = RuleEffect.changes(rule, in: items, accounts: [F.pkoAccount], categories: [], debts: debtBook)
     #expect(changes.count == 2)
     try await env.rules.apply(rule, records: RuleApplication.records(ruleID: rule.id, originals: originals, changes: changes))
 
@@ -452,7 +456,7 @@ struct DebtTransferImportTests {
     #expect(try await env.debtBalances() == ["Anna PLN": 0])
     #expect(try await env.balance(F.pkoAccount.id) == 1_000_00)
     // Transfers are never changed again by the rule.
-    #expect(RuleEffect.changes(rule, in: try await env.txns.transactions(matching: TxnQuery()), accounts: [F.pkoAccount], categories: []).isEmpty)
+    #expect(RuleEffect.changes(rule, in: try await env.txns.transactions(matching: TxnQuery()), accounts: [F.pkoAccount], categories: [], debts: try await env.debts.book()).isEmpty)
 
     let rolled = try await env.rules.rollBack(rule.id)
     #expect(rolled.restored == 2)
@@ -559,9 +563,8 @@ struct DebtTransferImportTests {
     #expect(out.type == .transfer && out.toAccountID == virtual.id && !out.isRefund)
     let inflow = try #require(changes.first { $0.toAccountID == F.pkoAccount.id })
     #expect(inflow.accountID == virtual.id)
-    // Without the person's account the shape is one-sided (made on apply); a debt account's own
-    // transactions are never touched.
-    #expect(RuleEffect.changes(CategoryRule(pattern: "anna nowak", action: .debt, debtPersonName: "Nobody"), in: items, accounts: accounts, categories: [], debts: book).allSatisfy { $0.toAccountID == nil })
+    // A person without a debt is skipped (C32); a debt account's own transactions are never touched.
+    #expect(RuleEffect.changes(CategoryRule(pattern: "anna nowak", action: .debt, debtPersonName: "Nobody"), in: items, accounts: accounts, categories: [], debts: book).isEmpty)
     let onDebtAccount = Txn(type: .expense, occurredAt: F.date("2026-01-20"), accountID: virtual.id, amountMinor: 5_00, payee: "anna nowak")
     #expect(RuleEffect.apply(rule, to: TxnWithLines(txn: onDebtAccount, lines: []), accounts: accounts, categories: [], debts: book) == nil)
   }
