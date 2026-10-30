@@ -80,7 +80,8 @@ public final class DebtsModel {
   public var recordDraft: RecordDraft?
 
   @ObservationIgnored public let dependencies: DebtsDependencies
-  @ObservationIgnored public private(set) var converter: any CurrencyConverter = NoRates()
+  /// Observed: the converted totals follow a rate refresh (R-DEBT-15).
+  public private(set) var converter: any CurrencyConverter = NoRates()
   /// After a save or delete: the transaction list, dashboard and balances follow.
   @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
 
@@ -132,6 +133,9 @@ public final class DebtsModel {
     /// "Due 1 Dec 2026" / "2 debts settled".
     public let detail: String?
     public let isSettled: Bool
+    /// The open balances summed in the display currency at the latest rate ("≈ +₴3,400"),
+    /// as on the dashboard widget: only when a balance is in another currency (R-DEBT-15).
+    public var convertedText: String? = nil
   }
 
   func balanceText(_ money: Money) -> BalanceText {
@@ -149,6 +153,7 @@ public final class DebtsModel {
     let groups = Dictionary(grouping: book.debts, by: \.personKey)
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
     let order = Dictionary(uniqueKeysWithValues: Currency.displayOrder.enumerated().map { ($1, $0) })
+    let totals = Dictionary(summary.people.map { ($0.personKey, $0) }, uniquingKeysWith: { first, _ in first })
     return groups.compactMap { key, debts -> PersonRow? in
       let settled = debts.allSatisfy(\.isSettled)
       guard settled == (filter == .settled) else { return nil }
@@ -159,7 +164,8 @@ public final class DebtsModel {
       let due = shown.compactMap { $0.dueDay.flatMap(Day.init) }.min()
       return PersonRow(
         id: key, name: name, balances: shown.map { balanceText(balances[$0.id] ?? .zero($0.currency)) },
-        detail: due.map { "Due \(format.day($0))" }, isSettled: settled)
+        detail: due.map { "Due \(format.day($0))" }, isSettled: settled,
+        convertedText: settled ? nil : totals[key].flatMap(convertedText))
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
@@ -167,6 +173,71 @@ public final class DebtsModel {
   /// Header totals in the display currency (latest rate): "Owed to you", "You owe".
   public var summary: DebtSummary {
     Calc.debtSummary(book, currency: displayCurrency, converter: converter)
+  }
+
+  /// "≈ +₴3,400" for a person whose open balances are not all in the display currency (the
+  /// widget's rule, `DashboardDebts`); "≈ no rate" when a rate is missing.
+  func convertedText(_ person: DebtPersonSummary) -> String? {
+    guard person.balances.count > 1 || person.balances.first?.currency != displayCurrency else { return nil }
+    guard let converted = person.converted else { return "≈ no rate" }
+    return "≈ " + DashboardFormat(locale: format.locale, calendar: format.calendar).signed(converted)
+  }
+
+  /// A person's total in the display currency (R-DEBT-15).
+  public struct PersonTotal: Hashable, Sendable {
+    /// The total; nil when a rate to the display currency is missing.
+    public let balance: BalanceText?
+    /// "Total in UAH" / "Total in UAH at today's rates".
+    public let caption: String
+    /// Some balance was converted: the figure is shown with "≈".
+    public let isApproximate: Bool
+  }
+
+  /// The selected person's open balances summed in the display currency at the latest rate
+  /// (the widget's figure); zero when nothing is open. Per-currency balances stay as they are.
+  public var selectedTotal: PersonTotal? {
+    guard let selectedPerson else { return nil }
+    let debts = book.debts.filter { $0.personKey == selectedPerson }
+    guard !debts.isEmpty else { return nil }
+    let person = summary.people.first { $0.personKey == selectedPerson }
+    let approximate = person?.balances.contains { $0.currency != displayCurrency } ?? false
+    let caption = "Total in \(displayCurrency.rawValue)" + (approximate ? " at today's rates" : "")
+    let money: Money? = person.map(\.converted) ?? .zero(displayCurrency)
+    return PersonTotal(balance: money.map(balanceText), caption: caption, isApproximate: approximate)
+  }
+
+  /// One account the selected person's records used (R-DEBT-14), in the account's currency.
+  public struct AccountFlowRow: Hashable, Sendable, Identifiable {
+    public let id: Account.ID
+    /// "Revolut EUR".
+    public let name: String
+    public let currency: Currency
+    /// "−€380.00" (money out of the account), nil when none.
+    public let outText: String?
+    /// "+€120.00" (money into the account), nil when none.
+    public let inText: String?
+    /// "3 records".
+    public let recordsText: String
+  }
+
+  /// Per account: what the selected person's records (every debt, every currency) moved out of
+  /// and into my accounts, accounts A–Z. Records without an account are not listed here.
+  public var selectedAccountFlows: [AccountFlowRow] {
+    guard let selectedPerson else { return [] }
+    let ids = Set(book.debts.filter { $0.personKey == selectedPerson }.map(\.id))
+    let accountsByID = Dictionary(accounts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    return Calc.debtAccountFlows(book, debtIDs: ids).compactMap { flow -> (Account, AccountFlowRow)? in
+      guard let account = accountsByID[flow.accountID] else { return nil }
+      let currency = account.currency
+      let row = AccountFlowRow(
+        id: account.id, name: account.name, currency: currency,
+        outText: flow.outMinor > 0 ? "−" + format.money(Money(minorUnits: flow.outMinor, currency: currency)) : nil,
+        inText: flow.inMinor > 0 ? "+" + format.money(Money(minorUnits: flow.inMinor, currency: currency)) : nil,
+        recordsText: flow.records == 1 ? "1 record" : "\(flow.records) records")
+      return (account, row)
+    }
+    .sorted { AccountOrder.byName($0.0, $1.0) }
+    .map(\.1)
   }
 
   // MARK: Detail

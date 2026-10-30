@@ -42,6 +42,9 @@ public enum DebtSample {
       (record(2, alex, .paidOnTheirBehalf, "2026-09-03", 80_00, note: "Concert tickets"),
        DebtLegInput(accountID: revolut, amountMinor: 80_00)),
       (record(3, alex, .theyRepaid, "2026-10-02", 120_00), DebtLegInput(accountID: revolut, amountMinor: 120_00)),
+      // The EUR debt paid from a UAH account too (R-DEBT-14): the leg is in hryvnias.
+      (record(11, alex, .lent, "2026-10-08", 50_00, note: "Train tickets"),
+       DebtLegInput(accountID: mono, amountMinor: 2_400_00)),
       (record(4, alexPLN, .borrowed, "2026-10-05", 250_00, note: "Taxi home"), DebtLegInput(accountID: pko, amountMinor: 250_00)),
       (record(5, maria, .lent, "2026-07-20", 6_000_00), DebtLegInput(accountID: mono, amountMinor: 6_000_00)),
       (record(6, maria, .theyRepaid, "2026-09-25", 2_500_00), DebtLegInput(accountID: mono, amountMinor: 2_500_00)),
