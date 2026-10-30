@@ -285,9 +285,13 @@ extension ImportWizardModel {
     var skipped = 0
     var reviewIDs: [String] = []
     var plainIDs: [String] = []
+    // C38: rows whose amount on that account the file does not give need their other side chosen.
+    var needingOtherSide: [String] = []
     for id in ids {
       guard let row = preview.row(id) else { continue }
-      if row.review != nil {
+      if preview.needsCounterpart(row: id, to: accountID) {
+        needingOtherSide.append(id)
+      } else if row.review != nil {
         if row.account == .existing(accountID) { skipped += 1 } else { reviewIDs.append(id) }
       } else if preview.canTransfer(row: id, to: accountID) {
         plainIDs.append(id)
@@ -295,7 +299,16 @@ extension ImportWizardModel {
         skipped += 1
       }
     }
+    if needingOtherSide.count == 1, ids.count == 1 {
+      // One row: the sheet that finds, types or estimates the other side.
+      beginCounterpart(forRow: needingOtherSide[0], to: accountID)
+      return
+    }
     guard !reviewIDs.isEmpty || !plainIDs.isEmpty else {
+      if !needingOtherSide.isEmpty {
+        bulkMessage = "The amount on that account is unknown for \(Self.rows(needingOtherSide.count)). Select one row to find the other side, type or estimate the amount."
+        return
+      }
       bulkMessage = "None of the selected rows can be a transfer to that account (same account, or the amount in its currency is unknown)."
       return
     }
@@ -308,7 +321,12 @@ extension ImportWizardModel {
     }
     applied = plainIDs.count + reviewIDs.count
     let name = accounts.first { $0.id == accountID }?.name ?? "the account"
-    finishBulk("\(Self.rows(applied)) now transfer\(applied == 1 ? "s" : "") to “\(name)”." + (skipped > 0 ? " \(Self.rows(skipped)) can't." : ""))
+    var message = "\(Self.rows(applied)) now transfer\(applied == 1 ? "s" : "") to “\(name)”."
+    if skipped > 0 { message += " \(Self.rows(skipped)) can't." }
+    if !needingOtherSide.isEmpty {
+      message += " \(Self.rows(needingOtherSide.count)) need the amount on that account: select one row to find the other side."
+    }
+    finishBulk(message)
   }
 
   /// Opens the debt sheet for the selection: the first row's amounts are shown; the choice

@@ -184,7 +184,7 @@ public enum TxnSource: String, CaseIterable, Codable, Hashable, Sendable, QueryB
 /// income is a transfer without a destination (`toAccountID == nil`): money out of `accountID`,
 /// or into it when `isRefund` is set.
 @Table("txns")
-public struct Txn: Hashable, Identifiable, Sendable {
+public struct Txn: Hashable, Identifiable, Sendable, Codable {
   public let id: UUID
   public var type: TxnType
   public var occurredAt: Date
@@ -225,6 +225,11 @@ public struct Txn: Hashable, Identifiable, Sendable {
   /// original's category in `categoryID` and always reduces that category's spending (on the
   /// refund's own date), whatever R-SET-3 says.
   public var refundOfID: UUID?
+  /// C38: a transfer whose other side's amount is an estimate at the day's rate, recorded because
+  /// the other account's statement was not imported yet. A later import row on the other account
+  /// that matches it completes the transfer with the real figure and clears the flag. Always false
+  /// for anything but a transfer.
+  public var isEstimatedTransferAmount: Bool
 
   public init(
     id: UUID = UUID(), type: TxnType, occurredAt: Date, accountID: Account.ID,
@@ -233,7 +238,8 @@ public struct Txn: Hashable, Identifiable, Sendable {
     originalCurrencyCode: String? = nil, payee: String = "", note: String = "",
     eventID: Event.ID? = nil, source: TxnSource = .manual, importBatchID: ImportBatch.ID? = nil,
     isPendingAtBank: Bool = false, createdAt: Date = Date(), bookedDay: String? = nil,
-    debtRecordID: DebtRecord.ID? = nil, isBalanceCorrection: Bool = false, refundOfID: UUID? = nil
+    debtRecordID: DebtRecord.ID? = nil, isBalanceCorrection: Bool = false, refundOfID: UUID? = nil,
+    isEstimatedTransferAmount: Bool = false
   ) {
     self.id = id
     self.type = type
@@ -257,6 +263,7 @@ public struct Txn: Hashable, Identifiable, Sendable {
     self.debtRecordID = debtRecordID
     self.isBalanceCorrection = isBalanceCorrection
     self.refundOfID = refundOfID
+    self.isEstimatedTransferAmount = isEstimatedTransferAmount
   }
 
   /// A refund linked to the expense it returns (R-TX-4, C30).

@@ -28,6 +28,8 @@ struct DebtMigrationV13Tests {
       try db.execute(
         sql: #"ALTER TABLE "txns" ADD COLUMN "isBalanceCorrection" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
       try db.execute(sql: #"ALTER TABLE "txns" ADD COLUMN "refundOfID" TEXT"#)
+      try db.execute(
+        sql: #"ALTER TABLE "txns" ADD COLUMN "isEstimatedTransferAmount" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
       func account(_ id: Int, _ name: String, _ currency: String, _ kind: String, opening: Int64 = 0, archived: Bool = false) throws {
         try db.execute(
           sql: """

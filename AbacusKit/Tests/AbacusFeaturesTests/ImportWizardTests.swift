@@ -28,7 +28,7 @@ struct ImportHarness {
       let p = dependencies.pipeline
       dependencies.pipeline = ImportPipeline(
         store: store, accounts: p.accounts, categories: p.categories, events: p.events, rules: p.rules,
-        calendar: Self.calendar, now: { Self.now }, refunds: p.refunds)
+        calendar: Self.calendar, now: { Self.now }, refunds: p.refunds, counterparts: p.counterparts)
     }
     model = ImportWizardModel(dependencies: dependencies)
   }

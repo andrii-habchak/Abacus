@@ -249,6 +249,22 @@ public struct PreviewRow: Identifiable, Hashable, Sendable {
   /// C35: the row can be offered, or already is, as a refund (a new money-in row without
   /// attached records, not a transfer or debt record).
   public internal(set) var canBeRefund = false
+  /// C38: the other side of the transfer the user chose for this row (found transaction, typed or
+  /// estimated amount); nil for an ordinary transfer or no transfer.
+  public internal(set) var counterpart: TransferCounterpart?
+  /// C38: the existing transaction the row's transfer takes over (it becomes the transfer; the row
+  /// creates no transaction of its own).
+  public internal(set) var absorbedTxn: Txn?
+  /// C38: an existing transfer with an estimated amount the row looks like the other side of,
+  /// waiting for Accept / Not this.
+  public internal(set) var estimateOffer: ImportEstimatedTransfer?
+  /// C38: the estimated transfer the row was accepted as the other side of (the row is linked to it
+  /// and creates no transaction).
+  public internal(set) var estimateLink: ImportEstimatedTransfer?
+  /// C38: the user said "Not this".
+  public internal(set) var estimateDeclined = false
+  /// C38: the row can be offered, or already is, as the other side of an estimated transfer.
+  public internal(set) var canMatchEstimate = false
 
   public var warnings: [String] { source.warnings }
   public var day: Date { source.occurredAt }

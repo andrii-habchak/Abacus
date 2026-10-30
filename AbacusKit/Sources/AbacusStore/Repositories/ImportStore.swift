@@ -136,6 +136,11 @@ public struct SQLiteImportStore: ImportStore {
           try AttachedRecord.insert { lines }.execute(db)
         }
       }
+      // C38: an existing income/expense turned into one side of a transfer must still be one that
+      // can be (nothing attached, linked or archived since the preview), and an estimated transfer
+      // completed by a row must still be estimated. The transaction as it is now is kept, so undo
+      // of the batch restores it.
+      try TransferAbsorb.keepOriginals(of: commit, batchID: batchID, db)
       for txn in commit.updatedTxns {
         guard try Txn.find(txn.id).fetchCount(db) > 0 else { throw RepositoryError.notFound }
         try Txn.upsert { Txn.Draft(txn) }.execute(db)
@@ -202,9 +207,10 @@ public struct SQLiteImportStore: ImportStore {
   }
 
   /// R-IMP-6: deletes the batch's debt records and transactions (their legs, attached records and
-  /// fingerprints go with them) and the fingerprints it added to existing transactions (links, settled upgrades), then
+  /// fingerprints go with them) and the fingerprints it added to existing transactions (links, settled upgrades), puts back the
+  /// transactions it turned into transfers or completed (C38), then
   /// the accounts, categories and events the batch created that nothing else uses any more, and
-  /// marks the batch undone. Field changes of upgraded transactions stay.
+  /// marks the batch undone. Field changes of settled holds and linked transactions stay.
   public func undo(_ batchID: ImportBatch.ID) async throws {
     try await database.write { db in
       guard let batch = try ImportBatch.find(batchID).fetchOne(db) else { throw RepositoryError.notFound }
@@ -216,6 +222,13 @@ public struct SQLiteImportStore: ImportStore {
       try Txn.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
       try RefundLinks.repair(db)
       try ImportFingerprint.where { $0.batchID.eq(batchID) }.delete().execute(db)
+      // C38: transactions the batch turned into transfers (or completed) come back as they were.
+      for snapshot in try ImportTxnSnapshot.where({ $0.batchID.eq(batchID) }).fetchAll(db) {
+        if let original = try? snapshot.txn(), try Txn.find(original.id).fetchCount(db) > 0 {
+          try Txn.upsert { Txn.Draft(original) }.execute(db)
+        }
+      }
+      try ImportTxnSnapshot.where { $0.batchID.eq(batchID) }.delete().execute(db)
 
       let events = try Event.where { $0.importBatchID.eq(batchID) }.fetchAll(db)
       for event in events where try Txn.where({ $0.eventID.eq(event.id) }).fetchCount(db) == 0 {

@@ -384,12 +384,19 @@ public struct ImportCommit: Sendable {
   /// New transactions that become debt records' legs (import row action and rules, R-DEBT-10/12),
   /// converted after the inserts, oldest first.
   public var debtLinks: [ImportDebtLink]
+  /// C38: existing income/expense transactions the import turns into transfers (they are in
+  /// `updatedTxns` as the transfer; these are the transactions as they were). The commit checks each
+  /// can still be absorbed and keeps the original, so undo of the batch restores it.
+  public var absorbedOriginals: [Txn]
+  /// C38: existing transfers with an estimated amount that the import completes (in `updatedTxns`
+  /// with the real amount; these are as they were, restored by undo).
+  public var completedOriginals: [Txn]
 
   public init(
     batch: ImportBatch, newAccounts: [Account] = [], newCategories: [Category] = [],
     newEvents: [Event] = [], txns: [TxnWithLines] = [], fingerprints: [ImportFingerprint] = [],
     updatedTxns: [Txn] = [], mappings: [ImportMapping] = [], rules: [CategoryRule] = [],
-    debtLinks: [ImportDebtLink] = []
+    debtLinks: [ImportDebtLink] = [], absorbedOriginals: [Txn] = [], completedOriginals: [Txn] = []
   ) {
     self.batch = batch
     self.newAccounts = newAccounts
@@ -401,6 +408,8 @@ public struct ImportCommit: Sendable {
     self.mappings = mappings
     self.rules = rules
     self.debtLinks = debtLinks
+    self.absorbedOriginals = absorbedOriginals
+    self.completedOriginals = completedOriginals
   }
 }
 

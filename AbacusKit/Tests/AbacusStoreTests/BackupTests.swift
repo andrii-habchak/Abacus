@@ -52,6 +52,17 @@ struct BackupTests {
     try await f.insert(F.expense(101, "2026-03-03", 20_00, F.groceries))
     try await debts.transferToDebt(F.id(101), to: DebtLink(personName: "Person A", debtID: debt.id))
     try await f.accounts.saveGroup(AccountGroup(name: "Bank group"))
+    // C38: an income an import turned into a transfer keeps its snapshot for undo.
+    let income = F.income(102, "2026-03-04", 25_00, F.salary, account: F.card, payee: "In")
+    try await f.insert(income)
+    var transfer = income
+    transfer.type = .transfer
+    transfer.accountID = F.bank.id
+    transfer.toAccountID = F.card.id
+    transfer.toAmountMinor = 25_00
+    transfer.categoryID = nil
+    try await f.imports.commit(
+      ImportCommit(batch: ImportBatch(source: .pko, fileName: "c38.csv"), updatedTxns: [transfer], absorbedOriginals: [income]))
   }
 
   @Test("R-SET-2: export writes all tables to one file; restore replaces all data with it")

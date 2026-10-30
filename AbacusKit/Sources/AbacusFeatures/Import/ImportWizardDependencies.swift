@@ -38,7 +38,8 @@ public struct ImportWizardDependencies: Sendable {
         events: SQLiteEventRepository(database: database),
         rules: SQLiteRuleRepository(database: database, calendar: calendar),
         calendar: calendar, now: now, converter: converter,
-        refunds: SQLiteRefundRepository(database: database, calendar: calendar, converter: converter)))
+        refunds: SQLiteRefundRepository(database: database, calendar: calendar, converter: converter),
+        counterparts: SQLiteTransferCounterpartRepository(database: database, calendar: calendar)))
   }
 }
 
