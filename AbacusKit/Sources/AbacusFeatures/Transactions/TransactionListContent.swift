@@ -97,6 +97,33 @@ public struct TransactionListContent: Equatable, Sendable {
     public var rows: [Row]
   }
 
+  public struct DayHeader: Hashable, Sendable {
+    public var day: Day
+    public var title: String
+    public var netText: String
+  }
+
+  /// One line of the flat list.
+  public enum Item: Identifiable, Hashable, Sendable {
+    public enum ID: Hashable, Sendable {
+      case day(Day)
+      case transaction(Txn.ID)
+      case line(AttachedRecord.ID)
+    }
+
+    case header(DayHeader)
+    case row(Row)
+    case line(Line)
+
+    public var id: ID {
+      switch self {
+      case .header(let header): .day(header.day)
+      case .row(let row): .transaction(row.id)
+      case .line(let line): .line(line.id)
+      }
+    }
+  }
+
   public struct Totals: Hashable, Sendable {
     public var count: Int
     public var income: Money
@@ -109,6 +136,10 @@ public struct TransactionListContent: Equatable, Sendable {
   }
 
   public var days: [DaySection]
+  /// The same content as one flat list (day header, its rows, each row's attached records): the
+  /// list view shows this, because a nested `ForEach` costs SwiftUI far more per row to diff when a
+  /// page is appended (C28).
+  public var items: [Item]
   public var totals: Totals
   public var incomeText: String
   public var expenseText: String
@@ -121,6 +152,7 @@ public struct TransactionListContent: Equatable, Sendable {
       converter: TransactionNoRates(), today: Day(year: 2000, month: 1, day: 1))
   }
 
+  /// All rows at once, totals and day sums computed from them (previews, tests, small sets).
   /// - Parameters:
   ///   - rows: as fetched, already filtered and sorted; days keep that order.
   ///   - categoryFilter: the expanded category filter, if any (see `TransactionTotalsRule`).
@@ -133,60 +165,127 @@ public struct TransactionListContent: Equatable, Sendable {
     refundsReduceSpending: Bool = false,
     calendar: Calendar = .current, format: TransactionMoneyFormat = TransactionMoneyFormat()
   ) {
-    let tree = reference.categories
-    let rule = TransactionTotalsRule(
-      refundsReduceSpending: refundsReduceSpending, categoryFilter: categoryFilter,
-      categoryKinds: tree.byID.mapValues(\.kind), includeUncategorised: includeUncategorised)
-    let titles = TransactionDayTitles(today: today, calendar: calendar, locale: format.locale)
+    let builder = Builder(
+      summary: TxnListSummary(rows: rows), reference: reference, displayCurrency: displayCurrency,
+      converter: converter, today: today, categoryFilter: categoryFilter,
+      includeUncategorised: includeUncategorised, refundsReduceSpending: refundsReduceSpending,
+      calendar: calendar, format: format)
+    self = builder.content(rows: rows)
+  }
 
-    var order: [Day] = []
-    var rowsByDay: [Day: [Row]] = [:]
-    var bucketsByDay: [Day: [Currency: (income: Int64, expense: Int64)]] = [:]
-    for item in rows {
-      let day = Day(item.txn.occurredAt, calendar: calendar)
-      if rowsByDay[day] == nil { order.append(day) }
-      rowsByDay[day, default: []].append(
-        Self.row(item, reference: reference, calendar: calendar, format: format))
-      if let currency = reference.accountsByID[item.txn.accountID]?.currency {
-        let parts = rule.parts(of: item)
-        bucketsByDay[day, default: [:]][currency, default: (0, 0)].income += parts.income
-        bucketsByDay[day, default: [:]][currency, default: (0, 0)].expense += parts.expense
-      }
-    }
+  fileprivate init(days: [DaySection], items: [Item] = [], totals: Totals, format: TransactionMoneyFormat) {
+    self.items = items
+    self.days = days
+    self.totals = totals
+    incomeText = format.string(totals.income)
+    expenseText = format.string(totals.expense)
+    netText = format.string(totals.net, sign: .always)
+  }
 
-    var income = Money.zero(displayCurrency)
-    var expense = Money.zero(displayCurrency)
-    var unconverted = rows.count(where: { reference.accountsByID[$0.txn.accountID] == nil })
-    var days: [DaySection] = []
-    for day in order {
-      var dayIncome = Money.zero(displayCurrency)
-      var dayExpense = Money.zero(displayCurrency)
-      for (currency, sums) in (bucketsByDay[day] ?? [:]).sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
-        guard sums.income != 0 || sums.expense != 0 else { continue }
-        guard
-          let i = converter.convert(Money(minorUnits: sums.income, currency: currency), to: displayCurrency, on: day),
-          let e = converter.convert(Money(minorUnits: sums.expense, currency: currency), to: displayCurrency, on: day)
-        else {
+  /// Builds the list content page by page (C28): the footer totals, "N transactions" and every
+  /// day's net come from `summary`, the aggregate of the WHOLE filtered set, so they stay right
+  /// while only some pages of rows are loaded; rows are formatted only for the pages given.
+  public struct Builder {
+    let reference: TransactionsReference
+    let calendar: Calendar
+    let format: TransactionMoneyFormat
+    let titles: TransactionDayTitles
+    public let totals: Totals
+    /// The net of every day of the filtered set, in the display currency.
+    let dayNets: [Day: Money]
+
+    /// - Parameter summary: the whole filtered set (`TxnRepository.summary`).
+    public init(
+      summary: TxnListSummary, reference: TransactionsReference, displayCurrency: Currency,
+      converter: any CurrencyConverter, today: Day,
+      categoryFilter: Set<AbacusDomain.Category.ID>? = nil, includeUncategorised: Bool = false,
+      refundsReduceSpending: Bool = false, calendar: Calendar = .current,
+      format: TransactionMoneyFormat = TransactionMoneyFormat()
+    ) {
+      self.reference = reference
+      self.calendar = calendar
+      self.format = format
+      titles = TransactionDayTitles(today: today, calendar: calendar, locale: format.locale)
+      let rule = TransactionTotalsRule(
+        refundsReduceSpending: refundsReduceSpending, categoryFilter: categoryFilter,
+        categoryKinds: reference.categories.byID.mapValues(\.kind), includeUncategorised: includeUncategorised)
+
+      var buckets: [Day: [Currency: (income: Int64, expense: Int64)]] = [:]
+      var unconverted = 0
+      for main in summary.mains {
+        guard let currency = reference.accountsByID[main.accountID]?.currency else {
           unconverted += 1
           continue
         }
-        dayIncome = dayIncome + i
-        dayExpense = dayExpense + e
+        let parts = rule.parts(
+          type: main.type, isRefund: main.isRefund, categoryID: main.categoryID, amountMinor: main.amountMinor)
+        let day = Day(main.occurredAt, calendar: calendar)
+        buckets[day, default: [:]][currency, default: (0, 0)].income += parts.income
+        buckets[day, default: [:]][currency, default: (0, 0)].expense += parts.expense
       }
-      income = income + dayIncome
-      expense = expense + dayExpense
-      let net = dayIncome - dayExpense
-      days.append(
-        DaySection(
-          day: day, title: titles.title(day), net: net, netText: format.string(net, sign: .always),
-          rows: rowsByDay[day] ?? []))
+      for line in summary.lines {
+        guard let currency = reference.accountsByID[line.accountID]?.currency else { continue }
+        let parts = rule.parts(lineKind: line.kind, categoryID: line.categoryID, amountMinor: line.amountMinor)
+        let day = Day(line.occurredAt, calendar: calendar)
+        buckets[day, default: [:]][currency, default: (0, 0)].income += parts.income
+        buckets[day, default: [:]][currency, default: (0, 0)].expense += parts.expense
+      }
+
+      var income = Money.zero(displayCurrency)
+      var expense = Money.zero(displayCurrency)
+      var nets: [Day: Money] = [:]
+      for (day, byCurrency) in buckets {
+        var dayIncome = Money.zero(displayCurrency)
+        var dayExpense = Money.zero(displayCurrency)
+        for (currency, sums) in byCurrency.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
+          guard sums.income != 0 || sums.expense != 0 else { continue }
+          guard
+            let i = converter.convert(Money(minorUnits: sums.income, currency: currency), to: displayCurrency, on: day),
+            let e = converter.convert(Money(minorUnits: sums.expense, currency: currency), to: displayCurrency, on: day)
+          else {
+            unconverted += 1
+            continue
+          }
+          dayIncome = dayIncome + i
+          dayExpense = dayExpense + e
+        }
+        income = income + dayIncome
+        expense = expense + dayExpense
+        nets[day] = dayIncome - dayExpense
+      }
+      dayNets = nets
+      totals = Totals(count: summary.count, income: income, expense: expense, unconverted: unconverted)
+      self.displayCurrency = displayCurrency
     }
 
-    self.days = days
-    totals = Totals(count: rows.count, income: income, expense: expense, unconverted: unconverted)
-    incomeText = format.string(income)
-    expenseText = format.string(expense)
-    netText = format.string(income - expense, sign: .always)
+    private let displayCurrency: Currency
+
+    /// Content for the first `rows` (a page, or all of them).
+    public func content(rows: [TxnWithLines]) -> TransactionListContent {
+      var content = TransactionListContent(days: [], totals: totals, format: format)
+      append(rows, to: &content)
+      return content
+    }
+
+    /// Adds the next page: its rows join the last day section when they share its day (a page
+    /// boundary may fall inside a day), otherwise new sections start.
+    public func append(_ rows: [TxnWithLines], to content: inout TransactionListContent) {
+      for item in rows {
+        let day = Day(item.txn.occurredAt, calendar: calendar)
+        let row = TransactionListContent.row(item, reference: reference, calendar: calendar, format: format)
+        if let last = content.days.indices.last, content.days[last].day == day {
+          content.days[last].rows.append(row)
+        } else {
+          let net = dayNets[day] ?? .zero(displayCurrency)
+          let title = titles.title(day)
+          let netText = format.string(net, sign: .always)
+          content.days.append(DaySection(day: day, title: title, net: net, netText: netText, rows: [row]))
+          content.items.append(.header(DayHeader(day: day, title: title, netText: netText)))
+        }
+        content.items.append(.row(row))
+        for line in row.lines { content.items.append(.line(line)) }
+      }
+    }
   }
 
   // MARK: Rows

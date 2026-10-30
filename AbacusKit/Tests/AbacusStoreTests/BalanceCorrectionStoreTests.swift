@@ -22,6 +22,19 @@ struct BalanceCorrectionStoreTests {
     #expect(try await f.txns.transaction(F.id(101))?.txn.isBalanceCorrection == false)
   }
 
+  @Test("R-ACC-4 / R-LIST-5: the list summary counts a correction but its flows skip it")
+  func summarySkipsCorrection() async throws {
+    let f = try F()
+    try f.seedBasics()
+    var flagged = F.expense(100, "2026-03-02", 10_00, F.groceries)
+    flagged.isBalanceCorrection = true
+    try await f.insert(flagged)
+    try await f.insert(F.expense(101, "2026-03-02", 20_00, F.groceries))
+    let summary = try await f.txns.summary(matching: TxnQuery())
+    #expect(summary.count == 2)
+    #expect(summary.mains.map(\.amountMinor).reduce(0, +) == 20_00)
+  }
+
   @Test("R-ACC-4: v14 adds the column to a v13 database; existing transactions are not corrections; running it again is a no-op")
   func migration() throws {
     let queue = try DatabaseQueue()

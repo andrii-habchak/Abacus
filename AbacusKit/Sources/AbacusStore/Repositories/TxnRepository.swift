@@ -26,6 +26,24 @@ public struct SQLiteTxnRepository: TxnRepository {
     return try await database.read { db in try filter.fetch(db) }
   }
 
+  /// C28: one page of `transactions(matching:)` (same order); an offset past the end gives [].
+  public func page(matching query: TxnQuery, offset: Int, limit: Int) async throws -> [TxnWithLines] {
+    let filter = TxnFilter(query: query, bounds: DayBounds(calendar: calendar))
+    return try await database.read { db in try filter.fetch(db, offset: offset, limit: limit) }
+  }
+
+  /// C28: count and amounts of the whole filtered set by aggregate queries (no rows decoded).
+  public func summary(matching query: TxnQuery) async throws -> TxnListSummary {
+    let filter = TxnFilter(query: query, bounds: DayBounds(calendar: calendar))
+    return try await database.read { db in try filter.summary(db) }
+  }
+
+  /// C28: per-value counts of one dimension under the other filters (GROUP BY queries).
+  public func facets(matching query: TxnQuery, dimension: TxnFacetDimension) async throws -> TxnFacetCounts {
+    let filter = TxnFilter(query: query.dropping(dimension), bounds: DayBounds(calendar: calendar))
+    return try await database.read { db in try filter.facets(db, dimension: dimension) }
+  }
+
   /// One transaction with its attached records.
   public func transaction(_ id: Txn.ID) async throws -> TxnWithLines? {
     try await database.read { db in
@@ -139,8 +157,12 @@ struct TxnFilter: Sendable {
     if let categories = try categoryIDs(db) {
       var alternatives: [QueryFragment] = []
       if query.includeUncategorised {
-        let kinds = sqlList([TxnType.expense, TxnType.income])
-        alternatives.append(#"("txns"."type" IN \#(kinds) AND "txns"."categoryID" IS NULL)"#)
+        if query.uncategorisedIncludesTransfers {
+          alternatives.append(#"("txns"."categoryID" IS NULL)"#)
+        } else {
+          let kinds = sqlList([TxnType.expense, TxnType.income])
+          alternatives.append(#"("txns"."type" IN \#(kinds) AND "txns"."categoryID" IS NULL)"#)
+        }
       }
       if !categories.isEmpty {
         let ids = sqlList(categories.sorted())
@@ -165,10 +187,10 @@ struct TxnFilter: Sendable {
     return parts.isEmpty ? "1" : parts.joined(separator: " AND ")
   }
 
-  func fetch(_ db: Database) throws -> [TxnWithLines] {
+  func fetch(_ db: Database, offset: Int = 0, limit: Int? = nil) throws -> [TxnWithLines] {
     let condition = SQLQueryExpression(try whereClause(db), as: Bool.self)
     let newestFirst = query.newestFirst
-    let txns = try Txn
+    let ordered = Txn
       .where { _ in condition }
       .order {
         if newestFirst {
@@ -177,7 +199,12 @@ struct TxnFilter: Sendable {
           ($0.occurredAt.asc(), $0.createdAt.asc(), $0.id.asc())
         }
       }
-      .fetchAll(db)
+    let txns: [Txn]
+    if let limit {
+      txns = try ordered.limit(limit, offset: offset).fetchAll(db)
+    } else {
+      txns = try ordered.fetchAll(db)
+    }
     guard !txns.isEmpty else { return [] }
     // Lines of the fetched transactions, by id in chunks (an index lookup per id).
     var lines: [AttachedRecord] = []
@@ -191,6 +218,142 @@ struct TxnFilter: Sendable {
     let linesByTxn = Dictionary(grouping: lines, by: \.txnID)
     return txns.map { TxnWithLines(txn: $0, lines: linesByTxn[$0.id] ?? []) }
   }
+
+  // MARK: Aggregates (C28)
+
+  /// The filtered set's count and amounts, grouped by minute / account / type / refund flag /
+  /// category in SQL. A minute never straddles two calendar days (every UTC offset is a whole
+  /// number of minutes), so the caller buckets each group by its local day.
+  func summary(_ db: Database) throws -> TxnListSummary {
+    let condition = try whereClause(db)
+    let count = try SQLQueryExpression(
+      #"SELECT count(*) FROM "txns" WHERE \#(condition)"# as QueryFragment, as: Int.self
+    ).fetchOne(db) ?? 0
+    let mains = try SQLQueryExpression(
+      #"""
+      SELECT MIN("txns"."occurredAt"), "txns"."accountID", "txns"."type", "txns"."isRefund", \#
+      "txns"."categoryID", SUM("txns"."amountMinor")
+      FROM "txns" WHERE NOT "txns"."isBalanceCorrection" AND \#(condition)
+      GROUP BY substr("txns"."occurredAt", 1, 16), "txns"."accountID", "txns"."type", "txns"."isRefund", \#
+      "txns"."categoryID"
+      """# as QueryFragment, as: MainFlowRow.self
+    ).fetchAll(db)
+    let lines = try SQLQueryExpression(
+      #"""
+      SELECT MIN("txns"."occurredAt"), "txns"."accountID", "ln"."kind", "ln"."categoryID", \#
+      SUM("ln"."amountMinor")
+      FROM "attachedRecords" AS "ln" JOIN "txns" ON "txns"."id" = "ln"."txnID" \#
+      WHERE NOT "txns"."isBalanceCorrection" AND \#(condition)
+      GROUP BY substr("txns"."occurredAt", 1, 16), "txns"."accountID", "ln"."kind", "ln"."categoryID"
+      """# as QueryFragment, as: LineFlowRow.self
+    ).fetchAll(db)
+    return TxnListSummary(
+      count: count,
+      mains: mains.map {
+        .init(
+          occurredAt: $0.occurredAt, accountID: $0.accountID, type: $0.type, isRefund: $0.isRefund,
+          categoryID: $0.categoryID, amountMinor: $0.amountMinor)
+      },
+      lines: lines.map {
+        .init(
+          occurredAt: $0.occurredAt, accountID: $0.accountID, kind: $0.kind, categoryID: $0.categoryID,
+          amountMinor: $0.amountMinor)
+      })
+  }
+
+  /// Row counts per value of `dimension` (this filter already has the dimension's own part
+  /// dropped).
+  func facets(_ db: Database, dimension: TxnFacetDimension) throws -> TxnFacetCounts {
+    let condition = try whereClause(db)
+    var counts = TxnFacetCounts()
+    switch dimension {
+    case .accounts:
+      let rows = try SQLQueryExpression(
+        #"""
+        SELECT "a", count(*) FROM (
+          SELECT "accountID" AS "a" FROM "txns" WHERE \#(condition)
+          UNION ALL
+          SELECT "toAccountID" FROM "txns"
+          WHERE "toAccountID" IS NOT NULL AND "toAccountID" <> "accountID" AND \#(condition)
+        ) GROUP BY "a"
+        """# as QueryFragment, as: FacetRow.self
+      ).fetchAll(db)
+      for row in rows { counts.accounts[row.key] = row.n }
+    case .categories:
+      let own = try SQLQueryExpression(
+        #"""
+        SELECT "categoryID", count(*) FROM "txns" WHERE "categoryID" IS NOT NULL AND \#(condition)
+        GROUP BY "categoryID"
+        """# as QueryFragment, as: FacetRow.self
+      ).fetchAll(db)
+      for row in own { counts.categories[row.key, default: 0] += row.n }
+      let attached = try SQLQueryExpression(
+        #"""
+        SELECT "ln"."categoryID", count(DISTINCT "ln"."txnID")
+        FROM "attachedRecords" AS "ln" JOIN "txns" ON "txns"."id" = "ln"."txnID"
+        WHERE "ln"."categoryID" IS NOT NULL AND \#(condition)
+        GROUP BY "ln"."categoryID"
+        """# as QueryFragment, as: FacetRow.self
+      ).fetchAll(db)
+      for row in attached { counts.categories[row.key, default: 0] += row.n }
+      let kinds = sqlList([TxnType.expense, TxnType.income])
+      let typeClause: QueryFragment =
+        query.uncategorisedIncludesTransfers ? "1" : #""type" IN \#(kinds)"#
+      counts.uncategorised =
+        try SQLQueryExpression(
+          #"""
+          SELECT count(*) FROM "txns" WHERE "categoryID" IS NULL AND \#(typeClause) AND \#(condition)
+          """# as QueryFragment, as: Int.self
+        ).fetchOne(db) ?? 0
+    case .events:
+      let rows = try SQLQueryExpression(
+        #"""
+        SELECT "eventID", count(*) FROM "txns" WHERE "eventID" IS NOT NULL AND \#(condition)
+        GROUP BY "eventID"
+        """# as QueryFragment, as: FacetRow.self
+      ).fetchAll(db)
+      for row in rows { counts.events[row.key] = row.n }
+    case .types:
+      let rows = try SQLQueryExpression(
+        #"""
+        SELECT "type", count(*) FROM "txns" WHERE \#(condition) GROUP BY "type"
+        """# as QueryFragment, as: TypeFacetRow.self
+      ).fetchAll(db)
+      for row in rows { counts.types[row.type] = row.n }
+    }
+    return counts
+  }
+}
+
+@Selection
+struct MainFlowRow: Sendable {
+  var occurredAt: Date
+  var accountID: UUID
+  var type: TxnType
+  var isRefund: Bool
+  var categoryID: UUID?
+  var amountMinor: Int64
+}
+
+@Selection
+struct LineFlowRow: Sendable {
+  var occurredAt: Date
+  var accountID: UUID
+  var kind: CategoryKind
+  var categoryID: UUID?
+  var amountMinor: Int64
+}
+
+@Selection
+struct FacetRow: Sendable {
+  var key: UUID
+  var n: Int
+}
+
+@Selection
+struct TypeFacetRow: Sendable {
+  var type: TxnType
+  var n: Int
 }
 
 // MARK: - Totals

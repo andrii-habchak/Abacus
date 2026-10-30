@@ -73,25 +73,50 @@ public struct TransactionTotalsRule: Sendable {
     let txn = row.txn
     // A balance correction (R-ACC-4) is not income or expense (C29).
     if txn.isBalanceCorrection { return (0, 0) }
-    if includeUncategorised && txn.categoryID == nil || matches(txn.categoryID) {
-      switch (txn.type, txn.isRefund) {
-      case (.expense, false): expense += txn.amountMinor
-      case (.expense, true): addRefund(txn.amountMinor, &income, &expense)
-      case (.income, false): income += txn.amountMinor
-      case (.income, true): income -= txn.amountMinor
+    let main = parts(type: txn.type, isRefund: txn.isRefund, categoryID: txn.categoryID, amountMinor: txn.amountMinor)
+    income += main.income
+    expense += main.expense
+    for line in row.lines {
+      let part = parts(lineKind: line.kind, categoryID: line.categoryID, amountMinor: line.amountMinor)
+      income += part.income
+      expense += part.expense
+    }
+    return (income, expense)
+  }
+
+  /// A transaction's main amount (also applied to the store's grouped flows, C28).
+  public func parts(
+    type: TxnType, isRefund: Bool, categoryID: AbacusDomain.Category.ID?, amountMinor: Int64
+  ) -> (income: Int64, expense: Int64) {
+    var income: Int64 = 0
+    var expense: Int64 = 0
+    if includeUncategorised && categoryID == nil || matches(categoryID) {
+      switch (type, isRefund) {
+      case (.expense, false): expense += amountMinor
+      case (.expense, true): addRefund(amountMinor, &income, &expense)
+      case (.income, false): income += amountMinor
+      case (.income, true): income -= amountMinor
       case (.transfer, _): break
       }
     }
-    for line in row.lines where matches(line.categoryID) {
-      switch line.kind {
-      case .expense:
-        expense += line.amountMinor
-      case .income:
-        if let category = line.categoryID, categoryKinds[category] == .expense {
-          addRefund(line.amountMinor, &income, &expense)
-        } else {
-          income += line.amountMinor
-        }
+    return (income, expense)
+  }
+
+  /// An attached record's amount.
+  public func parts(
+    lineKind: CategoryKind, categoryID: AbacusDomain.Category.ID?, amountMinor: Int64
+  ) -> (income: Int64, expense: Int64) {
+    var income: Int64 = 0
+    var expense: Int64 = 0
+    guard matches(categoryID) else { return (0, 0) }
+    switch lineKind {
+    case .expense:
+      expense += amountMinor
+    case .income:
+      if let category = categoryID, categoryKinds[category] == .expense {
+        addRefund(amountMinor, &income, &expense)
+      } else {
+        income += amountMinor
       }
     }
     return (income, expense)

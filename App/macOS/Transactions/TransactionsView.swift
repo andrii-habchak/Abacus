@@ -61,7 +61,7 @@ struct TransactionsView: View {
         if Task.isCancelled { return }
       }
       await model.refresh()
-      #if DEBUG
+      #if DEBUG || ABACUS_PROBE
         TransactionsDebugLaunch.apply(to: model)
       #endif
     }
@@ -84,20 +84,23 @@ struct TransactionsView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
       List(selection: $model.selection) {
-        ForEach(model.content.days) { day in
-          Section {
-            ForEach(day.rows) { row in
-              TransactionRowView(row: row)
-                .tag(row.id)
-                .listRowInsets(rowInsets(vertical: 4))
-              ForEach(row.lines) { line in
-                TransactionLineView(line: line)
-                  .listRowInsets(rowInsets(vertical: 2))
-                  .selectionDisabled()
-              }
-            }
-          } header: {
-            TransactionDayHeader(day: day)
+        // One flat ForEach (day header, rows, attached lines): a nested one costs SwiftUI about
+        // 0.5 ms per row on every appended page (C28, measured).
+        ForEach(model.content.items) { item in
+          switch item {
+          case .header(let header):
+            TransactionDayHeader(day: header)
+              .listRowInsets(rowInsets(vertical: 0))
+              .selectionDisabled()
+          case .row(let row):
+            TransactionRowView(row: row)
+              .tag(row.id)
+              .listRowInsets(rowInsets(vertical: 4))
+              .onAppear { model.rowAppeared(row.id) }
+          case .line(let line):
+            TransactionLineView(line: line)
+              .listRowInsets(rowInsets(vertical: 2))
+              .selectionDisabled()
           }
         }
       }
@@ -215,7 +218,7 @@ struct TransactionsPreviewHost: View {
   }
 }
 
-#if DEBUG
+#if DEBUG || ABACUS_PROBE
   /// Debug builds only, for UI checks on a scratch database: `-AbacusTransactionsEvent <name>`
   /// opens the list as that event's "Show N transactions" does, `-AbacusTransactionsSearch <text>`
   /// fills the page search, `-AbacusTransactionsTypes expense,income` sets the type toggles.
@@ -259,6 +262,7 @@ struct TransactionsPreviewHost: View {
           say("removed")
         }
       }
+      TransactionsPerfProbe.run(model: model)
       DebugWindowSize.applyIfRequested()
     }
   }
@@ -277,6 +281,74 @@ struct TransactionsPreviewHost: View {
         frame.size.width = width
         if height > 0 { frame.size.height = height }
         window.setFrame(frame, display: true)
+      }
+    }
+  }
+
+  /// Debug builds only (C28): `-AbacusTransactionsAllDates YES` switches to "All dates" 6 s after
+  /// launch, then jumps the scroller to 50 %, 95 %, 10 % and 100 % and switches the type filter,
+  /// printing `PERF <step> <ms>` (wall time until the main thread answers promptly again; use with
+  /// `-AbacusHangWatch YES` for `HANG` lines). Scratch databases only.
+  @MainActor
+  enum TransactionsPerfProbe {
+    static func run(model: TransactionsViewModel) {
+      guard UserDefaults.standard.bool(forKey: "AbacusTransactionsAllDates") else { return }
+      Task { @MainActor in
+        func say(_ text: String) { FileHandle.standardError.write(Data("PERF \(text)\n".utf8)) }
+        let clock = ContinuousClock()
+        func ms(_ d: Duration) -> Int { Int(d.components.seconds * 1000 + d.components.attoseconds / 1_000_000_000_000_000) }
+        /// Until the main thread has answered 3 short sleeps in a row without delay.
+        func settle() async {
+          var calm = 0
+          while calm < 3 {
+            let t = clock.now
+            try? await Task.sleep(for: .milliseconds(10))
+            calm = ms(clock.now - t) < 40 ? calm + 1 : 0
+          }
+        }
+        func scrollView() -> NSScrollView? {
+          func find(_ view: NSView) -> NSScrollView? {
+            if let table = view as? NSTableView { return table.enclosingScrollView }
+            for sub in view.subviews { if let found = find(sub) { return found } }
+            return nil
+          }
+          for window in NSApp.windows { if let content = window.contentView, let found = find(content) { return found } }
+          return nil
+        }
+        try? await Task.sleep(for: .seconds(6))
+        await settle()
+        var start = clock.now
+        model.filters.dateRange = TransactionFilters.allDates
+        while model.loadedQuery?.fromDay != Day(year: 1900, month: 1, day: 1) { try? await Task.sleep(for: .milliseconds(5)) }
+        say("all dates: rows loaded after \(ms(clock.now - start)) ms (\(model.rows.count) of \(model.content.totals.count))")
+        await settle()
+        say("all dates: first rows on screen and responsive after \(ms(clock.now - start)) ms")
+        for fraction in [0.5, 0.95, 0.1, 1.0] {
+          guard let scroll = scrollView(), let document = scroll.documentView else { say("no table"); break }
+          start = clock.now
+          let y = max(0, (document.frame.height - scroll.contentView.bounds.height) * fraction)
+          scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+          scroll.reflectScrolledClipView(scroll.contentView)
+          await settle()
+          say("scroller jump to \(Int(fraction * 100)) %: responsive after \(ms(clock.now - start)) ms (document \(Int(document.frame.height)) pt, \(model.rows.count) rows loaded)")
+        }
+        // Paging: keep scrolling to the end; each jump should load the next page.
+        for step in 1...6 {
+          guard let scroll = scrollView(), let document = scroll.documentView else { break }
+          start = clock.now
+          scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.frame.height - scroll.contentView.bounds.height)))
+          scroll.reflectScrolledClipView(scroll.contentView)
+          await settle()
+          try? await Task.sleep(for: .milliseconds(300))
+          say("to the end, step \(step): responsive after \(ms(clock.now - start)) ms; \(model.rows.count) of \(model.summary.count) rows loaded")
+        }
+        start = clock.now
+        model.filters.types = [.expense]
+        while model.loadedQuery?.types != [.expense] { try? await Task.sleep(for: .milliseconds(5)) }
+        await settle()
+        say("filter change (expense only): responsive after \(ms(clock.now - start)) ms")
+        try? await Task.sleep(for: .seconds(1))
+        NSApp.terminate(nil)
       }
     }
   }
