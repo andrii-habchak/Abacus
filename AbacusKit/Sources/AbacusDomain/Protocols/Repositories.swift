@@ -53,9 +53,14 @@ public protocol CategoryRepository: Sendable {
   /// kind and not be the category itself or one of its subcategories. Rules and import mappings
   /// follow when `repointRules`; the category (a parent with its subcategories) is archived
   /// afterwards when `archiveAfterwards`. Budget limits stay. Returns what moved.
+  ///
+  /// `target == nil` is the built-in "Uncategorised" (C39): the transactions and attached records
+  /// lose their category (the rows are those of the source's kind by construction). Rules and
+  /// import mappings cannot have no category, so they stay on the old category whatever
+  /// `repointRules` says (the returned counts for them are 0).
   @discardableResult
   func reassign(
-    from id: Category.ID, to target: Category.ID, repointRules: Bool, archiveAfterwards: Bool
+    from id: Category.ID, to target: Category.ID?, repointRules: Bool, archiveAfterwards: Bool
   ) async throws -> CategoryReassignImpact
 }
 
@@ -64,7 +69,7 @@ extension CategoryRepository {
   public func reassignImpact(of id: Category.ID) async throws -> CategoryReassignImpact { CategoryReassignImpact() }
 
   public func reassign(
-    from id: Category.ID, to target: Category.ID, repointRules: Bool, archiveAfterwards: Bool
+    from id: Category.ID, to target: Category.ID?, repointRules: Bool, archiveAfterwards: Bool
   ) async throws -> CategoryReassignImpact { throw RepositoryError.notFound }
 }
 

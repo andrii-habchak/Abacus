@@ -124,21 +124,23 @@ public struct SQLiteCategoryRepository: CategoryRepository {
 
   @discardableResult
   public func reassign(
-    from id: AbacusDomain.Category.ID, to target: AbacusDomain.Category.ID, repointRules: Bool, archiveAfterwards: Bool
+    from id: AbacusDomain.Category.ID, to target: AbacusDomain.Category.ID?, repointRules: Bool, archiveAfterwards: Bool
   ) async throws -> CategoryReassignImpact {
     try await database.write { db in
-      guard let source = try AbacusDomain.Category.find(id).fetchOne(db),
-        let targetCategory = try AbacusDomain.Category.find(target).fetchOne(db)
-      else { throw RepositoryError.notFound }
-      guard targetCategory.kind == source.kind else { throw RepositoryError.kindMismatch }
+      guard let source = try AbacusDomain.Category.find(id).fetchOne(db) else { throw RepositoryError.notFound }
+      if let target {
+        guard let targetCategory = try AbacusDomain.Category.find(target).fetchOne(db) else { throw RepositoryError.notFound }
+        guard targetCategory.kind == source.kind else { throw RepositoryError.kindMismatch }
+      }
       let ids = try Self.sourceIDs(of: id, db)
-      guard !ids.contains(target) else { throw RepositoryError.invalidReassignTarget }
+      if let target { guard !ids.contains(target) else { throw RepositoryError.invalidReassignTarget } }
       let set = Set(ids)
       let optional = set.map(Optional.some)
       var moved = try Self.impact(of: ids, db)
-      try Txn.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(Optional(target)) }.execute(db)
-      try AttachedRecord.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(Optional(target)) }.execute(db)
-      if repointRules {
+      try Txn.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(target) }.execute(db)
+      try AttachedRecord.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(target) }.execute(db)
+      // The built-in Uncategorised (nil) cannot be a rule's or a mapping's category: they stay.
+      if let target, repointRules {
         try CategoryRule.where { $0.categoryID.in(optional) }.update { $0.categoryID = #bind(target) }.execute(db)
         try ImportMapping
           .where { $0.kind.eq(MappingKind.category) && $0.targetID.in(set) }

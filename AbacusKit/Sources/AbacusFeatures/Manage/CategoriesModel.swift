@@ -48,7 +48,7 @@ public enum CategoryDropPosition: Hashable, Sendable {
 @Observable
 public final class CategoriesModel {
   /// The selection id of the built-in "Uncategorised" row (not a category id).
-  public static let uncategorisedID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+  public nonisolated static let uncategorisedID = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
 
   public private(set) var phase: ManagePhase = .idle
   public private(set) var kind: CategoryKind = .expense
@@ -754,9 +754,21 @@ public final class CategoriesModel {
     let targets = CategoryOrder.alphabetical(categories.filter { $0.kind == source.kind })
       .filter { $0.id != id && !childIDs.contains($0.id) && !$0.isArchived }
       .map { ManageDialog.Target(id: $0.id, name: $0.name, isChild: $0.parentID != nil) }
+    // The picker (C39): the built-in Uncategorised first, then the targets in picker order.
+    let section = source.kind == .expense ? "Expense" : "Income"
+    let builtIn = CategoryPickerItem(
+      value: Self.uncategorisedID, title: CategoryReassignSheet.builtInTitle, buttonTitle: CategoryReassignSheet.builtInTitle,
+      section: section)
+    let pickerItems =
+      [builtIn]
+      + CategoryPickerItem.items(
+        from: CategoryOrder.alphabetical(categories.filter { $0.kind == source.kind })
+          .filter { $0.id != id && !childIDs.contains($0.id) && !$0.isArchived },
+        kinds: [source.kind])
     reassignSheet = CategoryReassignSheet(
       sourceID: id, sourceName: source.name, kind: source.kind, childNames: children.map(\.name), targets: targets,
-      targetID: defaultTarget(for: source, among: targets), impact: impact)
+      pickerItems: pickerItems, targetID: defaultTarget(for: source, among: targets) ?? Self.uncategorisedID,
+      impact: impact)
   }
 
   public func cancelReassign() { reassignSheet = nil }
@@ -768,10 +780,12 @@ public final class CategoriesModel {
   /// "Re-assign": one repository call (one database transaction); the sheet closes on success,
   /// shows the failure in itself otherwise.
   public func confirmReassign(_ sheet: CategoryReassignSheet) async {
-    guard canConfirmReassign(sheet), let target = sheet.targetID else { return }
+    guard canConfirmReassign(sheet), let chosen = sheet.targetID else { return }
+    // The built-in Uncategorised is "no category": nil for the repository.
+    let target = chosen == Self.uncategorisedID ? nil : chosen
     do {
       try await dependencies.categories.reassign(
-        from: sheet.sourceID, to: target, repointRules: sheet.repointRules,
+        from: sheet.sourceID, to: target, repointRules: sheet.repointRules && target != nil,
         archiveAfterwards: sheet.archiveAfterwards)
       reassignSheet = nil
       await onDataChange?()
@@ -795,6 +809,10 @@ public struct CategoryReassignSheet: Identifiable, Equatable, Sendable {
   public let kind: CategoryKind
   public let childNames: [String]
   public let targets: [ManageDialog.Target]
+  /// The rows of the searchable "Move to" picker: the built-in Uncategorised first
+  /// (`CategoriesModel.uncategorisedID`), then the same categories as `targets` (C39).
+  public let pickerItems: [CategoryPickerItem<AbacusDomain.Category.ID>]
+  /// The chosen target; `CategoriesModel.uncategorisedID` = the built-in "no category".
   public var targetID: AbacusDomain.Category.ID?
   public let impact: CategoryReassignImpact
   public var repointRules = true
@@ -805,8 +823,10 @@ public struct CategoryReassignSheet: Identifiable, Equatable, Sendable {
 
   init(
     sourceID: AbacusDomain.Category.ID, sourceName: String, kind: CategoryKind, childNames: [String],
-    targets: [ManageDialog.Target], targetID: AbacusDomain.Category.ID?, impact: CategoryReassignImpact
+    targets: [ManageDialog.Target], pickerItems: [CategoryPickerItem<AbacusDomain.Category.ID>] = [],
+    targetID: AbacusDomain.Category.ID?, impact: CategoryReassignImpact
   ) {
+    self.pickerItems = pickerItems
     self.sourceID = sourceID
     self.sourceName = sourceName
     self.kind = kind
@@ -816,7 +836,21 @@ public struct CategoryReassignSheet: Identifiable, Equatable, Sendable {
     self.impact = impact
   }
 
-  public var targetName: String? { targets.first { $0.id == targetID }?.name }
+  /// The picker's first row and the name in the summary (C39).
+  public static let builtInTitle = "Uncategorised (no category)"
+
+  /// The target is the built-in Uncategorised: rows lose their category.
+  public var targetIsUncategorised: Bool { targetID == CategoriesModel.uncategorisedID }
+
+  public var targetName: String? {
+    targetIsUncategorised ? Uncategorised.title : targets.first { $0.id == targetID }?.name
+  }
+
+  /// Rules and import mappings cannot have no category, so the option is off for the built-in target.
+  public var canRepointRules: Bool { !targetIsUncategorised }
+
+  /// Shown next to the disabled option.
+  public static let rulesHint = "Rules keep pointing at the old category"
 
   /// "12 transactions will move to Groceries." (+ attached lines); plain when nothing is left.
   public var summary: String {
@@ -840,6 +874,9 @@ public struct CategoryReassignSheet: Identifiable, Equatable, Sendable {
     if impact.budgetLimits > 0 {
       notes.append(
         "The budget has \(impact.budgetLimits == 1 ? "a limit" : "\(impact.budgetLimits) limits") for \(sourceName) or its subcategories. \(impact.budgetLimits == 1 ? "It stays" : "They stay") there; edit the budget to move \(impact.budgetLimits == 1 ? "it" : "them").")
+    }
+    if targetIsUncategorised, impact.attachedRecords > 0 {
+      notes.append("Fee, cashback and split lines lose their category too (they can have none).")
     }
     if !childNames.isEmpty {
       notes.append(
