@@ -145,3 +145,41 @@ extension Calc {
       iOwe: Money(minorUnits: owe, currency: currency), people: summaries, unconverted: gaps)
   }
 }
+
+// MARK: - Accounts of a person's records (R-DEBT-14)
+
+/// The money one of my accounts moved for a set of debts, in the account's currency (legs are
+/// stored in it): what left the account (I lent, I repaid, Paid on their behalf) and what came
+/// in (They repaid, I borrowed).
+public struct DebtAccountFlow: Hashable, Sendable, Identifiable {
+  public let accountID: Account.ID
+  /// Money out of the account (minor units of the account's currency, positive).
+  public let outMinor: Int64
+  /// Money into the account.
+  public let inMinor: Int64
+  /// Records with a leg on this account.
+  public let records: Int
+
+  public var id: Account.ID { accountID }
+}
+
+extension Calc {
+  /// R-DEBT-14: per account, the legs of the records of `debtIDs` (a person's debts in any
+  /// currency), in the order the accounts first appear in the book. Records without a leg
+  /// ("No account") move no money on my accounts and are left out.
+  public static func debtAccountFlows(_ book: DebtBook, debtIDs: Set<Debt.ID>) -> [DebtAccountFlow] {
+    var order: [Account.ID] = []
+    var sums: [Account.ID: (out: Int64, in: Int64, count: Int)] = [:]
+    for entry in book.entries where debtIDs.contains(entry.record.debtID) {
+      guard let leg = entry.leg else { continue }
+      var sum = sums[leg.accountID] ?? (0, 0, 0)
+      if sums[leg.accountID] == nil { order.append(leg.accountID) }
+      if entry.record.kind.isInflow { sum.in += leg.amountMinor } else { sum.out += leg.amountMinor }
+      sum.count += 1
+      sums[leg.accountID] = sum
+    }
+    return order.compactMap { id in
+      sums[id].map { DebtAccountFlow(accountID: id, outMinor: $0.out, inMinor: $0.in, records: $0.count) }
+    }
+  }
+}

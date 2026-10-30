@@ -122,6 +122,10 @@ struct DebtPersonRowView: View {
       DebtAvatar(name: person.name)
       VStack(alignment: .leading, spacing: 3) {
         Text(person.name).font(.body.weight(.medium)).lineLimit(1)
+        if let converted = person.convertedText {
+          Text(converted).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            .help("All open balances in the display currency at today's rates")
+        }
         if let detail = person.detail {
           Text(detail).font(.caption).foregroundStyle(.secondary)
         }
@@ -178,8 +182,15 @@ struct DebtPersonDetail: View {
             DebtAvatar(name: name)
             Text(name).font(.title2.weight(.semibold))
             Spacer()
+            if let total = model.selectedTotal {
+              DebtPersonTotalView(total: total).padding(.trailing, 8)
+            }
             Button("Add currency", systemImage: "plus") { model.newDebt() }
               .help("Another debt with this person in another currency")
+          }
+          let flows = model.selectedAccountFlows
+          if !flows.isEmpty {
+            DebtAccountFlowsView(flows: flows)
           }
           ForEach(model.selectedDetails) { detail in
             DebtCard(model: model, detail: detail)
@@ -190,6 +201,67 @@ struct DebtPersonDetail: View {
     } else {
       ContentUnavailableView("Select a person", systemImage: "person.2", description: Text("Their debts and records show here."))
     }
+  }
+}
+
+/// The person's open balances summed in the display currency (R-DEBT-15); "≈" when some
+/// balance was converted at today's rate.
+struct DebtPersonTotalView: View {
+  let total: DebtsModel.PersonTotal
+
+  var body: some View {
+    VStack(alignment: .trailing, spacing: 0) {
+      Text(total.caption).font(.caption).foregroundStyle(.secondary)
+      if let balance = total.balance {
+        Text((total.isApproximate ? "≈ " : "") + balance.amountText)
+          .font(.title3.weight(.semibold).monospacedDigit())
+          .foregroundStyle(DebtStyle.color(balance))
+        Text(balance.directionText).font(.caption).foregroundStyle(.secondary)
+      } else {
+        Text("No rate").font(.title3).foregroundStyle(.secondary)
+          .help("A rate to the display currency is missing; refresh the rates")
+      }
+    }
+  }
+}
+
+/// R-DEBT-14: each of my accounts the person's records used, with the money out and in, in the
+/// account's currency.
+struct DebtAccountFlowsView: View {
+  let flows: [DebtsModel.AccountFlowRow]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Accounts").font(.headline)
+      Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+        GridRow {
+          Text("Account")
+          Text("Money out").gridColumnAlignment(.trailing)
+          Text("Money in").gridColumnAlignment(.trailing)
+          Text("")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        ForEach(flows) { flow in
+          GridRow {
+            HStack(spacing: 6) {
+              Text(flow.name).lineLimit(1)
+              Text(flow.currency.rawValue).font(.caption).foregroundStyle(.secondary)
+            }
+            Text(flow.outText ?? "—")
+              .foregroundStyle(flow.outText == nil ? Color.secondary : DebtStyle.iOwe)
+            Text(flow.inText ?? "—")
+              .foregroundStyle(flow.inText == nil ? Color.secondary : DebtStyle.owedToMe)
+            Text(flow.recordsText).font(.caption).foregroundStyle(.secondary)
+          }
+          .font(.callout.monospacedDigit())
+        }
+      }
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(ManagePalette.inspectorBackground, in: .rect(cornerRadius: 12))
+    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(ManagePalette.border))
   }
 }
 
