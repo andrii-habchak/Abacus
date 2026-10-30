@@ -137,13 +137,13 @@ public final class TransactionsViewModel {
     generation += 1
     let current = generation
     guard let query = query else {
-      apply([], generation: current)
+      apply([], generation: current, query: nil)
       return
     }
     isLoading = true
     do {
       let fetched = try await transactions.transactions(matching: query)
-      apply(fetched, generation: current)
+      apply(fetched, generation: current, query: query)
     } catch {
       guard current == generation else { return }
       isLoading = false
@@ -151,8 +151,15 @@ public final class TransactionsViewModel {
     }
   }
 
-  private func apply(_ fetched: [TxnWithLines], generation current: Int) {
+  /// The query the rows on screen were fetched with. The list view uses it as its identity: a
+  /// different query rebuilds the table in one go instead of diffing thousands of inserted rows
+  /// (AppKit sizes every inserted row on the main thread: removing a debt filter that showed
+  /// every date hung the app, docs/status/C24.md).
+  public private(set) var loadedQuery: TxnQuery?
+
+  private func apply(_ fetched: [TxnWithLines], generation current: Int, query: TxnQuery?) {
     guard current == generation else { return }
+    loadedQuery = query
     rows = fetched
     isLoading = false
     errorMessage = nil
@@ -239,7 +246,11 @@ public final class TransactionsViewModel {
   /// `accountOptions` in sections: groups A–Z, then the accounts without a group.
   public var accountSections: [AccountPickerSection] {
     AccountOrder.pickerSections(
-      reference.accounts.filter { !$0.isArchived || filters.accountIDs.contains($0.id) },
+      reference.accounts.filter { account in
+        // C24: while a debt filter is active, only the selected debts' accounts are offered.
+        (!filters.isDebtFiltered || filters.debtLinkedAccountIDs.contains(account.id))
+          && (!account.isArchived || filters.accountIDs.contains(account.id))
+      },
       groups: reference.accountGroups)
   }
 
@@ -393,11 +404,22 @@ public final class TransactionsViewModel {
   /// Selected debts, A–Z, for the removable debt chips.
   public var selectedDebts: [DebtFilterOption] { debtOptions.filter { filters.debtIDs.contains($0.id) } }
 
-  /// Account entries added by a debt and still selected, A–Z, for the removable account chips.
-  public var debtAccountChips: [Account] {
-    filters.debtAddedAccountIDs.compactMap { reference.accountsByID[$0] }.sorted {
-      $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+  /// "Name · CUR": same-named accounts (one per currency) stay distinguishable.
+  public func accountChipLabel(_ account: Account) -> String { "\(account.name) · \(account.currency.rawValue)" }
+
+  /// Accounts ticked on their own while a debt filter is active, A–Z, for their removable chips.
+  /// The accounts a debt added have no chips of their own: the debt chip stands for them (C24).
+  public var independentAccountChips: [Account] {
+    filters.independentAccountIDs.compactMap { reference.accountsByID[$0] }.sorted {
+      let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+      return order == .orderedSame ? $0.currency.rawValue < $1.currency.rawValue : order == .orderedAscending
     }
+  }
+
+  /// The debt chip's text: "<name> · 3 accounts", counting the debt's accounts still ticked.
+  public func debtChipLabel(_ debt: DebtFilterOption) -> String {
+    let count = debt.accountIDs.intersection(filters.accountIDs).count
+    return "\(debt.name) · \(count) \(count == 1 ? "account" : "accounts")"
   }
 
   /// Removes one account entry; its debt stays selected.

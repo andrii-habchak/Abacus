@@ -84,19 +84,21 @@ struct TransactionFilterBar: View {
     }
   }
 
-  /// R-DEBT-22: a removable chip per selected debt and per account entry a debt added.
+  /// R-DEBT-22: a removable chip per selected debt (it stands for the accounts it added, C24) and
+  /// one per account ticked on its own while a debt is selected.
   @ViewBuilder
   private var debtEntryChips: some View {
     ForEach(model.selectedDebts) { debt in
       removableChip(
-        icon: "person.2", title: debt.name, help: "Remove debt \(debt.name) and the accounts it added",
+        icon: "person.2", title: model.debtChipLabel(debt), help: "Remove debt \(debt.name) and the accounts it added",
         accessibility: "Remove debt filter \(debt.name)"
       ) { model.toggleDebt(debt.id) }
     }
-    ForEach(model.debtAccountChips) { account in
+    ForEach(model.independentAccountChips) { account in
       removableChip(
-        icon: "building.columns", title: account.name, help: "Remove \(account.name) from the accounts",
-        accessibility: "Remove account \(account.name)"
+        icon: "building.columns", title: model.accountChipLabel(account),
+        help: "Remove \(model.accountChipLabel(account)) from the accounts",
+        accessibility: "Remove account \(model.accountChipLabel(account))"
       ) { model.removeAccountEntry(account.id) }
     }
   }

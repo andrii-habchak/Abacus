@@ -65,6 +65,10 @@ public struct TransactionFilters: Hashable, Sendable {
   /// The accounts each selected debt added to `accountIDs` (not accounts the user had selected
   /// on their own): clearing the debt removes exactly these.
   public var debtAccountIDs: [Debt.ID: Set<Account.ID>]
+  /// Every account linked to each selected debt, whether still ticked or not. While a debt is
+  /// selected the Accounts menu offers only these (their union), so a debt together with an
+  /// unrelated account (always 0 rows) cannot be built (C24).
+  public var debtLinkedIDs: [Debt.ID: Set<Account.ID>]
   /// Type toggles; all three on by default. None on matches nothing.
   public var types: Set<TxnType>
   public var eventID: Event.ID?
@@ -81,10 +85,11 @@ public struct TransactionFilters: Hashable, Sendable {
     accountIDs: Set<Account.ID> = [], types: Set<TxnType> = Set(TxnType.allCases),
     eventID: Event.ID? = nil, search: String = "", newestFirst: Bool = true,
     includeUncategorised: Bool = false, importBatch: ImportBatch? = nil, debtIDs: Set<Debt.ID> = [],
-    debtAccountIDs: [Debt.ID: Set<Account.ID>] = [:]
+    debtAccountIDs: [Debt.ID: Set<Account.ID>] = [:], debtLinkedIDs: [Debt.ID: Set<Account.ID>] = [:]
   ) {
     self.debtIDs = debtIDs
     self.debtAccountIDs = debtAccountIDs
+    self.debtLinkedIDs = debtLinkedIDs
     self.dateRange = dateRange
     self.categoryIDs = categoryIDs
     self.includeUncategorised = includeUncategorised
@@ -181,15 +186,32 @@ public struct TransactionFilters: Hashable, Sendable {
     if accountIDs.contains(id) {
       accountIDs.remove(id)
       for debt in debtAccountIDs.keys { debtAccountIDs[debt]?.remove(id) }
-    } else {
+    } else if !isDebtFiltered || debtLinkedAccountIDs.contains(id) {
+      // While a debt is selected only its accounts can be ticked (the menu offers no others).
       accountIDs.insert(id)
     }
   }
 
+  /// The accounts of all selected debts (union); what the Accounts menu is limited to while a
+  /// debt filter is active.
+  public var debtLinkedAccountIDs: Set<Account.ID> {
+    debtLinkedIDs.values.reduce(into: Set<Account.ID>()) { $0.formUnion($1) }
+  }
+
+  /// Account entries the user ticked on their own while a debt filter is active (they get their
+  /// own chips; the debt's own entries are represented by the debt chip).
+  public var independentAccountIDs: Set<Account.ID> {
+    isDebtFiltered ? accountIDs.subtracting(debtAddedAccountIDs) : []
+  }
+
   /// R-DEBT-22: selects the debt and expands it to its accounts. Accounts the user had already
-  /// selected stay theirs (clearing the debt does not remove them).
+  /// selected and that belong to the debt (or to another selected debt) stay theirs; any other
+  /// selected account is dropped, because the Accounts menu then lists only the debts' accounts
+  /// (C24).
   public mutating func addDebt(_ id: Debt.ID, accountIDs linked: Set<Account.ID>) {
     debtIDs.insert(id)
+    debtLinkedIDs[id] = linked
+    accountIDs.formIntersection(debtLinkedAccountIDs)
     debtAccountIDs[id] = linked.subtracting(accountIDs)
     accountIDs.formUnion(linked)
   }
@@ -200,6 +222,9 @@ public struct TransactionFilters: Hashable, Sendable {
     debtIDs.remove(id)
     accountIDs.subtract(debtAccountIDs[id] ?? [])
     debtAccountIDs[id] = nil
+    debtLinkedIDs[id] = nil
+    // Other debts stay: the selection is limited to their accounts again.
+    if isDebtFiltered { accountIDs.formIntersection(debtLinkedAccountIDs) }
   }
 
   /// Account entries that came from a debt and are still selected.
