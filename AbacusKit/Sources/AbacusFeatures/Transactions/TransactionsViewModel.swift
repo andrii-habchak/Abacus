@@ -38,6 +38,15 @@ public final class TransactionsViewModel {
   @ObservationIgnored private let today: @Sendable () -> Day
   @ObservationIgnored private let calendar: Calendar
   @ObservationIgnored private var generation = 0
+  /// "Convert to debt record…" (R-DEBT-11); nil = not offered.
+  @ObservationIgnored private let debts: (any DebtRepository)?
+
+  /// The "Convert to debt record" sheet; nil when closed.
+  public var debtDraft: DebtLinkDraft?
+  /// The transaction the sheet converts.
+  public private(set) var debtDraftTxnID: Txn.ID?
+  /// A conversion changed balances: the dashboard and other screens re-read.
+  @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
 
   public init(
     transactions: any TxnRepository, accounts: any AccountRepository,
@@ -45,9 +54,10 @@ public final class TransactionsViewModel {
     converter: any CurrencyConverter, displayCurrency: Currency = .UAH,
     refundsReduceSpending: Bool = false, filters: TransactionFilters = .default,
     calendar: Calendar = .current, today: @escaping @Sendable () -> Day = { Day(Date()) },
-    settings: (any SettingsRepository)? = nil
+    settings: (any SettingsRepository)? = nil, debts: (any DebtRepository)? = nil
   ) {
     self.settings = settings
+    self.debts = debts
     self.transactions = transactions
     self.accounts = accounts
     self.categories = categories
@@ -235,4 +245,68 @@ public final class TransactionsViewModel {
   }
 
   public func clearFilters() { filters.clear() }
+
+  // MARK: Convert to debt record (R-DEBT-11, docs/status/C17.md)
+
+  /// An expense or income that is not a debt record's leg yet.
+  public func canConvertToDebt(_ id: Txn.ID) -> Bool {
+    guard debts != nil, let txn = rows.first(where: { $0.txn.id == id })?.txn else { return false }
+    return txn.debtRecordID == nil && txn.type != .transfer
+  }
+
+  /// Opens the sheet for the transaction: person, debt, kind suggested from the direction.
+  public func beginConvertToDebt(_ id: Txn.ID) async {
+    guard canConvertToDebt(id), let debts, let txn = rows.first(where: { $0.txn.id == id })?.txn,
+      let account = reference.accountsByID[txn.accountID]
+    else { return }
+    let book: DebtBook
+    do {
+      book = try await debts.book()
+    } catch {
+      errorMessage = "Couldn't load debts."
+      return
+    }
+    let inflow = (txn.type == .income) != txn.isRefund
+    let day = Day(txn.occurredAt, calendar: calendar)
+    var converted: [Currency: Int64] = [:]
+    for currency in Currency.allCases where currency != account.currency {
+      if let original = txn.originalAmountMinor, txn.originalCurrencyCode == currency.rawValue {
+        converted[currency] = original
+      } else if let money = converter.convert(
+        Money(minorUnits: txn.amountMinor, currency: account.currency), to: currency, on: day)
+      {
+        converted[currency] = money.minorUnits
+      }
+    }
+    let money = TransactionMoneyFormat()
+    let style = Date.FormatStyle(date: .abbreviated, time: .omitted).locale(Locale(identifier: "en_US"))
+    let amount = money.string(minor: inflow ? txn.amountMinor : -txn.amountMinor, code: account.currency.rawValue, sign: .always)
+    debtDraftTxnID = id
+    debtDraft = DebtLinkDraft(
+      title: txn.payee.isEmpty ? "Convert to debt record" : "Convert “\(txn.payee)” to a debt record",
+      subtitle: "\(amount) on \(account.name) · \(day.date(calendar: calendar).formatted(style))",
+      inflow: inflow, accountCurrency: account.currency, accountAmountMinor: txn.amountMinor, book: book,
+      convertedAmounts: converted)
+  }
+
+  public func cancelConvertToDebt() {
+    debtDraft = nil
+    debtDraftTxnID = nil
+  }
+
+  /// Saves the sheet: the transaction becomes the record's leg in place (no second
+  /// transaction). Takes the draft the sheet showed (SwiftUI may clear the binding first).
+  public func saveConvertToDebt(_ draft: DebtLinkDraft? = nil) async {
+    guard let draft = draft ?? debtDraft, let id = debtDraftTxnID, let link = draft.link, let debts else { return }
+    debtDraft = nil
+    debtDraftTxnID = nil
+    do {
+      try await debts.convert(id, to: link)
+      errorMessage = nil
+    } catch {
+      errorMessage = "Couldn't convert the transaction to a debt record."
+    }
+    await reload()
+    await onDataChange?()
+  }
 }

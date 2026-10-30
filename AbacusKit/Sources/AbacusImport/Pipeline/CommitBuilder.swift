@@ -12,6 +12,10 @@ public struct ImportSummary: Hashable, Sendable {
   public var settled = 0
   /// Existing transactions that got this import's fingerprints (link, other side of a transfer).
   public var linked = 0
+  /// Of those, debt records entered by hand that rows matched (R-DEBT-13).
+  public var debtRecordsMatched = 0
+  /// New transactions recorded as debt records (row action and rules, R-DEBT-10/12).
+  public var debtRecords = 0
   /// Existing expenses/incomes turned into transfers.
   public var transfersCompleted = 0
   public var alreadyImported = 0
@@ -45,7 +49,11 @@ public struct ImportSummary: Hashable, Sendable {
     if alreadyImported > 0 { matched.append("\(alreadyImported) already imported, skipped") }
     if linked > 0 { matched.append("\(linked) linked to existing") }
     if transfersCompleted > 0 { matched.append("\(transfersCompleted) transfer\(transfersCompleted == 1 ? "" : "s") completed") }
+    if debtRecordsMatched > 0 {
+      matched.append("\(debtRecordsMatched) matched debt record\(debtRecordsMatched == 1 ? "" : "s")")
+    }
     if !matched.isEmpty { lines.append(matched.joined(separator: " · ")) }
+    if debtRecords > 0 { lines.append("\(debtRecords) recorded as debt record\(debtRecords == 1 ? "" : "s")") }
     var review: [String] = []
     if duplicatesSkipped > 0 { review.append("\(duplicatesSkipped) possible duplicate\(duplicatesSkipped == 1 ? "" : "s") skipped") }
     if duplicatesImported > 0 { review.append("\(duplicatesImported) possible duplicate\(duplicatesImported == 1 ? "" : "s") imported") }
@@ -181,6 +189,7 @@ struct CommitBuilder {
     var txns: [TxnWithLines] = []
     var fingerprints: [ImportFingerprint] = []
     var updated: [Txn] = []
+    var debtLinks: [ImportDebtLink] = []
     var ruleHits: [CategoryRule.ID: Int] = [:]
     for (row, plan) in zip(preview.rows, preview.plans) {
       switch plan {
@@ -204,6 +213,16 @@ struct CommitBuilder {
         }
         txns.append(TxnWithLines(txn: txn, lines: lines))
         fingerprints += shape.fingerprints.map { ImportFingerprint(id: $0, txnID: txn.id) }
+        if let debt = shape.debt {
+          // R-DEBT-10/12: the store turns the new transaction into the record's leg.
+          debtLinks.append(
+            ImportDebtLink(
+              txnID: txn.id,
+              link: DebtLink(
+                personName: debt.personName, debtID: debt.debtID, currency: debt.currency, kind: debt.kind,
+                amountMinor: debt.amountMinor, countsInReports: debt.countsInReports)))
+          summary.debtRecords += 1
+        }
         if let rule = shape.ruleID { ruleHits[rule, default: 0] += 1 }
         summary.created += 1
         if shape.type == .transfer, shape.fingerprints.count > 1 { summary.transfersPaired += 1 }
@@ -228,6 +247,7 @@ struct CommitBuilder {
       case .link(let existing, let keys):
         fingerprints += keys.map { ImportFingerprint(id: $0, txnID: existing.id) }
         summary.linked += 1
+        if existing.debtRecordID != nil { summary.debtRecordsMatched += 1 }
       case .convert(var existing, let shape):
         existing.type = .transfer
         existing.accountID = accountID(shape.from)
@@ -300,7 +320,8 @@ struct CommitBuilder {
 
     let commit = ImportCommit(
       batch: summary.batch, newAccounts: newAccounts, newCategories: newCategories, newEvents: newEvents,
-      txns: txns, fingerprints: fingerprints, updatedTxns: updated, mappings: mappings, rules: rules)
+      txns: txns, fingerprints: fingerprints, updatedTxns: updated, mappings: mappings, rules: rules,
+      debtLinks: debtLinks)
     return (commit, summary)
   }
 
@@ -326,6 +347,7 @@ struct CommitBuilder {
     parts.append("\(s.created) new")
     if s.settled > 0 { parts.append("\(s.settled) settled") }
     if s.linked > 0 { parts.append("\(s.linked) linked") }
+    if s.debtRecords > 0 { parts.append(s.debtRecords == 1 ? "1 debt record" : "\(s.debtRecords) debt records") }
     if s.alreadyImported > 0 { parts.append("\(s.alreadyImported) skipped") }
     if s.duplicatesSkipped > 0 {
       parts.append(s.duplicatesSkipped == 1 ? "1 possible duplicate skipped" : "\(s.duplicatesSkipped) possible duplicates skipped")

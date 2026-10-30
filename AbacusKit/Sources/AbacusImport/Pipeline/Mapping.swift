@@ -8,11 +8,14 @@ public struct ImportContext: Sendable {
   public var events: [Event]
   public var rules: [CategoryRule]
   public var mappings: [ImportMapping]
+  /// Debts and records before the import (R-DEBT-10/12).
+  public var debts: DebtBook
 
   public init(
     accounts: [Account] = [], categories: [AbacusDomain.Category] = [], events: [Event] = [],
-    rules: [CategoryRule] = [], mappings: [ImportMapping] = []
+    rules: [CategoryRule] = [], mappings: [ImportMapping] = [], debts: DebtBook = .empty
   ) {
+    self.debts = debts
     self.accounts = accounts
     self.categories = categories
     self.events = events

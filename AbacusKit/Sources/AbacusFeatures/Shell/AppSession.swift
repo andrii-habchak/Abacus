@@ -55,7 +55,11 @@ public final class AppSession {
     events = EventsModel(dependencies: manage)
     rules = RulesModel(dependencies: manage)
     self.debts = DebtsModel(dependencies: debts)
-    importWizard = database.map { ImportWizardModel(dependencies: .live(database: $0)) }
+    // Debt records in another currency than the row's account convert at the day's rate (C17).
+    importWizard = database.map { database in
+      ImportWizardModel(
+        dependencies: .live(database: database, converter: { await refresher?.snapshot.table }))
+    }
     self.editorDependencies = editorDependencies
     self.database = database
     self.refresher = refresher
@@ -87,6 +91,12 @@ public final class AppSession {
     rules.onTransactionsChange = { [weak self] in
       guard let self else { return }
       await self.transactions.reload()
+      await self.dashboard.load()
+      await self.reloadManageScreens()
+    }
+    // A transaction converted to a debt record (R-DEBT-11): balances, dashboard, debts.
+    transactions.onDataChange = { [weak self] in
+      guard let self else { return }
       await self.dashboard.load()
       await self.reloadManageScreens()
     }
@@ -144,7 +154,8 @@ public final class AppSession {
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), converter: RateTable(),
       calendar: calendar, today: { Day(now(), calendar: calendar) },
-      settings: SQLiteSettingsRepository(database: database))
+      settings: SQLiteSettingsRepository(database: database),
+      debts: SQLiteDebtRepository(database: database, calendar: calendar))
     var editor = TransactionEditorDependencies(
       transactions: SQLiteTxnRepository(database: database, calendar: calendar),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),

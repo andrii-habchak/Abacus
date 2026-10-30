@@ -5,7 +5,8 @@ import Foundation
 /// R-IMP-8). Pure: callers decide whether to save.
 public enum RuleEffect {
   /// The transaction as `rule` would leave it, or nil when the rule does not match it or leaves
-  /// it unchanged. Transfers are never touched (neither by a category rule nor by a transfer
+  /// it unchanged. Debt legs are never touched (they follow their record); a debt rule gives the
+  /// leg shape (C17). Transfers are never touched (neither by a category rule nor by a transfer
   /// rule: halves of a paired transfer stay as they are). A transfer rule is skipped when the
   /// amount in the other account's currency is unknown (different currency and no original
   /// amount in it), and for money coming in when the transaction has attached records (they
@@ -14,7 +15,7 @@ public enum RuleEffect {
     _ rule: CategoryRule, to item: TxnWithLines, accounts: [Account], categories: [AbacusDomain.Category]
   ) -> Txn? {
     var txn = item.txn
-    guard txn.type != .transfer else { return nil }
+    guard txn.type != .transfer, txn.debtRecordID == nil else { return nil }
     let kind: CategoryKind = txn.type == .income ? .income : .expense
     let subject = RuleSubject(description: txn.payee, accountID: txn.accountID, amountMinor: txn.amountMinor, kind: kind)
     // The rule is applied on its own, whatever its position (the user asked for it).
@@ -26,6 +27,18 @@ public enum RuleEffect {
     case .category:
       guard let categoryID = rule.categoryID, txn.categoryID != categoryID else { return nil }
       txn.categoryID = categoryID
+      return txn
+
+    case .debt:
+      // R-DEBT-12: the transaction becomes a debt record's leg (unflagged: a one-sided
+      // transfer, `isRefund` = money in); the store creates the record when it is saved.
+      guard rule.debtPerson != nil else { return nil }
+      let inflow = (txn.type == .income) != txn.isRefund
+      txn.type = .transfer
+      txn.categoryID = nil
+      txn.toAccountID = nil
+      txn.toAmountMinor = nil
+      txn.isRefund = inflow
       return txn
 
     case .transfer:

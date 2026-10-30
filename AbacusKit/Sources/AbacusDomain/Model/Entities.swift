@@ -512,6 +512,9 @@ public enum RuleAction: String, CaseIterable, Codable, Hashable, Sendable, Query
   /// Turn the transaction into a transfer between its own account and `transferAccountID`:
   /// money out → to that account, money in → from it (D44).
   case transfer
+  /// Record the transaction as a debt record for `debtPersonName` (R-DEBT-12, C17): the
+  /// person's debt in the account's currency, kind from the money's direction.
+  case debt
 }
 
 /// A rule (R-IMP-8, D44): a description condition (`matchKind` + `pattern`) and/or an amount
@@ -540,13 +543,15 @@ public struct CategoryRule: Hashable, Identifiable, Sendable {
   public var action: RuleAction
   /// Set when `action == .transfer`.
   public var transferAccountID: Account.ID?
+  /// Set when `action == .debt`: the person the debt record is for (schema v12).
+  public var debtPersonName: String?
 
   public init(
     id: UUID = UUID(), pattern: String, matchKind: RuleMatchKind = .contains,
     amountComparison: RuleAmountComparison? = nil, amountMinor: Int64? = nil,
     accountID: Account.ID? = nil, action: RuleAction = .category, categoryID: Category.ID? = nil,
-    transferAccountID: Account.ID? = nil, origin: RuleOrigin = .manual, hitCount: Int = 0,
-    position: Int = 0, isEnabled: Bool = true
+    transferAccountID: Account.ID? = nil, debtPersonName: String? = nil, origin: RuleOrigin = .manual,
+    hitCount: Int = 0, position: Int = 0, isEnabled: Bool = true
   ) {
     self.id = id
     self.pattern = pattern
@@ -557,6 +562,7 @@ public struct CategoryRule: Hashable, Identifiable, Sendable {
     self.action = action
     self.categoryID = categoryID
     self.transferAccountID = transferAccountID
+    self.debtPersonName = debtPersonName
     self.origin = origin
     self.hitCount = hitCount
     self.position = position
@@ -574,6 +580,12 @@ extension CategoryRule {
   /// A rule needs a description condition, an amount condition or both (TA v1.6); a rule with
   /// neither never matches.
   public var hasCondition: Bool { hasDescriptionCondition || hasAmountCondition }
+
+  /// The person of a debt rule, trimmed; nil when blank (R-DEBT-12).
+  public var debtPerson: String? {
+    let name = (debtPersonName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return name.isEmpty ? nil : name
+  }
 }
 
 /// The fields a rule changes on a transaction (category, or the transfer conversion), as they

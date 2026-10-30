@@ -90,6 +90,7 @@ public struct SQLiteImportStore: ImportStore {
   /// (source, kind, external key); rules are upserted.
   public func commit(_ commit: ImportCommit) async throws {
     let convertsDebtAccounts = self.convertsDebtAccounts
+    let calendar = self.calendar
     try await database.write { db in
       let batchID = commit.batch.id
       try ImportBatch.insert { commit.batch }.execute(db)
@@ -157,9 +158,23 @@ public struct SQLiteImportStore: ImportStore {
       for rule in commit.rules {
         try CategoryRule.upsert { CategoryRule.Draft(rule) }.execute(db)
       }
+      // R-DEBT-10/12: rows recorded as debt records become their legs, oldest first (a
+      // suggested kind sees the records of earlier rows).
+      let dates = Dictionary(commit.txns.map { ($0.txn.id, $0.txn.occurredAt) }, uniquingKeysWith: { a, _ in a })
+      let links = commit.debtLinks.enumerated().sorted {
+        (dates[$0.element.txnID] ?? .distantPast, $0.offset) < (dates[$1.element.txnID] ?? .distantPast, $1.offset)
+      }
+      for (_, item) in links {
+        try DebtLinking.convert(item.txnID, to: item.link, calendar: calendar, db)
+      }
       // R-DEBT-8: what landed on debt-kind accounts (Saldo LIABILITIES) becomes debt records.
       if convertsDebtAccounts { try DebtConversion.convertDebtAccounts(db, calendar: calendar) }
     }
+  }
+
+  /// Debts and records with their legs (R-DEBT-10/12: whom a row can be recorded for).
+  public func debtBook() async throws -> DebtBook {
+    try await database.read { db in try SQLiteDebtRepository.book(db) }
   }
 
   /// Import history, newest first.

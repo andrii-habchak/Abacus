@@ -93,6 +93,13 @@ extension AbacusDatabase {
     migrator.registerMigration("v11: account groups") { db in
       try accountGroupsV11(db)
     }
+    // R-DEBT-12 (TA v1.8, C17): the person a "Record as debt" rule records for. Nullable,
+    // append-only; the action itself is the new raw value `debt` in "action".
+    migrator.registerMigration("v12: rule debt person") { db in
+      if try !db.columns(in: "categoryRules").contains(where: { $0.name == "debtPersonName" }) {
+        try db.execute(sql: #"ALTER TABLE "categoryRules" ADD COLUMN "debtPersonName" TEXT"#)
+      }
+    }
     return migrator
   }
 

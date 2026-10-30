@@ -27,7 +27,8 @@ public struct ImportWizardDependencies: Sendable {
 
   /// The pipeline on the SQLite store of `database` (the app's database, or an in-memory one).
   public static func live(
-    database: any DatabaseWriter, calendar: Calendar = .current, now: @escaping @Sendable () -> Date = { Date() }
+    database: any DatabaseWriter, calendar: Calendar = .current, now: @escaping @Sendable () -> Date = { Date() },
+    converter: @escaping @Sendable () async -> (any CurrencyConverter)? = { nil }
   ) -> ImportWizardDependencies {
     ImportWizardDependencies(
       pipeline: ImportPipeline(
@@ -35,8 +36,8 @@ public struct ImportWizardDependencies: Sendable {
         accounts: SQLiteAccountRepository(database: database, calendar: calendar),
         categories: SQLiteCategoryRepository(database: database),
         events: SQLiteEventRepository(database: database),
-        rules: SQLiteRuleRepository(database: database),
-        calendar: calendar, now: now))
+        rules: SQLiteRuleRepository(database: database, calendar: calendar),
+        calendar: calendar, now: now, converter: converter))
   }
 }
 

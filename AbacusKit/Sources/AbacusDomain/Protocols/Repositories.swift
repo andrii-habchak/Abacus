@@ -179,11 +179,15 @@ public struct ImportCommit: Sendable {
   public var updatedTxns: [Txn]
   public var mappings: [ImportMapping]
   public var rules: [CategoryRule]
+  /// New transactions that become debt records' legs (import row action and rules, R-DEBT-10/12),
+  /// converted after the inserts, oldest first.
+  public var debtLinks: [ImportDebtLink]
 
   public init(
     batch: ImportBatch, newAccounts: [Account] = [], newCategories: [Category] = [],
     newEvents: [Event] = [], txns: [TxnWithLines] = [], fingerprints: [ImportFingerprint] = [],
-    updatedTxns: [Txn] = [], mappings: [ImportMapping] = [], rules: [CategoryRule] = []
+    updatedTxns: [Txn] = [], mappings: [ImportMapping] = [], rules: [CategoryRule] = [],
+    debtLinks: [ImportDebtLink] = []
   ) {
     self.batch = batch
     self.newAccounts = newAccounts
@@ -194,6 +198,7 @@ public struct ImportCommit: Sendable {
     self.updatedTxns = updatedTxns
     self.mappings = mappings
     self.rules = rules
+    self.debtLinks = debtLinks
   }
 }
 
@@ -209,4 +214,11 @@ public protocol ImportStore: Sendable {
   func batches() async throws -> [ImportBatch]
   /// Deletes the batch's transactions and fingerprints, marks it undone (R-IMP-6).
   func undo(_ batchID: ImportBatch.ID) async throws
+  /// Debts and records with their legs: who an import row can be recorded for (R-DEBT-10/12).
+  func debtBook() async throws -> DebtBook
+}
+
+extension ImportStore {
+  /// Fakes without debts.
+  public func debtBook() async throws -> DebtBook { .empty }
 }

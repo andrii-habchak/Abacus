@@ -68,6 +68,8 @@ public struct RuleDraft: Equatable, Sendable {
   public var action: RuleAction
   public var categoryID: AbacusDomain.Category.ID?
   public var transferAccountID: Account.ID?
+  /// "Record as debt for <person>" (R-DEBT-12).
+  public var debtPersonName: String
   /// Apply the rule to matching existing transactions on save (R-MGMT-6).
   public var updateExisting: Bool
 
@@ -76,8 +78,10 @@ public struct RuleDraft: Equatable, Sendable {
     matchKind: RuleMatchKind = .contains, pattern: String = "",
     hasAmountCondition: Bool = false, amountComparison: RuleAmountComparison = .biggerThan, amountText: String = "",
     hasAccountCondition: Bool = false, accountID: Account.ID? = nil, action: RuleAction = .category,
-    categoryID: AbacusDomain.Category.ID? = nil, transferAccountID: Account.ID? = nil, updateExisting: Bool = false
+    categoryID: AbacusDomain.Category.ID? = nil, transferAccountID: Account.ID? = nil, debtPersonName: String = "",
+    updateExisting: Bool = false
   ) {
+    self.debtPersonName = debtPersonName
     self.id = id
     self.isNew = isNew
     self.hasDescriptionCondition = hasDescriptionCondition
@@ -180,6 +184,8 @@ public final class RulesModel {
   /// Account groups: the account pickers list A–Z under them (R-MGMT-8).
   public private(set) var accountGroups: [AccountGroup] = []
   public private(set) var categories: [AbacusDomain.Category] = []
+  /// People with debts: the debt action's name suggestions (R-DEBT-12).
+  public private(set) var debtPeople: [String] = []
   /// Page search (R-MGMT-11): the rule in words (condition and action).
   public var searchText = ""
   /// Only rules assigning this category or one of its subcategories (R-MGMT-11); nil = all.
@@ -214,6 +220,7 @@ public final class RulesModel {
       accounts = try await dependencies.accounts.accounts(includeArchived: true)
       accountGroups = (try? await dependencies.accounts.groups()) ?? []
       categories = try await dependencies.categories.categories(kind: nil, includeArchived: true)
+      debtPeople = (try? await dependencies.debts?.book().personNames) ?? []
       if let selection, !rules.contains(where: { $0.id == selection }) { self.selection = nil }
       if let categoryFilter, !categories.contains(where: { $0.id == categoryFilter }) { self.categoryFilter = nil }
       phase = .loaded
@@ -259,6 +266,8 @@ public final class RulesModel {
       return rule.categoryID.map { ManageText.categoryPath($0, tree: tree) } ?? "No category"
     case .transfer:
       return "Transfer to/from \(rule.transferAccountID.map(accountName) ?? "no account")"
+    case .debt:
+      return "Debt record for \(rule.debtPerson ?? "no one")"
     }
   }
 
@@ -384,7 +393,7 @@ public final class RulesModel {
       amountComparison: rule.amountComparison ?? .biggerThan,
       amountText: hasAmount ? rule.amountMinor.map(dependencies.format.amountInput) ?? "" : "",
       hasAccountCondition: rule.accountID != nil, accountID: rule.accountID, action: rule.action,
-      categoryID: rule.categoryID, transferAccountID: rule.transferAccountID))
+      categoryID: rule.categoryID, transferAccountID: rule.transferAccountID, debtPersonName: rule.debtPersonName ?? ""))
   }
 
   private func open(_ draft: RuleDraft) {
@@ -461,6 +470,8 @@ public final class RulesModel {
       if editor.hasAccountCondition, editor.accountID == target {
         return "The transfer account must differ from the account in the condition."
       }
+    case .debt:
+      if editor.debtPersonName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Enter the person's name." }
     }
     return nil
   }
@@ -486,6 +497,7 @@ public final class RulesModel {
     rule.action = editor.action
     rule.categoryID = editor.action == .category ? editor.categoryID : nil
     rule.transferAccountID = editor.action == .transfer ? editor.transferAccountID : nil
+    rule.debtPersonName = editor.action == .debt ? editor.debtPersonName.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     return rule
   }
 
@@ -533,6 +545,9 @@ public final class RulesModel {
         case .transfer:
           let name = rule.transferAccountID.map(accountName) ?? ""
           message += "\(them) will become \(changes.count == 1 ? "a transfer" : "transfers") to or from \(name). "
+        case .debt:
+          message += "\(them) will become debt record\(changes.count == 1 ? "" : "s") for \(rule.debtPerson ?? ""), "
+            + "in the person's debt in each account's currency. "
         }
         message += "Transfers are never changed. You can roll this back later in the rule's editor."
         confirmation = RuleApplyConfirmation(
