@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.7 — agreed** (2026-10-27). All open questions closed (§9). Changes after this point
+_Status: **v1.8 — agreed** (2026-10-30). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -140,6 +140,25 @@ Answers "who owes me, whom do I owe, and how much".
 - `R-DEBT-8` Migration: existing accounts of kind *debt* become debts (person = account name,
   currency = account currency); their transfers become records with the same days and amounts;
   every own-account balance and the net worth (with "Count in net worth" on) stay exactly equal.
+- `R-DEBT-9` (v1.8) **One payment, one transaction.** Every money movement of a debt is exactly
+  one transaction, linked to its record; a bank row and a debt record for the same payment must
+  never both count. Linking is automatic where possible, manual work is the fallback.
+- `R-DEBT-10` (v1.8) **Import**: a row can become a debt record ("Debt…": person, debt, kind
+  suggested from the direction — money out → I lent / I repaid, money in → They repaid / I
+  borrowed); the imported row becomes the record's transaction.
+- `R-DEBT-11` (v1.8) **Transactions**: "Convert to debt record" on an existing transaction; the
+  transaction becomes the record's transaction (no second transaction).
+- `R-DEBT-12` (v1.8) **Rules**: action "Record as debt for <person>" (kind from the direction),
+  applied on import like the other rule actions.
+- `R-DEBT-13` (v1.8) **Matching**: a bank row for a payment already recorded by hand as a debt
+  record is recognised (shown as Already imported / linked), in both directions (money out and
+  money in), and never imported as a second transaction.
+- `R-DEBT-14` (v1.8) **Several accounts per person**: a person's records may use any of my
+  accounts (Revolut, PKO, Mono, …) in any currency; the person's detail shows the account of each
+  record and the debt view includes all of them.
+- `R-DEBT-15` (v1.8) **Currency switch on Debts**: per-currency balances stay as they are (never
+  netted, `R-DEBT-1`); the Debts tab follows the display-currency switch and also shows each
+  person's total converted to the display currency.
   Imports that would create a debt account create/find a debt instead.
 
 ### 3.7 Exchange rates — `R-FX`
@@ -385,6 +404,7 @@ No open questions.
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
 | 1.7 | 2026-10-27 | Debts (`R-DEBT`, owner interview, D51). |
+| 1.8 | 2026-10-30 | Debts linked to bank transactions: one payment one transaction, import action, convert, rule action, matching, several accounts, currency switch (`R-DEBT-9…15`, D58). |
 | 1.6 | 2026-10-27 | Owner review of 1.1.0: budget total + currency back with unallocated (`R-BUD-1`, `R-MGMT-3`); built-in Uncategorised, sorting/search/drag-to-nest for categories (`R-MGMT-8`); account groups (`R-MGMT-9`); form button placement (`R-MGMT-10`); page search (`R-MGMT-11`); rules: amount-only condition, rollback; income donut, income vs expenses, widget reorder (`R-HOME-6`); currency switch order and Budget page; debts: design pending (owner interview). |
 | 1.5 | 2026-10-27 | Owner review of v1.0.0: per-category budget currencies, no separate total (`R-BUD-1/2`, `R-MGMT-3`); Saldo-like rules with amount conditions and a transfer action (`R-IMP-8`, `R-MGMT-6`); colours for categories, accounts, events (`R-MGMT-7`, `R-EVT-1`); click-only drill-down (`R-HOME-3`); budget edit button (`R-HOME-2`); currency switch only where it applies (`R-HOME-4`). |
 | 1.4 | 2026-10-21 | Q23: no second Saldo pairing pass; cross-currency halves go to Needs review. |
