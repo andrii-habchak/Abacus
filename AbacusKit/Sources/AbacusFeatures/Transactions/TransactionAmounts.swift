@@ -39,7 +39,8 @@ public struct TransactionMoneyFormat: Sendable {
 ///
 /// - Expense → expense; income → income; transfers count as neither (R-TX-5).
 /// - Expense refund (R-TX-4, R-SET-3): income ("Refunds") by default; with "refunds reduce
-///   spending" on it is subtracted from expenses instead. An income reversal subtracts from
+///   spending" on it is subtracted from expenses instead. A refund linked to its original (C30)
+///   is always subtracted from expenses. An income reversal subtracts from
 ///   income.
 /// - Attached records count by their own kind (R-TX-6); an `.income` record in an expense
 ///   category is a refund line and follows the refund rule (D22).
@@ -73,7 +74,9 @@ public struct TransactionTotalsRule: Sendable {
     let txn = row.txn
     // A balance correction (R-ACC-4) is not income or expense (C29).
     if txn.isBalanceCorrection { return (0, 0) }
-    let main = parts(type: txn.type, isRefund: txn.isRefund, categoryID: txn.categoryID, amountMinor: txn.amountMinor)
+    let main = parts(
+      type: txn.type, isRefund: txn.isRefund, categoryID: txn.categoryID, amountMinor: txn.amountMinor,
+      isLinkedRefund: txn.isLinkedRefund)
     income += main.income
     expense += main.expense
     for line in row.lines {
@@ -86,14 +89,17 @@ public struct TransactionTotalsRule: Sendable {
 
   /// A transaction's main amount (also applied to the store's grouped flows, C28).
   public func parts(
-    type: TxnType, isRefund: Bool, categoryID: AbacusDomain.Category.ID?, amountMinor: Int64
+    type: TxnType, isRefund: Bool, categoryID: AbacusDomain.Category.ID?, amountMinor: Int64,
+    isLinkedRefund: Bool = false
   ) -> (income: Int64, expense: Int64) {
     var income: Int64 = 0
     var expense: Int64 = 0
     if includeUncategorised && categoryID == nil || matches(categoryID) {
       switch (type, isRefund) {
       case (.expense, false): expense += amountMinor
-      case (.expense, true): addRefund(amountMinor, &income, &expense)
+      case (.expense, true):
+        // C30: a refund linked to its original always nets that category's spending.
+        if isLinkedRefund { expense -= amountMinor } else { addRefund(amountMinor, &income, &expense) }
       case (.income, false): income += amountMinor
       case (.income, true): income -= amountMinor
       case (.transfer, _): break

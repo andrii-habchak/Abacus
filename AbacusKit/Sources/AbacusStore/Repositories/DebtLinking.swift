@@ -125,8 +125,10 @@ public enum DebtLinking {
     txn.type = .transfer
     txn.categoryID = nil
     txn.isRefund = false
+    txn.refundOfID = nil
     txn.debtRecordID = nil
     try Txn.upsert { Txn.Draft(txn) }.execute(db)
+    try RefundLinks.repair(db)
     return DebtTransferResult(
       txnID: txn.id, debtID: debt.id, accountID: theirs.id, createdDebt: createdDebt, createdAccount: createdAccount)
   }
@@ -150,7 +152,9 @@ public enum DebtLinking {
     txn.toAmountMinor = nil
     txn.categoryID = nil
     txn.isRefund = false
+    txn.refundOfID = nil
     try Txn.upsert { Txn.Draft(txn) }.execute(db)
+    try RefundLinks.repair(db)
   }
 }
 

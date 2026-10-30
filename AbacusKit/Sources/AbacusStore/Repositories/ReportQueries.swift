@@ -37,14 +37,14 @@ public struct SQLiteReportQueries: Sendable {
     let condition: QueryFragment = conditions.isEmpty ? "1" : conditions.joined(separator: " AND ")
     let sql: QueryFragment = #"""
       SELECT "t"."categoryID", "a"."currency", "t"."occurredAt", "t"."type", "t"."isRefund", \#
-      "t"."amountMinor"
+      "t"."amountMinor", ("t"."type" = 'expense' AND "t"."isRefund" AND "t"."refundOfID" IS NOT NULL)
       FROM "txns" AS "t" JOIN "accounts" AS "a" ON "a"."id" = "t"."accountID"
       WHERE "t"."type" <> 'transfer' AND NOT "t"."isBalanceCorrection" AND \#(condition)
       UNION ALL
       SELECT "r"."categoryID", "a"."currency", "t"."occurredAt",
         CASE WHEN "r"."kind" = 'income' AND "c"."kind" = 'expense' THEN 'expense' ELSE "r"."kind" END,
         ("r"."kind" = 'income' AND coalesce("c"."kind" = 'expense', 0)),
-        "r"."amountMinor"
+        "r"."amountMinor", 0
       FROM "attachedRecords" AS "r"
       JOIN "txns" AS "t" ON "t"."id" = "r"."txnID"
       JOIN "accounts" AS "a" ON "a"."id" = "t"."accountID"
@@ -145,6 +145,8 @@ struct FlowRow: Sendable {
   var type: TxnType
   var isRefund: Bool
   var amountMinor: Int64
+  /// An expense refund linked to its original (C30): always nets the category (R-SET-3 ignored).
+  var isLinkedRefund: Bool
 }
 
 @Selection
@@ -174,7 +176,8 @@ public struct CategoryAmount: Hashable, Sendable {
 /// Expenses and income by category for a period (R-HOME-3, R-BUD-2, R-EVT-3).
 ///
 /// - `expenses`: expense transactions and attached expense records, positive = spent. With
-///   refunds reducing spending (R-SET-3 on) expense refunds are subtracted here.
+///   refunds reducing spending (R-SET-3 on) expense refunds are subtracted here; a refund linked
+///   to its original (C30) is always subtracted, under the original's category.
 /// - `income`: income transactions and attached income records; reversals subtracted.
 /// - `refunds`: with R-SET-3 off, expense refunds reported as income ("Refunds", R-TX-4), still
 ///   keyed by their expense category; empty when the setting is on.
@@ -203,7 +206,7 @@ public struct SpendingReport: Hashable, Sendable {
       switch (flow.type, flow.isRefund) {
       case (.expense, false): expenses[key, default: 0] += flow.amountMinor
       case (.expense, true):
-        if refundsReduceSpending {
+        if refundsReduceSpending || flow.isLinkedRefund {
           expenses[key, default: 0] -= flow.amountMinor
         } else {
           refunds[key, default: 0] += flow.amountMinor

@@ -88,18 +88,25 @@ public struct SQLiteTxnRepository: TxnRepository {
     try await database.write { db in
       if let recordID = try Txn.find(id).fetchOne(db)?.debtRecordID {
         try DebtRecord.find(recordID).delete().execute(db)
+        try RefundLinks.repair(db)
         return
       }
       try Txn.find(id).delete().execute(db)
       guard db.changesCount > 0 else { throw RepositoryError.notFound }
+      // C30: refunds linked to the deleted expense become unlinked and keep their own category.
+      try RefundLinks.repair(db)
     }
   }
 
   static func save(_ txn: Txn, lines: [AttachedRecord], _ db: Database) throws {
+    var txn = txn
+    // A link only lives on an expense refund (C30); the original's category follows it below.
+    if !(txn.type == .expense && txn.isRefund) { txn.refundOfID = nil }
     try Txn.upsert { Txn.Draft(txn) }.execute(db)
     let txnID = txn.id
     try AttachedRecord.where { $0.txnID.eq(txnID) }.delete().execute(db)
     try insertLines(lines, txnID: txnID, db)
+    try RefundLinks.repair(db)
   }
 
   static func insertLines(_ lines: [AttachedRecord], txnID: Txn.ID, _ db: Database) throws {
@@ -232,10 +239,10 @@ struct TxnFilter: Sendable {
     let mains = try SQLQueryExpression(
       #"""
       SELECT MIN("txns"."occurredAt"), "txns"."accountID", "txns"."type", "txns"."isRefund", \#
-      "txns"."categoryID", SUM("txns"."amountMinor")
+      "txns"."categoryID", SUM("txns"."amountMinor"), ("txns"."refundOfID" IS NOT NULL)
       FROM "txns" WHERE NOT "txns"."isBalanceCorrection" AND \#(condition)
       GROUP BY substr("txns"."occurredAt", 1, 16), "txns"."accountID", "txns"."type", "txns"."isRefund", \#
-      "txns"."categoryID"
+      "txns"."categoryID", ("txns"."refundOfID" IS NOT NULL)
       """# as QueryFragment, as: MainFlowRow.self
     ).fetchAll(db)
     let lines = try SQLQueryExpression(
@@ -252,7 +259,7 @@ struct TxnFilter: Sendable {
       mains: mains.map {
         .init(
           occurredAt: $0.occurredAt, accountID: $0.accountID, type: $0.type, isRefund: $0.isRefund,
-          categoryID: $0.categoryID, amountMinor: $0.amountMinor)
+          categoryID: $0.categoryID, amountMinor: $0.amountMinor, isLinkedRefund: $0.isLinked)
       },
       lines: lines.map {
         .init(
@@ -333,6 +340,7 @@ struct MainFlowRow: Sendable {
   var isRefund: Bool
   var categoryID: UUID?
   var amountMinor: Int64
+  var isLinked: Bool
 }
 
 @Selection
@@ -365,7 +373,7 @@ struct TypeFacetRow: Sendable {
 /// `includeUncategorised` the main amount of an expense or income without a category matches
 /// too (attached records without a category do not).
 /// Refunds (R-TX-4, R-SET-3): an expense refund is income unless refunds reduce spending, then it
-/// subtracts from expense; an income reversal subtracts from income. An income attached record
+/// subtracts from expense (a refund linked to its original, C30, always does); an income reversal subtracts from income. An income attached record
 /// in an expense category is a refund line (D22) and counts the same way.
 public struct TxnTotals: Hashable, Sendable {
   public struct Bucket: Hashable, Sendable {
@@ -410,7 +418,8 @@ public struct TxnTotals: Hashable, Sendable {
         switch (txn.type, txn.isRefund) {
         case (.expense, false): expense += txn.amountMinor
         case (.expense, true):
-          if refundsReduceSpending { expense -= txn.amountMinor } else { income += txn.amountMinor }
+          // C30: a linked refund always nets its category's spending.
+          if refundsReduceSpending || txn.refundOfID != nil { expense -= txn.amountMinor } else { income += txn.amountMinor }
         case (.income, false): income += txn.amountMinor
         case (.income, true): income -= txn.amountMinor
         case (.transfer, _): break

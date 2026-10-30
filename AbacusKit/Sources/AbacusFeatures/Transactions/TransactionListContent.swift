@@ -218,7 +218,8 @@ public struct TransactionListContent: Equatable, Sendable {
           continue
         }
         let parts = rule.parts(
-          type: main.type, isRefund: main.isRefund, categoryID: main.categoryID, amountMinor: main.amountMinor)
+          type: main.type, isRefund: main.isRefund, categoryID: main.categoryID, amountMinor: main.amountMinor,
+          isLinkedRefund: main.isLinkedRefund)
         let day = Day(main.occurredAt, calendar: calendar)
         buckets[day, default: [:]][currency, default: (0, 0)].income += parts.income
         buckets[day, default: [:]][currency, default: (0, 0)].expense += parts.expense

@@ -117,6 +117,15 @@ extension AbacusDatabase {
           sql: #"ALTER TABLE "txns" ADD COLUMN "isBalanceCorrection" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
       }
     }
+    // R-TX-4 (C30): `txns.refundOfID` links a refund to the expense it returns. Append-only and
+    // CloudKit-safe: a nullable column, no foreign key (the repository clears it when the original
+    // is deleted), no constraint. Existing rows stay NULL (unlinked). Safe to run again (checked).
+    migrator.registerMigration("v15: txns.refundOfID") { db in
+      if try !db.columns(in: "txns").contains(where: { $0.name == "refundOfID" }) {
+        try db.execute(sql: #"ALTER TABLE "txns" ADD COLUMN "refundOfID" TEXT"#)
+      }
+      try db.execute(sql: #"CREATE INDEX IF NOT EXISTS "idx_txns_refundOfID" ON "txns"("refundOfID") WHERE "refundOfID" IS NOT NULL"#)
+    }
     return migrator
   }
 

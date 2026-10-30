@@ -144,10 +144,16 @@ public struct TxnListSummary: Hashable, Sendable {
     public var accountID: UUID
     public var type: TxnType
     public var isRefund: Bool
+    /// An expense refund linked to its original (C30): nets its category whatever R-SET-3 says.
+    public var isLinkedRefund: Bool
     public var categoryID: UUID?
     public var amountMinor: Int64
 
-    public init(occurredAt: Date, accountID: UUID, type: TxnType, isRefund: Bool, categoryID: UUID?, amountMinor: Int64) {
+    public init(
+      occurredAt: Date, accountID: UUID, type: TxnType, isRefund: Bool, categoryID: UUID?, amountMinor: Int64,
+      isLinkedRefund: Bool = false
+    ) {
+      self.isLinkedRefund = isLinkedRefund
       self.occurredAt = occurredAt
       self.accountID = accountID
       self.type = type
@@ -191,7 +197,7 @@ public struct TxnListSummary: Hashable, Sendable {
     mains = rows.map {
       Main(
         occurredAt: $0.txn.occurredAt, accountID: $0.txn.accountID, type: $0.txn.type, isRefund: $0.txn.isRefund,
-        categoryID: $0.txn.categoryID, amountMinor: $0.txn.amountMinor)
+        categoryID: $0.txn.categoryID, amountMinor: $0.txn.amountMinor, isLinkedRefund: $0.txn.isLinkedRefund)
     }
     lines = rows.flatMap { row in
       row.lines.map {
