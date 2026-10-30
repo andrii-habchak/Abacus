@@ -2,6 +2,23 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.2.2] — Unreleased
+
+Rules and PKO import fixes. No database changes.
+
+### Added
+
+- Rules: a "Description starts with" condition.
+
+### Changed
+
+- Rules: "Description exactly matches" is now called "Description equals" (same behaviour).
+
+### Fixed
+
+- PKO card holds ("Pending at the bank") whose amount had no minus sign showed as income; holds
+  are always expenses now, and settling a hold repairs one stored with the wrong sign.
+
 ## [1.2.1] — Unreleased
 
 Stability and the owner's review of 1.2.0. No database changes beyond 1.2.0.

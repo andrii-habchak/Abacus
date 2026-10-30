@@ -4,6 +4,10 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-10-30 (orchestrator)._ **1.2.2 is on `main`** (build 5, not tagged): C15 rule
+conditions (starts with / equals) and C16 PKO hold sign fix on top of 1.2.1.
+`dist/Abacus-1.2.2.dmg` is the build for owner testing; no database changes.
+
 _Updated 2026-10-27 (orchestrator)._ **1.2.1 is on `main`** (version 1.2.1, build 4) and is the
 build the owner is testing; it is **not tagged**. Released so far: only `v1.0.0` (tag, 2026-10-27).
 1.1.0 and 1.2.0 were test builds and are folded into 1.2.1 (see CHANGELOG).
