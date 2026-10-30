@@ -2,6 +2,32 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.2] — Unreleased
+
+Opening this version updates the database (migration v14: a flag for balance corrections); back up
+`abacus.sqlite` first.
+
+### Changed
+
+- Transactions: the list loads in pages of 500 with fixed-height rows, so opening "All dates" and
+  dragging the scrollbar are fast; totals, counts and day sums still cover the whole filtered set.
+  Day headers no longer stay pinned while scrolling.
+- Transactions: removing the debt filter restores the date range you had before; "Clear filters"
+  returns to the last 30 days. The date menu has an explicit "All dates".
+- Transactions: filters agree with each other — each menu lists only values that have rows under the
+  other filters (selected ones stay, marked). The filter bar is one row of dropdown buttons with
+  summary labels and no chips; "Type" is a dropdown.
+- With a debt filter on, "Uncategorised" also matches the debt's transfers.
+
+### Added
+
+- Accounts: any account can change kind, including to Debt (person), which needs a debt chosen or
+  created in the same sheet. Account-type filter on the Accounts page.
+- Accounts: archiving an account with a balance asks for confirmation, with "Create a compensation
+  transaction" (excluded from income, expense and budget reports) or, for an account in a debt,
+  "Forgive the debt".
+- Debts: "Mark settled" asks whether to archive the related accounts.
+
 ## [1.4.1] — Unreleased
 
 Fixes from owner testing of 1.4.0. No database changes beyond 1.4.0.
