@@ -632,7 +632,7 @@ private struct Resolver {
       row.detail = "Matches the transfer to the debt of \(person ?? "a person") entered on \(dayText(leg.occurredAt))"
       return (row, .link(leg, source.fingerprints))
     }
-    if let reason = found.review {
+    if let reason = found.review, !ruleResolvesUnknownType(source, reason: reason, account: account) {
       return review(i, row, reason)
     }
     if decisions.excluded.contains(source.id) {
@@ -708,6 +708,19 @@ private struct Resolver {
     }
     row.createsTransaction = true
     return (row, .create(shape))
+  }
+
+  /// C36: an unknown PKO operation type is recorded by its sign; when an enabled category rule
+  /// matches and its category is of that sign's kind (money in = income, money out = expense) the
+  /// row is mapped by the rule and does not wait in Needs review. A choice the user already made
+  /// on the row keeps it in review; other review reasons (transfers) are never touched.
+  private func ruleResolvesUnknownType(_ source: NormalizedRow, reason: ReviewReason, account: AccountRef) -> Bool {
+    guard case .unknownOperationType = reason, decisions.reviews[source.id] == nil, let flow = source.flow else { return false }
+    let kind: CategoryKind = flow == .in ? .income : .expense
+    // The row must be recorded as that kind without being a refund of the other one.
+    guard source.kind == (kind == .income ? .income : .expense), !source.isRefund else { return false }
+    let accountID: Account.ID? = if case .existing(let id) = account { id } else { nil }
+    return matcher.match(description: source.payee, accountID: accountID, kind: kind, amountMinor: abs(source.amountMinor)) != nil
   }
 
   private func baseShape(_ source: NormalizedRow, _ found: RowAnalysis) -> TxnShape {

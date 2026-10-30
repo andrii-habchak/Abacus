@@ -67,7 +67,6 @@ struct ImportReviewStep: View {
   private var tabContent: some View {
     switch model.tab {
     case .transactions: ImportRowsTab(model: model)
-    case .categoryAssignment: ImportRowsTab(model: model, onlyNeedingCategory: true)
     case .mapping: ImportMappingTab(model: model)
     case .events: ImportEventsTab(model: model)
     case .review: ImportNeedsReviewTab(model: model)

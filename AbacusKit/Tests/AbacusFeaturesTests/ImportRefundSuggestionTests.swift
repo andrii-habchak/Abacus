@@ -69,7 +69,7 @@ struct ImportRefundSuggestionTests {
     #expect(accepted.refund?.state == .accepted && accepted.refund?.text.hasPrefix("Refund of GROCERY EXAMPLE") == true)
     #expect(accepted.statusLabel == "New refund" && !accepted.needsCategory)
     #expect(accepted.category == .none)
-    #expect(model.categoryAssignmentRows.isEmpty)
+    #expect(model.categoryRows.isEmpty)
 
     await model.commit()
     #expect(model.step == .done)
