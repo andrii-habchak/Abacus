@@ -33,12 +33,31 @@ struct ImportReviewStep: View {
         DebtLinkSheet(initial: draft, onCancel: { model.cancelDebt() }, onSave: { model.saveDebt($0) })
       }
     }
+    .sheet(
+      isPresented: Binding(
+        get: { model.ruleSheet != nil },
+        set: { if !$0 { model.dismissRuleSheet() } })
+    ) {
+      if let sheet = model.ruleSheet {
+        ImportRuleSheet(model: model, initial: sheet)
+      }
+    }
+    .sheet(
+      isPresented: Binding(
+        get: { model.newCategoryDraft != nil },
+        set: { if !$0 { model.cancelNewCategory() } })
+    ) {
+      if let draft = model.newCategoryDraft {
+        ImportNewCategorySheet(model: model, initial: draft)
+      }
+    }
   }
 
   @ViewBuilder
   private var tabContent: some View {
     switch model.tab {
     case .transactions: ImportRowsTab(model: model)
+    case .categoryAssignment: ImportRowsTab(model: model, onlyNeedingCategory: true)
     case .mapping: ImportMappingTab(model: model)
     case .events: ImportEventsTab(model: model)
     case .review: ImportNeedsReviewTab(model: model)

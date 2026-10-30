@@ -159,6 +159,13 @@ struct ImportNeedsReviewTab: View {
   let model: ImportWizardModel
 
   var body: some View {
+    VStack(spacing: 0) {
+      ImportBulkBar(model: model)
+      cards
+    }
+  }
+
+  private var cards: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 10) {
         HStack(alignment: .top, spacing: 12) {
@@ -178,7 +185,7 @@ struct ImportNeedsReviewTab: View {
         }
         LazyVStack(spacing: 10) {
           ForEach(model.reviewItems) { item in
-            ImportReviewCard(model: model, item: item)
+            ImportReviewCard(model: model, item: item, isSelected: model.selection.contains(item.id))
           }
         }
       }
@@ -193,6 +200,7 @@ struct ImportNeedsReviewTab: View {
 struct ImportReviewCard: View {
   let model: ImportWizardModel
   let item: ImportReviewItem
+  var isSelected = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -200,6 +208,9 @@ struct ImportReviewCard: View {
         Text(item.title).fontWeight(.semibold).frame(maxWidth: .infinity, alignment: .leading)
         Text(item.date).font(.system(size: 12)).foregroundStyle(.secondary)
       }
+      .contentShape(Rectangle())
+      // Click selects the card for the bulk bar; Cmd toggles, Shift ranges.
+      .onTapGesture { importSelect(model, item.id) }
       Text(item.detail)
         .foregroundStyle(ImportPalette.label)
         .fixedSize(horizontal: false, vertical: true)
@@ -228,7 +239,9 @@ struct ImportReviewCard: View {
     .font(.system(size: 13))
     .padding(12)
     .background(RoundedRectangle(cornerRadius: 10).fill(ImportPalette.reviewFill))
-    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ImportPalette.reviewBorder))
+    .overlay(
+      RoundedRectangle(cornerRadius: 10)
+        .strokeBorder(isSelected ? ImportPalette.accent : ImportPalette.reviewBorder, lineWidth: isSelected ? 2 : 1))
   }
 
   @ViewBuilder
@@ -256,6 +269,8 @@ struct ImportReviewCard: View {
           set: { choice in
             if case .existing(let id)? = choice {
               model.selectReviewCategory(id, forRow: item.id)
+            } else if choice == .createNew {
+              model.beginNewCategory(forRow: item.id)
             } else {
               model.selectReviewCategory(nil, forRow: item.id)
             }

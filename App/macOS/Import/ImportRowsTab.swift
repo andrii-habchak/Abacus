@@ -27,21 +27,34 @@ struct ImportColumns {
 /// action and the note under it (R-IMP-1, R-IMP-4, R-IMP-8).
 struct ImportRowsTab: View {
   let model: ImportWizardModel
+  /// The "Category assignment" tab: only the rows that still need a category.
+  var onlyNeedingCategory = false
 
   var body: some View {
     GeometryReader { proxy in
       let columns = ImportColumns(width: proxy.size.width)
-      let rows = model.visibleRows
+      let rows = onlyNeedingCategory ? model.categoryAssignmentRows : model.visibleRows
       VStack(spacing: 0) {
+        ImportBulkBar(model: model)
         header(columns)
         ImportRule(color: ImportPalette.softRule)
         ScrollView {
           LazyVStack(spacing: 0) {
             ForEach(rows) { row in
-              ImportRowView(model: model, row: row, columns: columns)
+              ImportRowView(model: model, row: row, columns: columns, isSelected: model.selection.contains(row.id))
               ImportRule(color: ImportPalette.softRule)
             }
-            Text(rows.count == model.rowItems.count
+            if onlyNeedingCategory, rows.isEmpty {
+              Text("Every row has a category.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, ImportMetrics.horizontalPadding)
+                .padding(.vertical, 14)
+            }
+            Text(onlyNeedingCategory
+              ? "\(rows.count.formatted()) rows need a category."
+              : rows.count == model.rowItems.count
               ? "\(rows.count.formatted()) rows in this file."
               : "Showing \(rows.count.formatted()) of \(model.rowItems.count.formatted()) rows.")
               .font(.system(size: 12))
@@ -76,6 +89,7 @@ struct ImportRowView: View {
   let model: ImportWizardModel
   let row: ImportRowItem
   let columns: ImportColumns
+  var isSelected = false
 
   var body: some View {
     HStack(alignment: .center, spacing: ImportColumns.spacing) {
@@ -117,6 +131,11 @@ struct ImportRowView: View {
     .padding(.horizontal, ImportMetrics.horizontalPadding)
     .padding(.vertical, 7)
     .frame(minHeight: 40)
+    .background(isSelected ? ImportPalette.accentFill : Color.clear)
+    .contentShape(Rectangle())
+    // Click selects; Cmd toggles, Shift ranges (controls inside the row keep their own clicks).
+    .onTapGesture { importSelect(model, row.id) }
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }
 
@@ -181,6 +200,11 @@ struct ImportRowActions: View {
           }
           .buttonStyle(.link)
           .font(.system(size: 11))
+        }
+        if row.excludedByUser {
+          Button("Include") { model.includeRow(row.id) }
+            .buttonStyle(.link)
+            .font(.system(size: 11))
         }
         if row.status == .needsReview {
           Button("Open") { model.tab = .review }

@@ -41,7 +41,7 @@ public struct ImportPreview: Sendable {
 
   // Inputs.
   let parsedRows: [NormalizedRow]
-  let context: ImportContext
+  private(set) var context: ImportContext
   let calendar: Calendar
   /// Day rates for debt records in another currency than the row's account (R-DEBT-10).
   let converter: (any CurrencyConverter)?
@@ -52,6 +52,7 @@ public struct ImportPreview: Sendable {
   // Outputs for the commit.
   private(set) var plans: [RowPlan] = []
   private var index: [String: Int] = [:]
+  private var isBatching = false
 
   struct Decisions: Sendable {
     var accountTargets: [String: AccountMapping.Target] = [:]
@@ -61,6 +62,12 @@ public struct ImportPreview: Sendable {
     var reviews: [String: ReviewChoice] = [:]
     var events: [String: Bool] = [:]
     var noRule: Set<String> = []
+    /// C31: rows the user excluded from the import (bulk "Skip").
+    var excluded: Set<String> = []
+    /// C31: the rule pattern the user edited for a row's learned rule.
+    var rulePatterns: [String: String] = [:]
+    /// C31: rows the user made a transfer to an own account (bulk "Account").
+    var transfers: [String: Account.ID] = [:]
     /// R-DEBT-10: rows recorded as debt records, or kept from a debt rule (`nil` choice).
     var debts: [String: ImportDebtChoice?] = [:]
     /// Review rows recorded by `acceptDefaults()` into "Uncategorised" with a review note.
@@ -132,13 +139,81 @@ public struct ImportPreview: Sendable {
   /// category from the file or a rule also gets a rule proposal (R-IMP-8).
   public mutating func setCategory(_ categoryID: AbacusDomain.Category.ID?, forRow id: String) {
     decisions.categories[id] = .some(categoryID)
+    decisions.transfers[id] = nil
     recompute()
   }
 
   /// Back to the category from the file or the rules.
   public mutating func resetCategory(forRow id: String) {
     decisions.categories[id] = nil
+    decisions.transfers[id] = nil
     recompute()
+  }
+
+  /// The rule pattern a row's category pick is saved as, instead of the derived one (C31:
+  /// the "Save rules" sheet). An empty text goes back to the derived pattern.
+  public mutating func setRulePattern(_ pattern: String, forRow id: String) {
+    let text = RulePattern.normalized(pattern)
+    decisions.rulePatterns[id] = text.isEmpty ? nil : text
+    recompute()
+  }
+
+  /// The pattern `RulePattern.derive` gives for the row's description (what a pick is saved as
+  /// unless `setRulePattern` changed it).
+  public func derivedRulePattern(forRow id: String) -> String {
+    row(id).map { RulePattern.derive(from: $0.source.payee) } ?? ""
+  }
+
+  /// Runs `changes` and recomputes once at the end (bulk edits of many rows).
+  public mutating func batch(_ changes: (inout ImportPreview) -> Void) {
+    isBatching = true
+    changes(&self)
+    isBatching = false
+    recompute()
+  }
+
+  /// Replaces the categories the preview knows (one created while the import is open).
+  public mutating func refreshCategories(_ categories: [AbacusDomain.Category]) {
+    context.categories = categories
+    recompute()
+  }
+
+  /// Excludes a new row from the import (C31 bulk "Skip"), or includes it again. Only rows
+  /// that would create a transaction can be excluded; review rows use `setReviewChoice(.skip)`
+  /// and possible duplicates `setDuplicateAction(.skip)`.
+  public mutating func setExcluded(_ excluded: Bool, forRow id: String) {
+    if excluded {
+      guard let row = row(id), row.status == .new, row.createsTransaction else { return }
+      decisions.excluded.insert(id)
+    } else {
+      decisions.excluded.remove(id)
+    }
+    recompute()
+  }
+
+  /// Whether a new expense/income row can become a transfer to the own account `accountID`:
+  /// another account whose amount is known (same currency, or the file gives it).
+  public func canTransfer(row id: String, to accountID: Account.ID) -> Bool {
+    guard let row = row(id), row.createsTransaction, row.review == nil, row.type == .expense || row.type == .income || row.type == .transfer,
+      row.source.kind != .openingBalance, let other = context.account(accountID), !other.isArchived,
+      row.account != .existing(accountID)
+    else { return false }
+    if row.isInflow, !row.source.lines.isEmpty { return false }
+    let own = currency(of: row.account)
+    if other.currency == own { return true }
+    if let original = row.source.original, original.currencyCode == other.currency.rawValue { return true }
+    return false
+  }
+
+  /// Makes a new expense/income row a transfer to (money out) or from (money in) the own account
+  /// (C31 bulk "Account"); false when `canTransfer` says no. It replaces a category or debt choice.
+  @discardableResult
+  public mutating func setTransfer(toAccount accountID: Account.ID, forRow id: String) -> Bool {
+    guard canTransfer(row: id, to: accountID) else { return false }
+    decisions.transfers[id] = accountID
+    decisions.categories[id] = nil
+    recompute()
+    return true
   }
 
   /// Whether the row's category choice is saved as a rule (default: yes).
@@ -157,6 +232,7 @@ public struct ImportPreview: Sendable {
   /// `setReviewChoice(.debt(…))`.
   public mutating func setDebt(_ choice: ImportDebtChoice?, forRow id: String) {
     decisions.debts[id] = .some(choice)
+    decisions.transfers[id] = nil
     recompute()
   }
 
@@ -267,6 +343,7 @@ public struct ImportPreview: Sendable {
   // MARK: - Resolution
 
   mutating func recompute() {
+    if isBatching { return }
     accountMappings = defaultAccountMappings.map { mapping in
       var mapping = mapping
       if let target = decisions.accountTargets[mapping.id] {
@@ -487,14 +564,30 @@ private struct Resolver {
     if let reason = found.review {
       return review(i, row, reason)
     }
+    if decisions.excluded.contains(source.id) {
+      // C31: excluded by the user (bulk "Skip").
+      row.status = .skipped
+      row.excludedByUser = true
+      row.detail = "Skipped by you"
+      return (row, .nothing)
+    }
 
     var shape = baseShape(source, found)
     row.type = shape.type
     var transferRuleDetail: String?
-    if shape.type != .transfer, let (debt, ruleID) = debtDecision(for: source, shape: shape, account: account) {
+    // C31: a transfer the user chose for this row wins over rules and debt decisions.
+    var userTransfer: (CategoryRule?, Account.ID, Int64)?
+    if shape.type != .transfer, let target = decisions.transfers[source.id], let other = preview.context.account(target),
+      let amount = amount(of: source, in: other.currency, accountCurrency: preview.currency(of: account))
+    {
+      userTransfer = (nil, target, amount)
+    }
+    if shape.type != .transfer, userTransfer == nil, let (debt, ruleID) = debtDecision(for: source, shape: shape, account: account) {
       applyDebt(debt, ruleID: ruleID, source: source, shape: &shape, row: &row)
-    } else if shape.type != .transfer, let (rule, accountID, otherAmount) = transferRule(for: source, shape: shape, account: account) {
-      // A transfer rule (D44): money out → to the rule's account, money in → from it.
+    } else if shape.type != .transfer,
+      let (rule, accountID, otherAmount) = userTransfer ?? transferRule(for: source, shape: shape, account: account).map({ ($0.0, $0.1, $0.2) })
+    {
+      // A transfer rule (D44) or the user's choice: money out → to the account, money in → from it.
       let inflow = (shape.type == .income) != shape.isRefund
       shape.type = .transfer
       shape.original = nil
@@ -508,11 +601,11 @@ private struct Resolver {
         shape.to = .existing(accountID)
         shape.toAmountMinor = otherAmount
       }
-      shape.ruleID = rule.id
+      shape.ruleID = rule?.id
       row.type = .transfer
       row.counterAccount = .existing(accountID)
       row.counterAmountMinor = otherAmount
-      transferRuleDetail = "Transfer by rule “\(rule.label)”"
+      transferRuleDetail = rule.map { "Transfer by rule “\($0.label)”" } ?? "Transfer to “\(preview.name(of: AccountRef.existing(accountID)))” (chosen)"
     } else if shape.type != .transfer {
       let (category, from, rule) = resolveCategory(for: source, kind: shape.type == .income ? .income : .expense, account: account, explicit: nil)
       shape.category = category
@@ -751,7 +844,7 @@ private struct Resolver {
     let accountID: Account.ID? = if case .existing(let id) = preview.accountRef(source.account) { id } else { nil }
     let kind: CategoryKind = source.kind == .income ? .income : .expense
     if matcher.match(description: source.payee, accountID: accountID, kind: kind) != nil { return nil }
-    let pattern = RulePattern.derive(from: source.payee)
+    let pattern = decisions.rulePatterns[source.id] ?? RulePattern.derive(from: source.payee)
     return pattern.isEmpty ? nil : pattern
   }
 

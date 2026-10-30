@@ -300,6 +300,8 @@ public final class AppSession {
   /// Accounts, categories or events changed on a manage screen.
   public func referenceChanged() async {
     await transactions.referenceChanged()
+    // The import wizard's pickers offer a category created meanwhile (C31).
+    await importWizard?.refreshReference()
     if dashboard.phase == .loaded { await dashboard.load() }
   }
 
