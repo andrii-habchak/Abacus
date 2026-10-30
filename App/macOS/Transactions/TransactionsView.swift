@@ -103,6 +103,7 @@ struct TransactionsView: View {
       }
       .listStyle(.plain)
       .scrollContentBackground(.hidden)
+      .id(model.loadedQuery)
       .contextMenu(forSelectionType: Txn.ID.self) { ids in
         // R-DEBT-11/19: an expense or income becomes a transfer to a person's debt account in
         // place; such a transfer can be turned back.
@@ -234,6 +235,29 @@ struct TransactionsPreviewHost: View {
       if let search = defaults.string(forKey: "AbacusTransactionsSearch") { model.filters.search = search }
       if let types = defaults.string(forKey: "AbacusTransactionsTypes") {
         model.filters.types = Set(types.split(separator: ",").compactMap { TxnType(rawValue: String($0)) })
+      }
+      // `-AbacusTransactionsDebt <person|ANY>` (use with `-AbacusLoadLargeSampleData YES`): applies a
+      // debt's "Show transactions" filter 10 s after launch; `-AbacusTransactionsDebtRemove YES` removes
+      // it again 3 s later. With `-AbacusHangWatch YES` a `HANG <ms>` line shows how long the main
+      // thread was blocked (C24: it was minutes before the list was keyed by the loaded query).
+      if let person = defaults.string(forKey: "AbacusTransactionsDebt") {
+        let remove = defaults.bool(forKey: "AbacusTransactionsDebtRemove")
+        Task {
+          try? await Task.sleep(for: .seconds(10))  // after the sample data is loaded
+          await model.load()
+          await model.loadDebtOptions()
+          func say(_ text: String) { FileHandle.standardError.write(Data("DEBTFILTER \(text)\n".utf8)) }
+          guard let debt = model.debtOptions.first(where: { person == "ANY" || $0.name == person }) else {
+            return say("no such debt")
+          }
+          // Like "Show transactions" of a debt: every date.
+          if let shown = await model.filters(showingDebt: debt.id) { model.filters = shown }
+          say("applied")
+          guard remove else { return }
+          try? await Task.sleep(for: .seconds(3))
+          model.toggleDebt(debt.id)
+          say("removed")
+        }
       }
       DebugWindowSize.applyIfRequested()
     }
