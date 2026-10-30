@@ -209,7 +209,11 @@ struct ImportReviewCard: View {
             label: option.label, isOn: item.selected == option.option,
             isSuggested: item.selected == nil && item.suggested == option.option, isEnabled: option.isEnabled
           ) {
-            model.selectReviewOption(option.option, forRow: item.id)
+            if option.option == .debt {
+              Task { await model.openDebt(forRow: item.id) }
+            } else {
+              model.selectReviewOption(option.option, forRow: item.id)
+            }
           }
         }
         detailPicker
@@ -278,6 +282,13 @@ struct ImportReviewCard: View {
       .labelsHidden()
       .controlSize(.small)
       .fixedSize()
+    case .debt:
+      HStack(spacing: 6) {
+        Text(item.debtLabel ?? "Debt record").font(.system(size: 12)).lineLimit(1)
+        Button("Edit…") { Task { await model.openDebt(forRow: item.id) } }
+          .buttonStyle(.link)
+          .font(.system(size: 11))
+      }
     case .skip, nil:
       EmptyView()
     }

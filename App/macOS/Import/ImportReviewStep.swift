@@ -24,6 +24,15 @@ struct ImportReviewStep: View {
       ImportRule()
       ImportFooter(model: model)
     }
+    .sheet(
+      isPresented: Binding(
+        get: { model.debtDraft != nil },
+        set: { if !$0 { model.cancelDebt() } })
+    ) {
+      if let draft = model.debtDraft {
+        DebtLinkSheet(initial: draft, onCancel: { model.cancelDebt() }, onSave: { model.saveDebt($0) })
+      }
+    }
   }
 
   @ViewBuilder
