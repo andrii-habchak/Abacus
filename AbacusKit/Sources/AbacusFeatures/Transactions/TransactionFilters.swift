@@ -54,16 +54,29 @@ public struct TransactionFilters: Hashable, Sendable {
 
   /// Changing the range by hand forgets `dateRangeBeforeDebt`.
   public var dateRange: DateRange {
-    didSet { if dateRange != oldValue { dateRangeBeforeDebt = nil } }
+    didSet {
+      if dateRange != oldValue {
+        dateRangeBeforeDebt = nil
+        dateRangeBeforeCategory = nil
+      }
+    }
   }
   /// The range the user had before "Show transactions" of a debt switched to all dates (C28):
   /// removing the debt filter brings it back, unless the range was changed by hand meanwhile.
   public var dateRangeBeforeDebt: DateRange?
+  /// The same for "Show all transactions" of a category (C33): the range the user had before the
+  /// jump switched to all dates; clearing the category filter brings it back unless the range was
+  /// changed by hand meanwhile.
+  public var dateRangeBeforeCategory: DateRange?
   /// Selected categories; a selected parent covers its children (R-LIST-2).
-  public var categoryIDs: Set<AbacusDomain.Category.ID>
+  public var categoryIDs: Set<AbacusDomain.Category.ID> {
+    didSet { restoreRangeWhenCategoryCleared() }
+  }
   /// "Uncategorised" ticked: expenses and incomes without a category, in addition to
   /// `categoryIDs` (dashboard drill-down, R-HOME-3).
-  public var includeUncategorised: Bool
+  public var includeUncategorised: Bool {
+    didSet { restoreRangeWhenCategoryCleared() }
+  }
   public var accountIDs: Set<Account.ID>
   /// Selected debts (R-DEBT-22). A debt stands for its linked accounts, which sit in `accountIDs`
   /// as removable entries; the debt stays selected when the user un-ticks one of them.
@@ -141,6 +154,31 @@ public struct TransactionFilters: Hashable, Sendable {
     TransactionFilters(dateRange: allDates, importBatch: batch)
   }
 
+  /// A category's "Show all transactions" on the Categories page (C33): that category (a parent
+  /// covers its subcategories, `TxnQuery.categoryIDs`), every date. `nil` is the built-in
+  /// "Uncategorised" of `kind`. The range in use before is kept for the way back.
+  public static func category(
+    _ id: AbacusDomain.Category.ID?, kind: CategoryKind = .expense, dateRangeBefore: DateRange? = nil
+  ) -> TransactionFilters {
+    var filters: TransactionFilters
+    if let id {
+      filters = TransactionFilters(dateRange: allDates, categoryIDs: [id])
+    } else {
+      let types = DashboardDrillDown.types(kind: kind, uncategorised: true) ?? Set(TxnType.allCases)
+      filters = TransactionFilters(dateRange: allDates, types: types, includeUncategorised: true)
+    }
+    if dateRangeBefore != allDates { filters.dateRangeBeforeCategory = dateRangeBefore }
+    return filters
+  }
+
+  /// Clearing the last category entry brings back the range from before the category jump, unless
+  /// the user changed the range by hand since (that clears `dateRangeBeforeCategory`).
+  private mutating func restoreRangeWhenCategoryCleared() {
+    guard !isCategoryFiltered, let before = dateRangeBeforeCategory else { return }
+    dateRange = before
+    dateRangeBeforeCategory = nil
+  }
+
   /// A debt's "Show transactions" (R-DEBT-22): the debt selected with all its linked accounts as
   /// account entries, any date.
   public static func debt(_ id: Debt.ID, accountIDs: Set<Account.ID>) -> TransactionFilters {
@@ -156,6 +194,7 @@ public struct TransactionFilters: Hashable, Sendable {
     var other = self
     other.newestFirst = Self.default.newestFirst
     other.dateRangeBeforeDebt = nil
+    other.dateRangeBeforeCategory = nil
     other.search = other.search.trimmingCharacters(in: .whitespacesAndNewlines)
     return other != Self.default
   }

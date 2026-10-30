@@ -11,6 +11,8 @@ public enum RepositoryError: Error, Equatable, Sendable {
   /// R-CAT-3: a category in use needs a reassignment target of the same kind.
   case categoryInUse
   case kindMismatch
+  /// C33: a category cannot be re-assigned to itself or to one of its own subcategories.
+  case invalidReassignTarget
 }
 
 public protocol AccountRepository: Sendable {
@@ -43,6 +45,46 @@ public protocol CategoryRepository: Sendable {
   /// (same kind) before deleting; children move up to top level. Throws `categoryInUse` when
   /// the category is used and `reassignTo` is nil (R-CAT-3).
   func delete(_ id: Category.ID, reassignTo: Category.ID?) async throws
+  /// What "Re-assign…" of `id` would touch (C33): rows of the category and, for a parent, of its
+  /// subcategories. Read-only.
+  func reassignImpact(of id: Category.ID) async throws -> CategoryReassignImpact
+  /// Moves every transaction and attached record of `id` (and of its subcategories when it is a
+  /// parent) to `target`, in ONE database transaction (C33). `target` must exist, be of the same
+  /// kind and not be the category itself or one of its subcategories. Rules and import mappings
+  /// follow when `repointRules`; the category (a parent with its subcategories) is archived
+  /// afterwards when `archiveAfterwards`. Budget limits stay. Returns what moved.
+  @discardableResult
+  func reassign(
+    from id: Category.ID, to target: Category.ID, repointRules: Bool, archiveAfterwards: Bool
+  ) async throws -> CategoryReassignImpact
+}
+
+extension CategoryRepository {
+  /// Fakes without the feature: nothing to move.
+  public func reassignImpact(of id: Category.ID) async throws -> CategoryReassignImpact { CategoryReassignImpact() }
+
+  public func reassign(
+    from id: Category.ID, to target: Category.ID, repointRules: Bool, archiveAfterwards: Bool
+  ) async throws -> CategoryReassignImpact { throw RepositoryError.notFound }
+}
+
+/// Counts for the "Re-assign…" sheet (C33): what is (or was) moved, and the budget limits that
+/// stay on the source categories.
+public struct CategoryReassignImpact: Hashable, Sendable {
+  public var transactions: Int
+  public var attachedRecords: Int
+  public var rules: Int
+  public var importMappings: Int
+  /// Budget allocations of the source categories in any plan; never moved.
+  public var budgetLimits: Int
+
+  public init(transactions: Int = 0, attachedRecords: Int = 0, rules: Int = 0, importMappings: Int = 0, budgetLimits: Int = 0) {
+    self.transactions = transactions
+    self.attachedRecords = attachedRecords
+    self.rules = rules
+    self.importMappings = importMappings
+    self.budgetLimits = budgetLimits
+  }
 }
 
 /// Filters of the transaction list (R-LIST-2…6). Empty sets mean "any".

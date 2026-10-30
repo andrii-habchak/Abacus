@@ -85,6 +85,8 @@ public final class AppSession {
     }
     accounts.onDataChange = referenceChanged
     categories.onDataChange = referenceChanged
+    // "Show all transactions" in a category's context menu (C33).
+    categories.onShowTransactions = { [weak self] id in self?.showTransactions(ofCategory: id) }
     events.onDataChange = referenceChanged
     // A rule applied to existing transactions or rolled back (C9): the list, the dashboard and
     // balances follow at once.
@@ -345,6 +347,19 @@ public final class AppSession {
       guard let self, let filters = await self.transactions.filters(showingDebt: id) else { return }
       self.app.showTransactions(filters)
     }
+  }
+
+  /// A category's "Show all transactions" (Categories page, C33): the list filtered to that
+  /// category (a parent with its subcategories), every date; the range in use is restored when the
+  /// category filter is cleared. `CategoriesModel.uncategorisedID` stands for the built-in
+  /// "Uncategorised" of the open tab. Does nothing for an unknown category.
+  public func showTransactions(ofCategory id: AbacusDomain.Category.ID) {
+    let before = transactions.filters.dateRangeBeforeCategory ?? transactions.filters.dateRange
+    if id == CategoriesModel.uncategorisedID {
+      return app.showTransactions(.category(nil, kind: categories.kind, dateRangeBefore: before))
+    }
+    guard let category = categories.category(id) else { return }
+    app.showTransactions(.category(category.id, kind: category.kind, dateRangeBefore: before))
   }
 
   /// An import's "Show transactions" (done step, history): the list filtered to the

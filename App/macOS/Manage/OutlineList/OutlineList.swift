@@ -42,6 +42,19 @@ private struct OutlineKey: Hashable {
   let children: [OutlineKey]
 }
 
+/// An extra item of a row's context menu, above "Edit…" (C33).
+struct OutlineMenuItem {
+  let title: String
+  var isEnabled = true
+  let action: () -> Void
+}
+
+/// Carries a menu item's closure on `NSMenuItem.representedObject`.
+private final class MenuAction: NSObject {
+  let run: () -> Void
+  init(_ run: @escaping () -> Void) { self.run = run }
+}
+
 /// A drop the list proposes: `target` nil = below the last row (top level, last). `moving` is
 /// the dragged selection in list order (one row for a plain drag, C27).
 struct OutlineDrop: Equatable {
@@ -84,6 +97,8 @@ struct OutlineList: NSViewRepresentable {
   let onActivate: (UUID) -> Void
   let canDrop: (OutlineDrop) -> Bool
   let onDrop: (OutlineDrop) -> Void
+  /// Extra context-menu items for a row, listed before "Edit…"; none by default.
+  var menuItems: (UUID) -> [OutlineMenuItem] = { _ in [] }
 
   func makeCoordinator() -> OutlineCoordinator { OutlineCoordinator() }
 
@@ -295,11 +310,24 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
   func menu(forRow row: Int, in outline: NSOutlineView) -> NSMenu? {
     guard row >= 0, let item = item(outline.item(atRow: row)) else { return nil }
     let menu = NSMenu()
+    let extras = parent?.menuItems(item.id) ?? []
+    for extra in extras {
+      let entry = NSMenuItem(title: extra.title, action: #selector(runMenuAction(_:)), keyEquivalent: "")
+      entry.target = self
+      entry.isEnabled = extra.isEnabled
+      entry.representedObject = MenuAction(extra.action)
+      menu.addItem(entry)
+    }
+    if !extras.isEmpty { menu.addItem(.separator()) }
     let edit = NSMenuItem(title: "Edit…", action: #selector(editFromMenu(_:)), keyEquivalent: "")
     edit.target = self
     edit.representedObject = item.id
     menu.addItem(edit)
     return menu
+  }
+
+  @objc private func runMenuAction(_ sender: NSMenuItem) {
+    (sender.representedObject as? MenuAction)?.run()
   }
 
   @objc private func editFromMenu(_ sender: NSMenuItem) {

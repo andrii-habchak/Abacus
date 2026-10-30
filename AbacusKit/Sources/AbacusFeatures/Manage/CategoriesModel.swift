@@ -92,6 +92,10 @@ public final class CategoriesModel {
   /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
   /// so the transaction list and the dashboard re-read it.
   @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
+  /// "Show all transactions" of the context menu (C33): the session opens the Transactions page.
+  @ObservationIgnored public var onShowTransactions: (@MainActor (AbacusDomain.Category.ID) -> Void)?
+  /// The open "Re-assign…" sheet (C33); nil while none is open.
+  public var reassignSheet: CategoryReassignSheet?
   @ObservationIgnored private var sortLoaded = false
 
   public init(dependencies: ManageDependencies) {
@@ -716,5 +720,133 @@ public final class CategoriesModel {
     self.dialog = nil
     sheet = nil
     await setArchived(id, true)
+  }
+
+  // MARK: Context menu: show transactions, re-assign (C33)
+
+  /// "Show all transactions": the Transactions page filtered to this category (a parent with its
+  /// subcategories) and every date, or to the built-in "Uncategorised" of the open tab.
+  public func showTransactions(of id: AbacusDomain.Category.ID) {
+    guard id == Self.uncategorisedID || category(id) != nil else { return }
+    onShowTransactions?(id)
+  }
+
+  /// Whether the context menu offers "Re-assign…" for this row: the built-in entry has nothing to
+  /// move (its transactions have no category).
+  public func canReassign(_ id: AbacusDomain.Category.ID) -> Bool { category(id) != nil }
+
+  /// "Re-assign…": opens the sheet for `id`. Moves the transactions (and attached records) of the
+  /// category, and of its subcategories when it is a parent, to another category of the same kind
+  /// in one step. The impact is counted first.
+  public func requestReassign(_ id: AbacusDomain.Category.ID) async {
+    guard let source = category(id) else { return }
+    select(id)
+    let impact: CategoryReassignImpact
+    do {
+      impact = try await dependencies.categories.reassignImpact(of: id)
+    } catch {
+      errorMessage = ManageFailure.message(error, doing: "count the transactions")
+      return
+    }
+    let children = categories.filter { $0.parentID == id }
+    let childIDs = Set(children.map(\.id))
+    // A–Z (R-MGMT-8): active categories of the same kind except the source and its own children.
+    let targets = CategoryOrder.alphabetical(categories.filter { $0.kind == source.kind })
+      .filter { $0.id != id && !childIDs.contains($0.id) && !$0.isArchived }
+      .map { ManageDialog.Target(id: $0.id, name: $0.name, isChild: $0.parentID != nil) }
+    reassignSheet = CategoryReassignSheet(
+      sourceID: id, sourceName: source.name, kind: source.kind, childNames: children.map(\.name), targets: targets,
+      targetID: defaultTarget(for: source, among: targets), impact: impact)
+  }
+
+  public func cancelReassign() { reassignSheet = nil }
+
+  public func canConfirmReassign(_ sheet: CategoryReassignSheet) -> Bool {
+    sheet.targetID != nil && sheet.impact.transactions + sheet.impact.attachedRecords > 0
+  }
+
+  /// "Re-assign": one repository call (one database transaction); the sheet closes on success,
+  /// shows the failure in itself otherwise.
+  public func confirmReassign(_ sheet: CategoryReassignSheet) async {
+    guard canConfirmReassign(sheet), let target = sheet.targetID else { return }
+    do {
+      try await dependencies.categories.reassign(
+        from: sheet.sourceID, to: target, repointRules: sheet.repointRules,
+        archiveAfterwards: sheet.archiveAfterwards)
+      reassignSheet = nil
+      await onDataChange?()
+      await load()
+    } catch {
+      reassignSheet?.errorMessage = ManageFailure.message(error, doing: "re-assign the transactions")
+    }
+  }
+}
+
+/// The "Re-assign…" sheet's state (C33).
+///
+/// Interpretation for a parent: its own transactions and those of all its subcategories move to
+/// the target; the subcategories stay as categories (now empty) unless "Archive … afterwards" is
+/// ticked, which archives the parent together with them (the store's archive rule). The target
+/// is an active category of the same kind that is neither the category nor one of its
+/// subcategories. Budget limits of the category never move; the sheet only lists them.
+public struct CategoryReassignSheet: Identifiable, Equatable, Sendable {
+  public let sourceID: AbacusDomain.Category.ID
+  public let sourceName: String
+  public let kind: CategoryKind
+  public let childNames: [String]
+  public let targets: [ManageDialog.Target]
+  public var targetID: AbacusDomain.Category.ID?
+  public let impact: CategoryReassignImpact
+  public var repointRules = true
+  public var archiveAfterwards = false
+  public var errorMessage: String?
+
+  public var id: AbacusDomain.Category.ID { sourceID }
+
+  init(
+    sourceID: AbacusDomain.Category.ID, sourceName: String, kind: CategoryKind, childNames: [String],
+    targets: [ManageDialog.Target], targetID: AbacusDomain.Category.ID?, impact: CategoryReassignImpact
+  ) {
+    self.sourceID = sourceID
+    self.sourceName = sourceName
+    self.kind = kind
+    self.childNames = childNames
+    self.targets = targets
+    self.targetID = targetID
+    self.impact = impact
+  }
+
+  public var targetName: String? { targets.first { $0.id == targetID }?.name }
+
+  /// "12 transactions will move to Groceries." (+ attached lines); plain when nothing is left.
+  public var summary: String {
+    let count = impact.transactions
+    let scope = childNames.isEmpty ? "" : " (including its subcategories)"
+    guard count + impact.attachedRecords > 0 else {
+      return "No transaction uses \(sourceName)\(scope); there is nothing to move."
+    }
+    let target = targetName ?? "the chosen category"
+    var text = "\(ManageText.transactions(count)) will move to \(target)"
+    if impact.attachedRecords > 0 {
+      let lines = impact.attachedRecords == 1 ? "1 fee, cashback or split line" : "\(impact.attachedRecords) fee, cashback or split lines"
+      text += count > 0 ? ", with \(lines)" : ": \(lines)"
+    }
+    return text + "."
+  }
+
+  /// Warnings under the summary: budget limits stay where they are; subcategories stay.
+  public var notes: [String] {
+    var notes: [String] = []
+    if impact.budgetLimits > 0 {
+      notes.append(
+        "The budget has \(impact.budgetLimits == 1 ? "a limit" : "\(impact.budgetLimits) limits") for \(sourceName) or its subcategories. \(impact.budgetLimits == 1 ? "It stays" : "They stay") there; edit the budget to move \(impact.budgetLimits == 1 ? "it" : "them").")
+    }
+    if !childNames.isEmpty {
+      notes.append(
+        archiveAfterwards
+          ? "\(sourceName) and its subcategories (\(childNames.joined(separator: ", "))) will be archived."
+          : "Its subcategories (\(childNames.joined(separator: ", "))) stay, now empty.")
+    }
+    return notes
   }
 }

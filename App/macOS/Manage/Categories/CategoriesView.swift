@@ -43,6 +43,12 @@ public struct CategoriesView: View {
     ) { dialog in
       CategoryDeleteDialog(model: model, dialog: dialog)
     }
+    .sheet(
+      item: Binding(
+        get: { model.reassignSheet }, set: { if $0 == nil, model.reassignSheet != nil { model.cancelReassign() } })
+    ) { sheet in
+      CategoryReassignSheetView(model: model, initial: sheet)
+    }
     .task {
       if model.phase == .idle { await model.load() }
       #if DEBUG
@@ -64,6 +70,70 @@ public struct CategoriesView: View {
       }
     }
   #endif
+}
+
+/// "Re-assign…" (C33): moves every transaction of a category (and of its subcategories) to another
+/// category of the same kind. Plain pickers for now; the shared searchable picker (C34) replaces
+/// the target Picker later.
+struct CategoryReassignSheetView: View {
+  let model: CategoriesModel
+  @State private var sheet: CategoryReassignSheet
+  @State private var working = false
+
+  init(model: CategoriesModel, initial: CategoryReassignSheet) {
+    self.model = model
+    _sheet = State(initialValue: initial)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Re-assign “\(sheet.sourceName)”").font(.system(size: 15, weight: .semibold))
+      if sheet.targets.isEmpty {
+        Text("There is no other active \(sheet.kind.rawValue) category to move them to.")
+          .foregroundStyle(.secondary)
+      } else {
+        ManageField("Move to") {
+          Picker("Move to", selection: $sheet.targetID) {
+            ForEach(sheet.targets) { target in
+              Text(target.isChild ? "    \(target.name)" : target.name).tag(Optional(target.id))
+            }
+          }
+          .labelsHidden()
+        }
+      }
+      Text(sheet.summary).fixedSize(horizontal: false, vertical: true)
+      ForEach(sheet.notes, id: \.self) { note in
+        Text(note).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+      }
+      Toggle(isOn: $sheet.repointRules) {
+        Text(sheet.impact.rules + sheet.impact.importMappings > 0
+          ? "Re-point rules that use this category (\(sheet.impact.rules + sheet.impact.importMappings))"
+          : "Re-point rules that use this category")
+      }
+      Toggle("Archive “\(sheet.sourceName)” afterwards", isOn: $sheet.archiveAfterwards)
+      if let message = sheet.errorMessage {
+        Text(message).font(.system(size: 12)).foregroundStyle(.red)
+      }
+      HStack {
+        Spacer()
+        Button("Cancel", role: .cancel) { model.cancelReassign() }
+          .keyboardShortcut(.cancelAction)
+        Button("Re-assign") {
+          working = true
+          Task {
+            await model.confirmReassign(sheet)
+            working = false
+            // A failure stays on the model's sheet; show it here.
+            sheet.errorMessage = model.reassignSheet?.errorMessage
+          }
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(!model.canConfirmReassign(sheet) || working)
+      }
+    }
+    .padding(20)
+    .frame(width: 440)
+  }
 }
 
 /// The delete dialog with its reassignment target (R-CAT-3).
@@ -120,7 +190,14 @@ struct CategoriesTree: View {
         onSelect: { model.select(ids: $0) },
         onActivate: { model.edit($0) },
         canDrop: { model.canDrop($0.moving, on: $0.target, position: $0.position) },
-        onDrop: { drop in Task { await model.drop(drop.moving, on: drop.target, position: drop.position) } }
+        onDrop: { drop in Task { await model.drop(drop.moving, on: drop.target, position: drop.position) } },
+        menuItems: { id in
+          var items = [OutlineMenuItem(title: "Show all transactions") { model.showTransactions(of: id) }]
+          if model.canReassign(id) {
+            items.append(OutlineMenuItem(title: "Re-assign…") { Task { await model.requestReassign(id) } })
+          }
+          return items
+        }
       )
       .padding(.horizontal, 8)
       .overlay {
