@@ -120,7 +120,7 @@ struct ImportWizardTests {
     #expect(model.fileMeta == "4 rows · 1 Mar 2025 – 4 Mar 2025")
     #expect(model.cards.map(\.label) == ["All rows", "New", "Needs review"])
     #expect(model.cards.map(\.count) == ["4", "4", "0"])
-    #expect(model.tabs.map(\.label) == ["Transactions", "Accounts & categories", "Events from tags", "Needs review (0)"])
+    #expect(model.tabs.map(\.label) == ["Transactions", "Accounts & categories", "Events from tags", "Category assignment (0)", "Needs review (0)"])
     #expect(model.rowItems.map(\.statusLabel) == ["Opening balance", "New", "New transfer", "New transfer"])
     #expect(model.commitLabel == "Import 3 transactions")
     #expect(model.canCommit)

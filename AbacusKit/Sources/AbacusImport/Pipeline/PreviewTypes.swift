@@ -190,6 +190,8 @@ public struct PreviewRow: Identifiable, Hashable, Sendable {
   public internal(set) var eventTag: String?
   /// True when committing creates a new transaction for this row.
   public internal(set) var createsTransaction: Bool
+  /// The user excluded the row (C31 bulk "Skip"); `setExcluded(false, …)` brings it back.
+  public internal(set) var excludedByUser = false
 
   public var warnings: [String] { source.warnings }
   public var day: Date { source.occurredAt }

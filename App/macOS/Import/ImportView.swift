@@ -90,6 +90,11 @@ struct ImportView: View {
       #endif
     }
     .animation(.easeOut(duration: 0.18), value: model.isHistoryShown)
+    // A category created in another window or screen shows up in the row pickers (C31).
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      Task { await model.refreshReference() }
+    }
+    .onAppear { Task { await model.refreshReference() } }
   }
 
   @ViewBuilder
@@ -100,7 +105,7 @@ struct ImportView: View {
     case .review:
       ImportReviewStep(model: model)
     case .done:
-      ImportDoneStep(model: model) {
+      ImportDoneStep(model: model, isTargeted: isDropTargeted) {
         if let id = model.summary?.batch.id { onShowTransactions(id) }
       }
     }
@@ -233,6 +238,7 @@ struct ImportChooseFileStep: View {
 
 struct ImportDoneStep: View {
   let model: ImportWizardModel
+  var isTargeted = false
   let showTransactions: () -> Void
 
   var body: some View {
@@ -256,6 +262,26 @@ struct ImportDoneStep: View {
           .buttonStyle(.borderedProminent)
       }
       .padding(.top, 6)
+      // The next file can be dropped right here (C31).
+      VStack(spacing: 6) {
+        Image(systemName: "arrow.down.doc")
+          .font(.system(size: 24, weight: .light))
+          .foregroundStyle(.secondary)
+        Text("Drop a CSV export here")
+          .font(.system(size: 14, weight: .semibold))
+        Text("to import the next file")
+          .font(.system(size: 12))
+          .foregroundStyle(ImportPalette.label)
+      }
+      .padding(.vertical, 22)
+      .frame(maxWidth: 420)
+      .background(RoundedRectangle(cornerRadius: 12).fill(isTargeted ? ImportPalette.accentFill : ImportPalette.dropZone))
+      .overlay(
+        RoundedRectangle(cornerRadius: 12)
+          .strokeBorder(
+            isTargeted ? ImportPalette.accent : ImportPalette.dropBorder, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+      )
+      .padding(.top, 18)
     }
     .padding(.horizontal, ImportMetrics.horizontalPadding)
     .padding(.top, 40)

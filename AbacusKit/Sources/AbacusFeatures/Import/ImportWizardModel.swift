@@ -27,6 +27,8 @@ public final class ImportWizardModel {
 
   public enum Tab: Hashable, Sendable {
     case transactions, mapping, events, review
+    /// C31: only the rows that still need a category, with bulk assignment.
+    case categoryAssignment
   }
 
   /// What the model is busy with; the views disable their controls meanwhile.
@@ -54,9 +56,27 @@ public final class ImportWizardModel {
   /// Account groups: account pickers list A–Z under them (R-MGMT-8).
   public private(set) var accountGroups: [AccountGroup] = []
   public private(set) var categories: [AbacusDomain.Category] = []
-  public var tab: Tab = .transactions
+  public var tab: Tab = .transactions {
+    didSet { if tab != oldValue { clearSelection() } }
+  }
   /// The pressed summary card; nil = all rows.
-  public private(set) var filter: RowStatus?
+  public private(set) var filter: RowStatus? {
+    didSet { if filter != oldValue { clearSelection() } }
+  }
+  /// C31: the rows selected in the list (row ids); bulk actions work on them.
+  public internal(set) var selection: Set<String> = []
+  @ObservationIgnored var selectionAnchor: String?
+  /// C31: the "Save rules" sheet after a bulk category; nil when closed.
+  public var ruleSheet: RuleSuggestionSheet?
+  /// C31: the "New category" sheet; nil when closed.
+  public var newCategoryDraft: NewCategoryDraft?
+  /// C31: what the last bulk action did ("Category set on 12 rows"), shown in the bulk bar.
+  public internal(set) var bulkMessage: String?
+  /// C31: the state before the last bulk action (undo of one step).
+  @ObservationIgnored var bulkUndo: (preview: ImportPreview, noRuleRows: Set<String>)?
+  public var canUndoBulk: Bool { bulkUndo != nil }
+  /// C31: the rows a "Transfer to debt account" sheet opened from the bulk bar records.
+  public internal(set) var debtBulkRowIDs: [String] = []
   public private(set) var activity: Activity = .idle
   /// Shown as an alert; the view clears it.
   public var errorMessage: String?
@@ -66,7 +86,7 @@ public final class ImportWizardModel {
   /// The batch waiting for the "Undo import?" confirmation.
   public private(set) var pendingUndo: ImportBatch?
   /// Rows whose category pick is not saved as a rule (`ImportPreview.setSavesRule`).
-  public private(set) var noRuleRows: Set<String> = []
+  public internal(set) var noRuleRows: Set<String> = []
   /// Display values, rebuilt after every change of the preview.
   public private(set) var rowItems: [ImportRowItem] = []
   public private(set) var reviewItems: [ImportReviewItem] = []
@@ -98,14 +118,26 @@ public final class ImportWizardModel {
     await reloadHistory()
   }
 
-  private func reloadReference() async {
+  func reloadReference() async {
     do {
       accounts = try await pipeline.accounts.accounts(includeArchived: true)
       accountGroups = (try? await pipeline.accounts.groups()) ?? []
       categories = try await pipeline.categories.categories(kind: nil, includeArchived: true)
+      // The open preview knows the categories too (names, rules learned from a pick); rebuild
+      // the pickers so a category created meanwhile can be chosen (C31).
+      if var preview {
+        preview.refreshCategories(categories)
+        setPreview(preview)
+      }
     } catch {
       errorMessage = "Couldn't load accounts and categories."
     }
+  }
+
+  /// Reads accounts and categories again: called when a category is created elsewhere and when
+  /// the window becomes active again, so the row pickers offer what exists now (C31).
+  public func refreshReference() async {
+    await reloadReference()
   }
 
   private func reloadHistory() async {
@@ -200,6 +232,11 @@ public final class ImportWizardModel {
   private func resetReviewState() {
     tab = .transactions
     filter = nil
+    clearSelection()
+    ruleSheet = nil
+    newCategoryDraft = nil
+    bulkUndo = nil
+    bulkMessage = nil
     noRuleRows = []
     summary = nil
   }
@@ -229,11 +266,16 @@ public final class ImportWizardModel {
   /// Category of an expense/income row. Picking the file's own new category returns the row
   /// to its default (file or rule).
   public func setCategory(_ choice: ImportCategoryChoice, forRow id: String) {
+    if choice == .createNew {
+      beginNewCategory(forRow: id)
+      return
+    }
     update { preview in
       switch choice {
       case .none: preview.setCategory(nil, forRow: id)
       case .existing(let categoryID): preview.setCategory(categoryID, forRow: id)
       case .new: preview.resetCategory(forRow: id)
+      case .createNew: break
       }
     }
   }
@@ -337,7 +379,7 @@ public final class ImportWizardModel {
 
   /// Opens the debt sheet for a row (a new expense/income or a Needs review row), starting from
   /// its current choice or the person's debt and virtual account in the account's currency.
-  public func openDebt(forRow id: String) async {
+  public func openDebt(forRow id: String, bulkRows: [String] = []) async {
     guard let preview, let row = preview.row(id), row.canRecordDebt,
       let currency = preview.accountCurrency(ofRow: id)
     else { return }
@@ -369,9 +411,13 @@ public final class ImportWizardModel {
       }
     }
     debtDraftRowID = id
+    debtBulkRowIDs = bulkRows
+    let bulk = bulkRows.count > 1
     debtDraft = DebtLinkDraft(
-      title: row.source.payee.isEmpty ? "Transfer to debt account" : "Transfer “\(row.source.payee)” to a debt account",
-      subtitle: "\(format.amount(row.amountMinor, currency.rawValue, inflow: row.isInflow)) on \(preview.name(of: row.account)) · \(format.day(row.day))",
+      title: bulk
+        ? "Transfer \(bulkRows.count.formatted()) payments to a debt account"
+        : row.source.payee.isEmpty ? "Transfer to debt account" : "Transfer “\(row.source.payee)” to a debt account",
+      subtitle: (bulk ? "Amounts shown are of the first row · " : "") + "\(format.amount(row.amountMinor, currency.rawValue, inflow: row.isInflow)) on \(preview.name(of: row.account)) · \(format.day(row.day))",
       inflow: row.isInflow, accountCurrency: currency, accountAmountMinor: row.amountMinor, book: book,
       convertedAmounts: converted, personName: existing?.personName ?? "", account: account,
       newAccountCurrency: existing?.currency,
@@ -381,6 +427,7 @@ public final class ImportWizardModel {
   public func cancelDebt() {
     debtDraft = nil
     debtDraftRowID = nil
+    debtBulkRowIDs = []
   }
 
   /// Saves the sheet: the row becomes a transfer to the person's account on commit (Needs review rows: their
@@ -389,6 +436,12 @@ public final class ImportWizardModel {
     guard let draft = draft ?? debtDraft, let id = debtDraftRowID, let link = draft.link else { return }
     debtDraft = nil
     debtDraftRowID = nil
+    let bulkIDs = debtBulkRowIDs
+    debtBulkRowIDs = []
+    if bulkIDs.count > 1 {
+      applyBulkDebt(link: link, personCurrency: draft.personCurrency, baseRow: id, rows: bulkIDs)
+      return
+    }
     let choice = ImportDebtChoice(
       personName: link.personName, debtID: link.debtID, accountID: link.accountID,
       currency: link.currency ?? draft.personCurrency, amountMinor: link.amountMinor)
@@ -487,17 +540,22 @@ public final class ImportWizardModel {
 
   // MARK: Updating
 
-  private func update(_ change: (inout ImportPreview) -> Void) {
+  func update(keepBulk: Bool = false, _ change: (inout ImportPreview) -> Void) {
     guard var preview else { return }
+    if !keepBulk {
+      bulkUndo = nil
+      bulkMessage = nil
+    }
     change(&preview)
     setPreview(preview)
   }
 
-  private func setPreview(_ preview: ImportPreview?) {
+  func setPreview(_ preview: ImportPreview?) {
     self.preview = preview
     rowItems = preview.map { makeRowItems($0) } ?? []
     reviewItems = preview.map { makeReviewItems($0) } ?? []
     if let filter, let preview, preview.counts[filter] == 0 { self.filter = nil }
+    pruneSelection()
   }
 
   static func message(for error: any Error, fileName: String) -> String {

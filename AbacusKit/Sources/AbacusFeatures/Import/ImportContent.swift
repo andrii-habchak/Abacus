@@ -50,6 +50,8 @@ public enum ImportCategoryChoice: Hashable, Sendable {
   case none
   case existing(AbacusDomain.Category.ID)
   case new(key: String)
+  /// "+ New category…": creates a category and picks it (C31); never a stored value.
+  case createNew
 }
 
 public struct ImportCategoryOption: Identifiable, Hashable, Sendable {
@@ -91,6 +93,14 @@ public struct ImportRowItem: Identifiable, Hashable, Sendable {
   public var debt: String? = nil
   /// The row offers "Debt…" (a new expense/income, or one already recorded as a debt).
   public var canRecordDebt: Bool = false
+  /// The user excluded this row (bulk "Skip"); it offers "Include".
+  public var excludedByUser: Bool = false
+
+  /// An expense/income row that still has no category.
+  public var needsCategory: Bool {
+    if case .picker(_, _, let needs) = category { return needs }
+    return false
+  }
 }
 
 // MARK: - Accounts & categories tab
@@ -328,6 +338,8 @@ extension ImportWizardModel {
       ImportTabItem(tab: .mapping, label: "Accounts & categories"),
     ]
     if preview.source == .saldo { tabs.append(ImportTabItem(tab: .events, label: "Events from tags")) }
+    tabs.append(
+      ImportTabItem(tab: .categoryAssignment, label: "Category assignment (\(preview.uncategorisedCount.formatted()))"))
     tabs.append(ImportTabItem(tab: .review, label: "Needs review (\(preview.counts.needsReview.formatted()))"))
     return tabs
   }
@@ -364,6 +376,7 @@ extension ImportWizardModel {
       isDimmed: row.status == .alreadyImported || row.status == .skipped || (row.status == .possibleDuplicate && row.duplicate?.action == .skip),
       category: .none, duplicateAction: row.duplicate?.action, note: nil, savesRule: nil)
     item.canRecordDebt = row.canRecordDebt && row.review == nil
+    item.excludedByUser = row.excludedByUser
     item.debt = row.debt.map(debtLabel)
     if let debt = row.debt, row.review == nil, row.status != .alreadyImported, row.status != .skipped {
       item.note = ImportNote(
@@ -376,7 +389,7 @@ extension ImportWizardModel {
       item.note = ImportNote(row.linkedDebtLeg != nil ? "Linked to the transfer to the debt" : "Skipped")
       return item
     case .skipped:
-      item.note = ImportNote("Not imported")
+      item.note = ImportNote(row.excludedByUser ? "Skipped by you" : "Not imported")
       return item
     case .settlesPending:
       item.note = ImportNote("Updates the pending payment")
@@ -407,6 +420,7 @@ extension ImportWizardModel {
         options.append(ImportCategoryOption(choice: .new(key: key), label: "\(preview.name(of: CategoryRef.new(key: key))) (new)", isChild: false))
       }
       options += categoryOptions(kind)
+      options.append(ImportCategoryOption(choice: .createNew, label: "+ New category…", isChild: false))
       item.category = .picker(selection: selection, options: options, needsCategory: row.needsCategory)
       switch row.categorySource {
       case .rule(_, let pattern):
@@ -734,7 +748,8 @@ extension ImportWizardModel {
     return ImportReviewItem(
       id: row.id, title: title, date: format.day(row.day), detail: detail, options: options, selected: selected,
       suggested: suggested, pairCandidates: candidates, selectedPair: selectedPair, recordKind: recordKind,
-      categoryOptions: [ImportCategoryOption(choice: .none, label: "No category", isChild: false)] + categoryOptions(recordKind),
+      categoryOptions: [ImportCategoryOption(choice: .none, label: "No category", isChild: false)] + categoryOptions(recordKind)
+        + [ImportCategoryOption(choice: .createNew, label: "+ New category…", isChild: false)],
       selectedCategory: selectedCategory, transferAccounts: transferAccounts, selectedTransferAccount: selectedTransfer,
       debtLabel: row.debt.map(debtLabel))
   }
