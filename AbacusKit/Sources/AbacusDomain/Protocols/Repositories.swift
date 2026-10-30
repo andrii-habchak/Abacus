@@ -62,12 +62,15 @@ public struct TxnQuery: Hashable, Sendable {
   public var includeUncategorised: Bool
   /// Only transactions created by these imports ("Show transactions" after an import).
   public var importBatchIDs: Set<ImportBatch.ID>
+  /// "Uncategorised" also matches transfers (they never have a category). Set while a debt is
+  /// filtered: its rows are transfers, so the Categories menu can offer Uncategorised (C28).
+  public var uncategorisedIncludesTransfers: Bool
 
   public init(
     fromDay: Day? = nil, toDay: Day? = nil, categoryIDs: Set<Category.ID> = [],
     accountIDs: Set<Account.ID> = [], types: Set<TxnType> = [], eventIDs: Set<Event.ID> = [],
     search: String = "", newestFirst: Bool = true, includeUncategorised: Bool = false,
-    importBatchIDs: Set<ImportBatch.ID> = []
+    importBatchIDs: Set<ImportBatch.ID> = [], uncategorisedIncludesTransfers: Bool = false
   ) {
     self.fromDay = fromDay
     self.toDay = toDay
@@ -79,11 +82,124 @@ public struct TxnQuery: Hashable, Sendable {
     self.newestFirst = newestFirst
     self.includeUncategorised = includeUncategorised
     self.importBatchIDs = importBatchIDs
+    self.uncategorisedIncludesTransfers = uncategorisedIncludesTransfers
   }
 
   /// R-LIST-1: the last 30 days, newest first.
   public static func lastThirtyDays(today: Day) -> TxnQuery {
     TxnQuery(fromDay: today.adding(days: -29), toDay: today)
+  }
+}
+
+/// A filter dimension whose menu offers only values that have rows under all the other filters
+/// (R-LIST-2, C28 cascading filters).
+public enum TxnFacetDimension: Hashable, CaseIterable, Sendable {
+  /// Accounts (either side of a transfer); debts are derived from their accounts.
+  case accounts
+  case categories
+  case events
+  case types
+}
+
+extension TxnQuery {
+  /// The query without the filter of `dimension`: what that dimension's menu is computed under.
+  public func dropping(_ dimension: TxnFacetDimension) -> TxnQuery {
+    var copy = self
+    switch dimension {
+    case .accounts: copy.accountIDs = []
+    case .categories:
+      copy.categoryIDs = []
+      copy.includeUncategorised = false
+    case .events: copy.eventIDs = []
+    case .types: copy.types = []
+    }
+    return copy
+  }
+}
+
+/// How many rows of a query have each value of one dimension (`TxnRepository.facets`). Only values
+/// with at least one row appear.
+public struct TxnFacetCounts: Hashable, Sendable {
+  /// Rows touching the account (either side of a transfer).
+  public var accounts: [UUID: Int] = [:]
+  /// Rows whose own category, or one of whose attached records' categories, is this one (exact
+  /// category, parents not summed up).
+  public var categories: [UUID: Int] = [:]
+  /// Expenses and incomes without a category (with `uncategorisedIncludesTransfers`: any type).
+  public var uncategorised = 0
+  public var events: [UUID: Int] = [:]
+  public var types: [TxnType: Int] = [:]
+
+  public init() {}
+}
+
+/// What the footer and the day headers of a filtered list need, for the WHOLE filtered set and
+/// without its rows (R-LIST-4/5, C28 paging): the row count and the amounts as light flows,
+/// grouped by minute, account, type, refund flag and category. The feature layer applies its
+/// totals rule and converts each day at its rate (R-FX-3).
+public struct TxnListSummary: Hashable, Sendable {
+  /// A transaction's main amount.
+  public struct Main: Hashable, Sendable {
+    public var occurredAt: Date
+    public var accountID: UUID
+    public var type: TxnType
+    public var isRefund: Bool
+    public var categoryID: UUID?
+    public var amountMinor: Int64
+
+    public init(occurredAt: Date, accountID: UUID, type: TxnType, isRefund: Bool, categoryID: UUID?, amountMinor: Int64) {
+      self.occurredAt = occurredAt
+      self.accountID = accountID
+      self.type = type
+      self.isRefund = isRefund
+      self.categoryID = categoryID
+      self.amountMinor = amountMinor
+    }
+  }
+
+  /// An attached record's amount, on its transaction's day and account.
+  public struct Line: Hashable, Sendable {
+    public var occurredAt: Date
+    public var accountID: UUID
+    public var kind: CategoryKind
+    public var categoryID: UUID?
+    public var amountMinor: Int64
+
+    public init(occurredAt: Date, accountID: UUID, kind: CategoryKind, categoryID: UUID?, amountMinor: Int64) {
+      self.occurredAt = occurredAt
+      self.accountID = accountID
+      self.kind = kind
+      self.categoryID = categoryID
+      self.amountMinor = amountMinor
+    }
+  }
+
+  /// Transactions in the filtered set.
+  public var count: Int
+  public var mains: [Main]
+  public var lines: [Line]
+
+  public init(count: Int = 0, mains: [Main] = [], lines: [Line] = []) {
+    self.count = count
+    self.mains = mains
+    self.lines = lines
+  }
+
+  /// From fetched rows (fakes, previews, tests).
+  public init(rows: [TxnWithLines]) {
+    count = rows.count
+    mains = rows.map {
+      Main(
+        occurredAt: $0.txn.occurredAt, accountID: $0.txn.accountID, type: $0.txn.type, isRefund: $0.txn.isRefund,
+        categoryID: $0.txn.categoryID, amountMinor: $0.txn.amountMinor)
+    }
+    lines = rows.flatMap { row in
+      row.lines.map {
+        Line(
+          occurredAt: row.txn.occurredAt, accountID: row.txn.accountID, kind: $0.kind, categoryID: $0.categoryID,
+          amountMinor: $0.amountMinor)
+      }
+    }
   }
 }
 
@@ -99,6 +215,13 @@ public struct TxnWithLines: Hashable, Sendable {
 
 public protocol TxnRepository: Sendable {
   func transactions(matching query: TxnQuery) async throws -> [TxnWithLines]
+  /// `limit` rows of the query's order starting at `offset` (the list loads pages, C28).
+  func page(matching query: TxnQuery, offset: Int, limit: Int) async throws -> [TxnWithLines]
+  /// Count and amounts of the whole filtered set, without its rows.
+  func summary(matching query: TxnQuery) async throws -> TxnListSummary
+  /// Per-value row counts of one dimension under the query's OTHER filters (the dimension's own
+  /// filter is dropped), computed with aggregate queries.
+  func facets(matching query: TxnQuery, dimension: TxnFacetDimension) async throws -> TxnFacetCounts
   /// One transaction with its attached records, or nil.
   func transaction(_ id: Txn.ID) async throws -> TxnWithLines?
   /// Replaces the transaction's attached records with `lines`.
@@ -107,6 +230,32 @@ public protocol TxnRepository: Sendable {
 }
 
 extension TxnRepository {
+  /// Fallbacks for simple implementations (fakes); the store answers these in SQL.
+  public func page(matching query: TxnQuery, offset: Int, limit: Int) async throws -> [TxnWithLines] {
+    let all = try await transactions(matching: query)
+    guard offset < all.count else { return [] }
+    return Array(all[offset..<min(all.count, offset + limit)])
+  }
+
+  public func summary(matching query: TxnQuery) async throws -> TxnListSummary {
+    TxnListSummary(rows: try await transactions(matching: query))
+  }
+
+  public func facets(matching query: TxnQuery, dimension: TxnFacetDimension) async throws -> TxnFacetCounts {
+    var counts = TxnFacetCounts()
+    for row in try await transactions(matching: query.dropping(dimension)) {
+      let txn = row.txn
+      counts.accounts[txn.accountID, default: 0] += 1
+      if let to = txn.toAccountID, to != txn.accountID { counts.accounts[to, default: 0] += 1 }
+      let categories = Set(([txn.categoryID] + row.lines.map(\.categoryID)).compactMap { $0 })
+      for id in categories { counts.categories[id, default: 0] += 1 }
+      if txn.categoryID == nil, txn.type != .transfer || query.uncategorisedIncludesTransfers { counts.uncategorised += 1 }
+      if let event = txn.eventID { counts.events[event, default: 0] += 1 }
+      counts.types[txn.type, default: 0] += 1
+    }
+    return counts
+  }
+
   /// Fallback for simple implementations (fakes); stores provide a direct lookup.
   public func transaction(_ id: Txn.ID) async throws -> TxnWithLines? {
     try await transactions(matching: TxnQuery()).first { $0.txn.id == id }

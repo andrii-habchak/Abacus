@@ -2,50 +2,68 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// Date · Categories · Accounts · Type · Event · Import … Clear filters · sort (approved
-/// prototype 2, R-LIST-2/3). The import chip appears only while the list shows one import
-/// (R-IMP-6) and has its own clear button.
+/// Date · Categories · Accounts · Debts · Types · Event (· Import) … Clear filters · sort: ONE row of
+/// dropdown buttons, no chips (C28, approved prototype 2 otherwise, R-LIST-2/3). Every button that
+/// is filtering has the same blue outline and a summary label ("5 accounts", "Debt: Alex"); a
+/// single value is removed by un-ticking it inside its menu. When the window is too narrow the
+/// labels are shortened and the row scrolls sideways; it never wraps into a second line.
+///
+/// Each menu lists only the values that have rows under all the OTHER filters (cascading filters,
+/// `TransactionsViewModel.facetCounts`); a value that is ticked stays in its menu and is marked
+/// when it has no rows left.
 struct TransactionFilterBar: View {
   @Bindable var model: TransactionsViewModel
   @State private var open: Popover?
-
-  enum Popover: Hashable { case date, categories, accounts, debts, event }
   @State private var debtSearch = ""
 
-  /// The chips wrap onto a second line when the window is too narrow; no label is squeezed
-  /// or broken. "Clear filters" and the sort button stay at the trailing edge of the first line.
+  enum Popover: Hashable { case date, categories, accounts, debts, types, event, importBatch }
+
+  /// Below this width the full labels do not fit next to each other.
+  private static let compactBelow: CGFloat = 1_120
+  private static let rowHeight: CGFloat = 28
+
   var body: some View {
-    HStack(alignment: .top, spacing: 8) {
-      TxnFlowLayout(spacing: 8, lineSpacing: 8) {
-        dateChip
-        categoriesChip
-        accountsChip
-        debtsChip
-        typeToggles
-        eventChip
-        importChip
-        debtEntryChips
+    GeometryReader { proxy in
+      let compact = proxy.size.width < Self.compactBelow
+      ScrollView(.horizontal, showsIndicators: false) {
+        row(labels: compact ? model.compactLabels : model.fullLabels)
+          .frame(minWidth: proxy.size.width - 2 * TxnMetrics.horizontalPadding, alignment: .leading)
+          .padding(.horizontal, TxnMetrics.horizontalPadding)
+          .frame(minHeight: proxy.size.height)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      HStack(spacing: 8) {
-        if model.filters.hasActiveFilters {
-          Button("Clear filters") { model.clearFilters() }
-            .buttonStyle(.plain)
-            .foregroundStyle(TxnPalette.link)
-            .font(.system(size: 13))
-            .lineLimit(1)
-            .padding(.horizontal, 6)
-        }
-        sortButton
-      }
-      .fixedSize()
-      .frame(minHeight: 28)
     }
-    .padding(.horizontal, TxnMetrics.horizontalPadding)
-    .padding(.vertical, 10)
+    .frame(height: Self.rowHeight + 20)
   }
 
-  // MARK: Chips
+  private func row(labels: FilterBarLabels) -> some View {
+    HStack(spacing: 8) {
+      chip(.date, active: model.filters.isDateFiltered, label: labels.date, systemImage: "calendar")
+      chip(.categories, active: model.filters.isCategoryFiltered, label: labels.categories)
+      chip(.accounts, active: !model.filters.accountIDs.isEmpty, label: labels.accounts)
+      if model.offersDebtFilter {
+        chip(.debts, active: model.filters.isDebtFiltered, label: labels.debts)
+      }
+      chip(.types, active: model.filters.isTypeFiltered, label: labels.types)
+      chip(.event, active: model.filters.eventID != nil, label: labels.event)
+      if model.filters.importBatch != nil {
+        chip(.importBatch, active: true, label: labels.importFile, systemImage: "square.and.arrow.down")
+      }
+      Spacer(minLength: 12)
+      if model.filters.hasActiveFilters {
+        Button("Clear filters") { model.clearFilters() }
+          .buttonStyle(.plain)
+          .foregroundStyle(TxnPalette.link)
+          .font(.system(size: 13))
+          .lineLimit(1)
+          .fixedSize()
+          .padding(.horizontal, 6)
+      }
+      sortButton(label: labels.sort)
+    }
+    .frame(height: Self.rowHeight)
+  }
+
+  // MARK: Buttons
 
   private func chip(_ popover: Popover, active: Bool, label: String, systemImage: String? = nil) -> some View {
     Button {
@@ -53,9 +71,10 @@ struct TransactionFilterBar: View {
     } label: {
       HStack(spacing: 6) {
         if let systemImage { Image(systemName: systemImage).font(.system(size: 12)) }
-        Text(label).lineLimit(1)
+        Text(label).lineLimit(1).truncationMode(.middle)
         Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
       }
+      .fixedSize()
     }
     .buttonStyle(TxnChipStyle(isActive: active))
     .popover(isPresented: isOpen(popover), arrowEdge: .bottom) { content(for: popover) }
@@ -65,111 +84,15 @@ struct TransactionFilterBar: View {
     Binding(get: { open == popover }, set: { if !$0, open == popover { open = nil } })
   }
 
-  private var dateChip: some View {
-    chip(.date, active: model.filters.isDateFiltered, label: model.dateLabel, systemImage: "calendar")
-  }
-
-  private var categoriesChip: some View {
-    chip(.categories, active: model.filters.isCategoryFiltered, label: model.categoryLabel)
-  }
-
-  private var accountsChip: some View {
-    chip(.accounts, active: !model.filters.accountIDs.isEmpty, label: model.accountLabel)
-  }
-
-  @ViewBuilder
-  private var debtsChip: some View {
-    if model.offersDebtFilter {
-      chip(.debts, active: model.filters.isDebtFiltered, label: model.debtLabel)
-    }
-  }
-
-  /// R-DEBT-22: a removable chip per selected debt (it stands for the accounts it added, C24) and
-  /// one per account ticked on its own while a debt is selected.
-  @ViewBuilder
-  private var debtEntryChips: some View {
-    ForEach(model.selectedDebts) { debt in
-      removableChip(
-        icon: "person.2", title: model.debtChipLabel(debt), help: "Remove debt \(debt.name) and the accounts it added",
-        accessibility: "Remove debt filter \(debt.name)"
-      ) { model.toggleDebt(debt.id) }
-    }
-    ForEach(model.independentAccountChips) { account in
-      removableChip(
-        icon: "building.columns", title: model.accountChipLabel(account),
-        help: "Remove \(model.accountChipLabel(account)) from the accounts",
-        accessibility: "Remove account \(model.accountChipLabel(account))"
-      ) { model.removeAccountEntry(account.id) }
-    }
-  }
-
-  private func removableChip(
-    icon: String, title: String, help: String, accessibility: String, action: @escaping () -> Void
-  ) -> some View {
-    HStack(spacing: 6) {
-      Image(systemName: icon).font(.system(size: 12))
-      Text(title).lineLimit(1).truncationMode(.middle)
-      Button(action: action) { Image(systemName: "xmark.circle.fill").font(.system(size: 12)) }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(accessibility)
-    }
-    .modifier(TxnChipLook(isActive: true))
-    .frame(maxWidth: 240)
-    .accessibilityElement(children: .contain)
-  }
-
-  private var eventChip: some View {
-    chip(.event, active: model.filters.eventID != nil, label: model.eventLabel)
-  }
-
-  /// "Import: <file> · <date>" with an × that removes only this filter.
-  @ViewBuilder
-  private var importChip: some View {
-    if let label = model.importLabel {
-      HStack(spacing: 6) {
-        Image(systemName: "square.and.arrow.down").font(.system(size: 12))
-        Text(label).lineLimit(1).truncationMode(.middle)
-        Button {
-          model.clearImportFilter()
-        } label: {
-          Image(systemName: "xmark.circle.fill").font(.system(size: 12))
-        }
-        .buttonStyle(.plain)
-        .help("Show all transactions, not only this import")
-        .accessibilityLabel("Remove import filter")
-      }
-      .modifier(TxnChipLook(isActive: true))
-      .frame(maxWidth: 320)
-      .accessibilityElement(children: .contain)
-    }
-  }
-
-  private var typeToggles: some View {
-    HStack(spacing: 2) {
-      ForEach([(TxnType.expense, "Expense"), (.income, "Income"), (.transfer, "Transfer")], id: \.0) { type, title in
-        let isOn = model.filters.types.contains(type)
-        Button(title) { model.filters.toggleType(type) }
-          .buttonStyle(TxnSegmentStyle(isOn: isOn))
-          .lineLimit(1)
-          .accessibilityAddTraits(isOn ? .isSelected : [])
-      }
-    }
-    .padding(2)
-    .background(RoundedRectangle(cornerRadius: 7).fill(TxnPalette.segmentTrack))
-    .fixedSize()
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel("Type")
-  }
-
-  private var sortButton: some View {
+  private func sortButton(label: String) -> some View {
     Button {
       model.filters.newestFirst.toggle()
     } label: {
       HStack(spacing: 6) {
         Image(systemName: "arrow.up.arrow.down").font(.system(size: 11))
-        Text(model.filters.newestFirst ? "Newest first" : "Oldest first")
+        Text(label)
       }
+      .fixedSize()
     }
     .buttonStyle(TxnChipStyle(isActive: false))
     .accessibilityLabel(
@@ -186,8 +109,27 @@ struct TransactionFilterBar: View {
     case .categories: categoriesPopover
     case .accounts: accountsPopover
     case .debts: debtsPopover
+    case .types: typesPopover
     case .event: eventPopover
+    case .importBatch: importPopover
     }
+  }
+
+  /// "12" in the menu line, or an orange "no rows" when the ticked value has none left.
+  @ViewBuilder
+  private func countLabel(_ count: Int?, impossible: Bool) -> some View {
+    if impossible {
+      Text("no rows")
+        .font(.system(size: 11))
+        .foregroundStyle(.orange)
+        .help("No transaction has this value under the other filters")
+    } else if let count {
+      Text("\(count)").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+    }
+  }
+
+  private func emptyNote(_ text: String) -> some View {
+    Text(text).foregroundStyle(.secondary).padding(.vertical, 4)
   }
 
   private var datePopover: some View {
@@ -199,6 +141,11 @@ struct TransactionFilterBar: View {
         }
         .buttonStyle(TxnMenuItemStyle(isChosen: model.filters.dateRange == .preset(preset)))
       }
+      Button("All dates") {
+        model.filters.dateRange = TransactionFilters.allDates
+        open = nil
+      }
+      .buttonStyle(TxnMenuItemStyle(isChosen: model.filters.dateRange == TransactionFilters.allDates))
       Divider().padding(.vertical, 6)
       Text("Custom range")
         .font(.system(size: 11, weight: .semibold))
@@ -230,7 +177,8 @@ struct TransactionFilterBar: View {
   }
 
   private var categoriesPopover: some View {
-    ScrollView {
+    let entries = model.categoryMenu
+    return ScrollView {
       VStack(alignment: .leading, spacing: 2) {
         if model.showsUncategorisedOption {
           Toggle(
@@ -241,25 +189,32 @@ struct TransactionFilterBar: View {
             HStack(spacing: 8) {
               Circle().fill(TxnPalette.tile(model.reference.uncategorisedColor)).frame(width: 8, height: 8)
               Text(TransactionsViewModel.uncategorisedTitle).fontWeight(.medium)
+              Spacer(minLength: 8)
+              countLabel(model.uncategorisedCount, impossible: model.isUncategorisedImpossible)
             }
           }
           .toggleStyle(.checkbox)
           .padding(.vertical, 3)
-          Divider().padding(.vertical, 4)
+          if !entries.isEmpty { Divider().padding(.vertical, 4) }
         }
-        ForEach(model.reference.categories.options) { option in
+        if entries.isEmpty && !model.showsUncategorisedOption {
+          emptyNote("No categories under the other filters.")
+        }
+        ForEach(entries) { entry in
           Toggle(
             isOn: Binding(
-              get: { model.isCategoryChecked(option.id) },
-              set: { _ in model.toggleCategory(option.id) })
+              get: { model.isCategoryChecked(entry.id) },
+              set: { _ in model.toggleCategory(entry.id) })
           ) {
             HStack(spacing: 8) {
-              Circle().fill(TxnPalette.tile(option.colorHex)).frame(width: 8, height: 8)
-              Text(option.label).fontWeight(option.isChild ? .regular : .medium)
+              Circle().fill(TxnPalette.tile(entry.option.colorHex)).frame(width: 8, height: 8)
+              Text(entry.option.label).fontWeight(entry.option.isChild ? .regular : .medium)
+              Spacer(minLength: 8)
+              countLabel(entry.count, impossible: entry.isImpossible)
             }
           }
           .toggleStyle(.checkbox)
-          .padding(.leading, option.isChild ? 20 : 0)
+          .padding(.leading, entry.option.isChild ? 20 : 0)
           .padding(.vertical, 3)
         }
       }
@@ -267,30 +222,37 @@ struct TransactionFilterBar: View {
       .padding(10)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .frame(width: 250)
+    .frame(width: 270)
     .frame(maxHeight: 360)
   }
 
-  /// Accounts A–Z under their group names (R-MGMT-8).
+  /// Accounts A–Z under their group names (R-MGMT-8); only those with rows under the other
+  /// filters, and, while a debt is selected, only that debt's accounts (C24).
   private var accountsPopover: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      ForEach(model.accountSections) { section in
-        if let title = section.title {
-          Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.top, section.id == model.accountSections.first?.id ? 0 : 6)
-        } else if section.id != model.accountSections.first?.id {
-          Divider().padding(.vertical, 4)
-        }
-        ForEach(section.accounts) { account in
-          accountToggle(account, indented: section.title != nil)
+    let sections = model.accountSections
+    return ScrollView {
+      VStack(alignment: .leading, spacing: 2) {
+        if sections.isEmpty { emptyNote("No accounts under the other filters.") }
+        ForEach(sections) { section in
+          if let title = section.title {
+            Text(title)
+              .font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(.secondary)
+              .padding(.top, section.id == sections.first?.id ? 0 : 6)
+          } else if section.id != sections.first?.id {
+            Divider().padding(.vertical, 4)
+          }
+          ForEach(section.accounts) { account in
+            accountToggle(account, indented: section.title != nil)
+          }
         }
       }
+      .font(.system(size: 13))
+      .padding(10)
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .font(.system(size: 13))
-    .padding(10)
-    .frame(width: 240)
+    .frame(width: 270)
+    .frame(maxHeight: 400)
   }
 
   private func accountToggle(_ account: Account, indented: Bool) -> some View {
@@ -299,9 +261,10 @@ struct TransactionFilterBar: View {
         get: { model.filters.accountIDs.contains(account.id) },
         set: { _ in model.filters.toggleAccount(account.id) })
     ) {
-      HStack {
-        Text(account.name)
-        Spacer()
+      HStack(spacing: 6) {
+        Text(account.name).lineLimit(1)
+        Spacer(minLength: 8)
+        countLabel(model.accountCount(account.id), impossible: model.isAccountImpossible(account.id))
         Text(account.currency.rawValue).font(.system(size: 11)).foregroundStyle(.secondary)
       }
     }
@@ -310,16 +273,16 @@ struct TransactionFilterBar: View {
     .padding(.vertical, 3)
   }
 
-  /// Debts A–Z with a search field; ticking a debt adds its accounts to the account entries.
+  /// Debts A–Z with a search field; ticking a debt selects its accounts. Only debts with rows
+  /// under the other filters (and the ticked ones) are listed.
   private var debtsPopover: some View {
     VStack(alignment: .leading, spacing: 4) {
       TextField("Search debts", text: $debtSearch)
         .textFieldStyle(.roundedBorder)
-      let options = model.debtOptions(matching: debtSearch)
+      let options = model.debtMenu(matching: debtSearch)
       if options.isEmpty {
-        Text(model.debtOptions.isEmpty ? "No debts yet." : "No debt matches.")
-          .foregroundStyle(.secondary)
-          .padding(.vertical, 4)
+        emptyNote(
+          model.debtOptions.isEmpty ? "No debts yet." : (debtSearch.isEmpty ? "No debts under the other filters." : "No debt matches."))
       }
       ScrollView {
         VStack(alignment: .leading, spacing: 2) {
@@ -329,9 +292,13 @@ struct TransactionFilterBar: View {
             ) {
               HStack {
                 Text(debt.name)
-                Spacer()
-                Text(debt.accountIDs.count == 1 ? "1 account" : "\(debt.accountIDs.count) accounts")
-                  .font(.system(size: 11)).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                if model.isDebtImpossible(debt) {
+                  countLabel(nil, impossible: true)
+                } else {
+                  Text(debt.accountIDs.count == 1 ? "1 account" : "\(debt.accountIDs.count) accounts")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
               }
             }
             .toggleStyle(.checkbox)
@@ -343,8 +310,31 @@ struct TransactionFilterBar: View {
     }
     .font(.system(size: 13))
     .padding(10)
-    .frame(width: 260)
+    .frame(width: 270)
     .task { await model.loadDebtOptions() }
+  }
+
+  private var typesPopover: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      ForEach(model.typeMenu, id: \.type) { entry in
+        Toggle(
+          isOn: Binding(
+            get: { model.filters.types.contains(entry.type) },
+            set: { _ in model.filters.toggleType(entry.type) })
+        ) {
+          HStack {
+            Text(entry.title)
+            Spacer(minLength: 8)
+            countLabel(entry.count, impossible: entry.isImpossible)
+          }
+        }
+        .toggleStyle(.checkbox)
+        .padding(.vertical, 3)
+      }
+    }
+    .font(.system(size: 13))
+    .padding(10)
+    .frame(width: 200)
   }
 
   private var eventPopover: some View {
@@ -355,14 +345,35 @@ struct TransactionFilterBar: View {
       }
       .buttonStyle(TxnMenuItemStyle(isChosen: model.filters.eventID == nil))
       ForEach(model.eventOptions) { event in
-        Button(event.name) {
+        let impossible = model.filters.eventID == event.id && model.isEventImpossible
+        Button {
           model.filters.eventID = event.id
           open = nil
+        } label: {
+          HStack {
+            Text(event.name)
+            Spacer(minLength: 8)
+            countLabel(model.eventCount(event.id), impossible: impossible)
+          }
         }
         .buttonStyle(TxnMenuItemStyle(isChosen: model.filters.eventID == event.id))
       }
     }
     .padding(6)
-    .frame(width: 200)
+    .frame(width: 230)
+  }
+
+  /// "Import: <file> · <date>" (R-IMP-6): the menu removes only this filter.
+  private var importPopover: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(model.importLabel ?? "Import").font(.system(size: 12)).foregroundStyle(.secondary)
+      Button("Show all transactions, not only this import") {
+        model.clearImportFilter()
+        open = nil
+      }
+      .buttonStyle(TxnMenuItemStyle(isChosen: false))
+    }
+    .padding(10)
+    .frame(width: 300)
   }
 }

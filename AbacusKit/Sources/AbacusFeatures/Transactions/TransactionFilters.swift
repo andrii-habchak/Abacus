@@ -52,7 +52,13 @@ public struct TransactionFilters: Hashable, Sendable {
   public static let allDates = DateRange.custom(
     from: Day(year: 1900, month: 1, day: 1), to: Day(year: 9999, month: 12, day: 31))
 
-  public var dateRange: DateRange
+  /// Changing the range by hand forgets `dateRangeBeforeDebt`.
+  public var dateRange: DateRange {
+    didSet { if dateRange != oldValue { dateRangeBeforeDebt = nil } }
+  }
+  /// The range the user had before "Show transactions" of a debt switched to all dates (C28):
+  /// removing the debt filter brings it back, unless the range was changed by hand meanwhile.
+  public var dateRangeBeforeDebt: DateRange?
   /// Selected categories; a selected parent covers its children (R-LIST-2).
   public var categoryIDs: Set<AbacusDomain.Category.ID>
   /// "Uncategorised" ticked: expenses and incomes without a category, in addition to
@@ -149,6 +155,7 @@ public struct TransactionFilters: Hashable, Sendable {
   public var hasActiveFilters: Bool {
     var other = self
     other.newestFirst = Self.default.newestFirst
+    other.dateRangeBeforeDebt = nil
     other.search = other.search.trimmingCharacters(in: .whitespacesAndNewlines)
     return other != Self.default
   }
@@ -198,12 +205,6 @@ public struct TransactionFilters: Hashable, Sendable {
     debtLinkedIDs.values.reduce(into: Set<Account.ID>()) { $0.formUnion($1) }
   }
 
-  /// Account entries the user ticked on their own while a debt filter is active (they get their
-  /// own chips; the debt's own entries are represented by the debt chip).
-  public var independentAccountIDs: Set<Account.ID> {
-    isDebtFiltered ? accountIDs.subtracting(debtAddedAccountIDs) : []
-  }
-
   /// R-DEBT-22: selects the debt and expands it to its accounts. Accounts the user had already
   /// selected and that belong to the debt (or to another selected debt) stay theirs; any other
   /// selected account is dropped, because the Accounts menu then lists only the debts' accounts
@@ -224,7 +225,14 @@ public struct TransactionFilters: Hashable, Sendable {
     debtAccountIDs[id] = nil
     debtLinkedIDs[id] = nil
     // Other debts stay: the selection is limited to their accounts again.
-    if isDebtFiltered { accountIDs.formIntersection(debtLinkedAccountIDs) }
+    if isDebtFiltered {
+      accountIDs.formIntersection(debtLinkedAccountIDs)
+    } else if let before = dateRangeBeforeDebt {
+      // C28: "Show transactions" of a debt had switched to all dates; the last debt going brings
+      // the user's range back (a range chosen by hand since has cleared `before`).
+      dateRange = before
+      dateRangeBeforeDebt = nil
+    }
   }
 
   /// Account entries that came from a debt and are still selected.
@@ -243,12 +251,28 @@ public struct TransactionFilters: Hashable, Sendable {
     guard !types.isEmpty else { return nil }
     // A debt with every account entry un-ticked (or no linked account) matches nothing, not all.
     if !debtIDs.isEmpty && accountIDs.isEmpty { return nil }
+    return rawQuery(today: today, calendar: calendar)
+  }
+
+  /// Whether the filters match nothing however `dimension` is set: no type on (and the types are
+  /// not the dimension), or a debt without any account entry (and accounts are not the dimension).
+  /// `query` is nil then; the facets of the other menus are all zero.
+  public func matchesNothing(whenDropping dimension: TxnFacetDimension) -> Bool {
+    (types.isEmpty && dimension != .types) || (isDebtFiltered && accountIDs.isEmpty && dimension != .accounts)
+  }
+
+  /// `query(today:)` even when it matches nothing (no type on, a debt without accounts): the
+  /// facets of a menu are computed under the other filters while one dimension is dropped, and
+  /// that dimension may be the one that emptied the result (C28).
+  public func rawQuery(today: Day, calendar: Calendar = .current) -> TxnQuery {
     let days = days(today: today, calendar: calendar)
     return TxnQuery(
       fromDay: days.lowerBound, toDay: days.upperBound, categoryIDs: categoryIDs,
       accountIDs: accountIDs, types: types == Set(TxnType.allCases) ? [] : types,
       eventIDs: eventID.map { [$0] } ?? [],
       search: search.trimmingCharacters(in: .whitespacesAndNewlines), newestFirst: newestFirst,
-      includeUncategorised: includeUncategorised, importBatchIDs: importBatch.map { [$0.id] } ?? [])
+      includeUncategorised: includeUncategorised, importBatchIDs: importBatch.map { [$0.id] } ?? [],
+      // A debt's rows are transfers, which never have a category: "Uncategorised" covers them.
+      uncategorisedIncludesTransfers: isDebtFiltered)
   }
 }

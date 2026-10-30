@@ -140,12 +140,12 @@ struct UncategorisedImportViewModelTests {
   func uncategorisedOption() async {
     let plain = TransactionsViewModel.preview()
     await plain.load()
-    #expect(!plain.hasUncategorised)
+    #expect(plain.uncategorisedCount == 0)
     #expect(!plain.showsUncategorisedOption)
 
     let model = C1Sample.model()
     await model.load()
-    #expect(model.hasUncategorised)
+    #expect((model.uncategorisedCount ?? 0) > 0)
     #expect(model.showsUncategorisedOption)
     model.toggleUncategorised()
     await model.reload()

@@ -45,7 +45,8 @@ public struct TransactionQueryMatcher: Sendable {
         return false
       }
       if categoryIDs != nil || query.includeUncategorised {
-        let uncategorised = query.includeUncategorised && txn.type != .transfer && txn.categoryID == nil
+        let uncategorised =
+          query.includeUncategorised && (txn.type != .transfer || query.uncategorisedIncludesTransfers) && txn.categoryID == nil
         let ids = [txn.categoryID] + row.lines.map(\.categoryID)
         let inCategories = categoryIDs.map { set in ids.contains { $0.map(set.contains) ?? false } } ?? false
         if !uncategorised && !inCategories { return false }

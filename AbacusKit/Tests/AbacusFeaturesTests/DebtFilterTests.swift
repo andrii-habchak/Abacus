@@ -41,7 +41,6 @@ struct DebtFilterTests {
     #expect(model.filters.debtIDs == [DebtSample.alex.id])
     #expect(model.filters.accountIDs == alexAccounts)
     #expect(model.filters.debtAddedAccountIDs == alexAccounts)
-    #expect(model.independentAccountChips.isEmpty)  // the debt chip stands for them (C24)
     #expect(model.debtLabel == "Debt: Alex Example")
     #expect(model.accountLabel == "2 accounts")
 
@@ -58,7 +57,7 @@ struct DebtFilterTests {
     await model.load()
     await model.loadDebtOptions()
     model.toggleDebt(DebtSample.alex.id)
-    model.removeAccountEntry(DebtSample.alexPLN.id)
+    model.filters.toggleAccount(DebtSample.alexPLN.id)
     #expect(model.filters.debtIDs == [DebtSample.alex.id])
     #expect(model.filters.accountIDs == [DebtSample.alexEUR.id])
     #expect(model.filters.debtAddedAccountIDs == [DebtSample.alexEUR.id])
@@ -76,7 +75,7 @@ struct DebtFilterTests {
     await model.load()
     await model.loadDebtOptions()
     model.toggleDebt(DebtSample.alex.id)
-    for id in alexAccounts { model.removeAccountEntry(id) }
+    for id in alexAccounts { model.filters.toggleAccount(id) }
     #expect(model.filters.isDebtFiltered)
     #expect(model.query == nil)
     await model.reload()
@@ -95,11 +94,9 @@ struct DebtFilterTests {
     // C24: the unrelated account is dropped when the debt is applied; the linked one stays.
     #expect(model.filters.accountIDs == alexAccounts)
     #expect(model.filters.debtAddedAccountIDs == [DebtSample.alexPLN.id])
-    #expect(model.independentAccountChips.map(\.id) == [DebtSample.alexEUR.id])
     model.toggleDebt(DebtSample.alex.id)
     #expect(model.filters.debtIDs.isEmpty)
     #expect(model.filters.accountIDs == [DebtSample.alexEUR.id])
-    #expect(model.independentAccountChips.isEmpty)
     #expect(model.debtLabel == "All debts")
   }
 
@@ -164,7 +161,9 @@ struct DebtFilterTests {
   func filtersForDebt() async throws {
     let model = try model()
     let filters = try #require(await model.filters(showingDebt: DebtSample.maria.id))
-    #expect(filters == .debt(DebtSample.maria.id, accountIDs: mariaAccounts))
+    var expected = TransactionFilters.debt(DebtSample.maria.id, accountIDs: mariaAccounts)
+    expected.dateRangeBeforeDebt = TransactionFilters.default.dateRange  // C28: remembered
+    #expect(filters == expected)
     #expect(filters.accountIDs == mariaAccounts)
     #expect(filters.dateRange == TransactionFilters.allDates)
     #expect(await model.filters(showingDebt: UUID()) == nil)
@@ -251,7 +250,7 @@ struct DebtFilterTests {
       ("clear filters", { $0.clearFilters() }),
       ("filters replaced by the default", { $0.filters = .default }),
       ("each account entry, then the debt", { model in
-        for account in Self.kittyAccounts { model.removeAccountEntry(account.id) }
+        for account in Self.kittyAccounts { model.filters.toggleAccount(account.id) }
         model.toggleDebt(id)
       }),
     ]
@@ -266,7 +265,7 @@ struct DebtFilterTests {
       #expect(model.filters.accountIDs.isEmpty, "\(name)")
       #expect(model.filters.debtLinkedIDs.isEmpty, "\(name)")
       #expect(model.debtLabel == "All debts", "\(name)")
-      #expect(model.selectedDebts.isEmpty && model.independentAccountChips.isEmpty, "\(name)")
+      
       #expect(model.loadedQuery == model.query, "\(name)")
       #expect(model.errorMessage == nil, "\(name)")
     }
@@ -285,39 +284,32 @@ struct DebtFilterTests {
     #expect(model.loadedQuery == model.query)
     #expect(model.loadedQuery != before)
     // A debt without any ticked account matches nothing: the identity still moves on.
-    for account in Self.kittyAccounts { model.removeAccountEntry(account.id) }
+    for account in Self.kittyAccounts { model.filters.toggleAccount(account.id) }
     await model.reload()
     #expect(model.rows.isEmpty)
     #expect(model.loadedQuery == nil)
   }
 
-  @Test("C24: a debt with three same-named accounts has one chip, labelled with the count")
-  func oneChipPerDebt() async throws {
+  @Test("R-DEBT-22 / C28: a debt with three same-named accounts reads one label; un-ticking an account keeps the debt")
+  func debtLabelAndAccountCount() async throws {
     let model = try await kittyModel()
     model.toggleDebt(Self.kittyDebt.id)
-    #expect(model.selectedDebts.map(\.id) == [Self.kittyDebt.id])
-    #expect(model.independentAccountChips.isEmpty)
     #expect(model.filters.accountIDs == Set(Self.kittyAccounts.map(\.id)))
-    let debt = try #require(model.selectedDebts.first)
-    #expect(model.debtChipLabel(debt) == "Kitty Same · 3 accounts")
     #expect(model.debtLabel == "Debt: Kitty Same")
+    #expect(model.accountLabel == "3 accounts")
 
-    // Un-ticking one account in the Accounts menu keeps the debt and its single chip.
+    // Un-ticking one account in the Accounts menu keeps the debt.
     let eur = try #require(Self.kittyAccounts.first { $0.currency == .EUR })
     model.filters.toggleAccount(eur.id)
     #expect(model.filters.isDebtFiltered)
-    #expect(model.independentAccountChips.isEmpty)
-    #expect(model.debtChipLabel(debt) == "Kitty Same · 2 accounts")
+    #expect(model.accountLabel == "2 accounts")
     await model.reload()
     #expect(model.rows.count == 2)
 
-    // Ticked again by the user: an independent selection with its own chip, currency in the label.
+    // Ticked again: back to 3 accounts (the bar has only buttons, no chips).
     model.filters.toggleAccount(eur.id)
-    #expect(model.independentAccountChips.map(\.id) == [eur.id])
-    #expect(model.accountChipLabel(eur) == "Kitty Same · EUR")
-    #expect(model.debtChipLabel(debt) == "Kitty Same · 3 accounts")
-    model.removeAccountEntry(eur.id)
-    #expect(model.independentAccountChips.isEmpty)
+    #expect(model.accountLabel == "3 accounts")
+    #expect(model.debtLabel == "Debt: Kitty Same")
   }
 
   @Test("C24: while a debt is selected the Accounts menu lists only its accounts; removing it restores the list")
@@ -356,9 +348,7 @@ struct DebtFilterTests {
     let eur = try #require(Self.kittyAccounts.first { $0.currency == .EUR })
     model.filters.toggleAccount(eur.id)  // un-tick
     model.filters.toggleAccount(eur.id)  // tick again: independent now
-    #expect(model.filters.independentAccountIDs == [eur.id])
     model.toggleDebt(Self.kittyDebt.id)
     #expect(model.filters.accountIDs == mariaAccounts)
-    #expect(model.filters.independentAccountIDs.isEmpty)
   }
 }

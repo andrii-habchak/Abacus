@@ -90,6 +90,7 @@ struct TransactionsView: View {
               TransactionRowView(row: row)
                 .tag(row.id)
                 .listRowInsets(rowInsets(vertical: 4))
+                .onAppear { model.rowAppeared(row.id) }
               ForEach(row.lines) { line in
                 TransactionLineView(line: line)
                   .listRowInsets(rowInsets(vertical: 2))

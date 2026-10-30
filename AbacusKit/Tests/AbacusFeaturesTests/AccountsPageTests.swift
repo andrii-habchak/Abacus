@@ -261,7 +261,9 @@ struct AccountsPageTests {
 
     let transactions = TransactionsViewModel.preview()
     await transactions.load()
-    #expect(transactions.accountOptions.map(\.name) == expected)
+    // C28: only accounts with rows under the other filters (last 30 days) are offered, in the same order.
+    let offered = Set(transactions.accountOptions.map(\.name))
+    #expect(transactions.accountOptions.map(\.name) == expected.filter(offered.contains))
     #expect(transactions.accountSections.first?.title == "Monobank")
 
     let rules = RulesModel(dependencies: ManageFixture.dependencies(store))

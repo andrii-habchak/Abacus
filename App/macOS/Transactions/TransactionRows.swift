@@ -37,6 +37,7 @@ struct TransactionDayHeader: View {
     }
     .padding(.top, 8)
     .padding(.horizontal, TxnMetrics.horizontalPadding - 8)
+    .frame(height: TxnMetrics.headerHeight, alignment: .bottom)
   }
 }
 
@@ -62,7 +63,7 @@ struct TransactionRowView: View {
       }
     }
     .font(.system(size: 13))
-    .frame(minHeight: 40)
+    .frame(height: TxnMetrics.rowHeight)
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
   }
@@ -138,6 +139,7 @@ struct TransactionLineView: View {
     }
     .font(.system(size: 12))
     .foregroundStyle(.primary.opacity(0.8))
+    .frame(height: TxnMetrics.lineHeight)
     .accessibilityElement(children: .combine)
   }
 }

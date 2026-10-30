@@ -16,6 +16,12 @@ public enum LargeSampleData {
     public var debts = 10
     public var days = 900
 
+    /// 5,000 transactions, or `-AbacusLargeSampleTransactions <n>` (scratch databases, C28 timings).
+    public static var launch: Size {
+      let count = UserDefaults.standard.integer(forKey: "AbacusLargeSampleTransactions")
+      return Size(transactions: count > 0 ? count : 5_000)
+    }
+
     public init(transactions: Int = 5_000, accounts: Int = 50, groups: Int = 8, debts: Int = 10, days: Int = 900) {
       self.transactions = transactions
       self.accounts = accounts
@@ -27,7 +33,7 @@ public enum LargeSampleData {
 
   /// Seeds the set into an empty database; false (nothing changed) when it already has accounts.
   public static func loadIfEmpty(
-    into database: any DatabaseWriter, size: Size = Size(), today: Day = Day(Date()), calendar: Calendar = .current
+    into database: any DatabaseWriter, size: Size = .launch, today: Day = Day(Date()), calendar: Calendar = .current
   ) async throws -> Bool {
     try await database.write { db in
       guard try Account.fetchCount(db) == 0 else { return false }

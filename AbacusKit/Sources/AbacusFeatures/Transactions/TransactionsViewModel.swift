@@ -21,11 +21,25 @@ public final class TransactionsViewModel {
 
   /// Names and colours the rows show; a change rebuilds the rows at once (R-MGMT-7).
   public private(set) var reference = TransactionsReference() { didSet { if oldValue != reference { rebuild() } } }
-  /// Whether any expense or income has no category; the categories menu then offers
-  /// "Uncategorised" (R-LIST-2, R-HOME-3). Checked on `load()`.
-  public private(set) var hasUncategorised = false
+  /// The rows loaded so far: the first page(s) of the filtered set, newest (or oldest) first.
   public private(set) var rows: [TxnWithLines] = []
   public private(set) var content: TransactionListContent
+  /// Rows per page (C28); the next one loads when the list scrolls near the end.
+  public let pageSize: Int
+  /// Count and amounts of the WHOLE filtered set (not of `rows`): the footer, "N transactions" and
+  /// every day's net come from it.
+  public private(set) var summary = TxnListSummary()
+  /// More rows of the filtered set than `rows` holds.
+  public var hasMoreRows: Bool { !exhausted && rows.count < summary.count }
+  public private(set) var isLoadingMore = false
+  /// The row whose appearance loads the next page (about 100 rows before the end).
+  public private(set) var loadMoreTriggerID: Txn.ID?
+  @ObservationIgnored private var exhausted = false
+  @ObservationIgnored private var builder: TransactionListContent.Builder?
+  /// Per dimension, how many rows each value has under the other filters (cascading filters,
+  /// C28); nil until computed.
+  public private(set) var facetCounts: [TxnFacetDimension: TxnFacetCounts] = [:]
+  @ObservationIgnored private var facetGeneration = 0
   public private(set) var isLoading = false
   public private(set) var errorMessage: String?
 
@@ -59,8 +73,9 @@ public final class TransactionsViewModel {
     converter: any CurrencyConverter, displayCurrency: Currency = .UAH,
     refundsReduceSpending: Bool = false, filters: TransactionFilters = .default,
     calendar: Calendar = .current, today: @escaping @Sendable () -> Day = { Day(Date()) },
-    settings: (any SettingsRepository)? = nil, debts: (any DebtRepository)? = nil
+    settings: (any SettingsRepository)? = nil, debts: (any DebtRepository)? = nil, pageSize: Int = 500
   ) {
+    self.pageSize = max(1, pageSize)
     self.settings = settings
     self.debts = debts
     self.transactions = transactions
@@ -118,9 +133,6 @@ public final class TransactionsViewModel {
     } catch {
       errorMessage = "Couldn't load accounts and categories."
     }
-    hasUncategorised =
-      (try? await transactions.transactions(matching: TxnQuery(includeUncategorised: true)).isEmpty == false)
-      ?? false
     if !filters.debtIDs.isEmpty { await loadDebtOptions() }
     await loadDebtAccounts()
     await reload()
@@ -131,52 +143,158 @@ public final class TransactionsViewModel {
     debtAccountIDs = (try? await debts.book().linkedAccountIDs) ?? []
   }
 
-  /// Fetches the rows for the current filters. Results of an older call that finishes later
-  /// are dropped.
+  // MARK: Paged rows (C28)
+
+  /// Fetches the first page (or, for the same query, as many rows as are loaded, so a refresh
+  /// after an edit keeps the scroll position and the selection) and the aggregate of the whole
+  /// filtered set, then the facets of the filter menus. Results of an older call that finishes
+  /// later are dropped.
   public func reload() async {
     generation += 1
     let current = generation
     guard let query = query else {
-      apply([], generation: current, query: nil)
+      apply(page: [], summary: TxnListSummary(), generation: current, query: nil)
+      await loadFacets()
       return
     }
     isLoading = true
+    let limit = query == loadedQuery ? max(rows.count, pageSize) : pageSize
     do {
-      let fetched = try await transactions.transactions(matching: query)
-      apply(fetched, generation: current, query: query)
+      async let page = transactions.page(matching: query, offset: 0, limit: limit)
+      async let aggregate = transactions.summary(matching: query)
+      let (fetched, sum) = try await (page, aggregate)
+      apply(page: fetched, summary: sum, generation: current, query: query, limit: limit)
     } catch {
       guard current == generation else { return }
       isLoading = false
       errorMessage = "Couldn't load transactions."
     }
+    await loadFacets()
   }
 
   /// The query the rows on screen were fetched with. The list view uses it as its identity: a
   /// different query rebuilds the table in one go instead of diffing thousands of inserted rows
   /// (AppKit sizes every inserted row on the main thread: removing a debt filter that showed
-  /// every date hung the app, docs/status/C24.md).
+  /// every date hung the app, docs/status/C24.md). Loading the next page keeps it.
   public private(set) var loadedQuery: TxnQuery?
 
-  private func apply(_ fetched: [TxnWithLines], generation current: Int, query: TxnQuery?) {
+  private func apply(
+    page fetched: [TxnWithLines], summary sum: TxnListSummary, generation current: Int, query: TxnQuery?,
+    limit: Int? = nil
+  ) {
     guard current == generation else { return }
     loadedQuery = query
     rows = fetched
+    summary = sum
+    exhausted = limit.map { fetched.count < $0 } ?? true
     isLoading = false
     errorMessage = nil
     if let selection, !fetched.contains(where: { $0.txn.id == selection }) { self.selection = nil }
     rebuild()
   }
 
+  /// Loads the next page and appends it: new rows join the last day section when they share its
+  /// day, and the footer, day nets and counts do not change (they cover the whole set).
+  public func loadMore() async {
+    guard hasMoreRows, !isLoadingMore, !isLoading, let query = loadedQuery, query == self.query,
+      let builder
+    else { return }
+    isLoadingMore = true
+    let current = generation
+    let offset = rows.count
+    let fetched = try? await transactions.page(matching: query, offset: offset, limit: pageSize)
+    isLoadingMore = false
+    guard current == generation, let fetched, rows.count == offset else { return }
+    if fetched.count < pageSize { exhausted = true }
+    guard !fetched.isEmpty else { return }
+    rows += fetched
+    builder.append(fetched, to: &content)
+    updateLoadMoreTrigger()
+  }
+
+  /// The list calls this when a row appears: the trigger row loads the next page.
+  public func rowAppeared(_ id: Txn.ID) {
+    guard id == loadMoreTriggerID else { return }
+    Task { await loadMore() }
+  }
+
+  private func updateLoadMoreTrigger() {
+    guard hasMoreRows, !rows.isEmpty else {
+      loadMoreTriggerID = nil
+      return
+    }
+    let lead = max(1, min(100, pageSize / 5))
+    loadMoreTriggerID = rows[max(0, rows.count - lead)].txn.id
+  }
+
   /// The repository query of the current filters (nil: no type is on, nothing matches).
   public var query: TxnQuery? { filters.query(today: today(), calendar: calendar) }
 
   private func rebuild() {
-    content = TransactionListContent(
-      rows: rows, reference: reference, displayCurrency: displayCurrency, converter: converter,
+    let newBuilder = TransactionListContent.Builder(
+      summary: summary, reference: reference, displayCurrency: displayCurrency, converter: converter,
       today: today(),
       categoryFilter: filters.categoryIDs.isEmpty ? nil : reference.categories.expanded(filters.categoryIDs),
       includeUncategorised: filters.includeUncategorised,
       refundsReduceSpending: refundsReduceSpending, calendar: calendar)
+    builder = newBuilder
+    content = newBuilder.content(rows: rows)
+    updateLoadMoreTrigger()
+  }
+
+  // MARK: Facets (cascading filters, C28)
+
+  /// Recomputes, for every menu, how many rows each value has under all the OTHER filters (four
+  /// GROUP BY queries). A newer call supersedes an older one; a cancelled task stops at once.
+  public func loadFacets() async {
+    facetGeneration += 1
+    let mine = facetGeneration
+    let base = filters.rawQuery(today: today(), calendar: calendar)
+    for dimension in TxnFacetDimension.allCases {
+      guard mine == facetGeneration, !Task.isCancelled else { return }
+      let counts: TxnFacetCounts
+      if filters.matchesNothing(whenDropping: dimension) {
+        counts = TxnFacetCounts()
+      } else if let fetched = try? await transactions.facets(matching: base, dimension: dimension) {
+        counts = fetched
+      } else {
+        continue
+      }
+      guard mine == facetGeneration, !Task.isCancelled else { return }
+      facetCounts[dimension] = counts
+    }
+  }
+
+  /// Whether the menu of `dimension` should list a value: it has rows under the other filters, or
+  /// it is selected (selected values never disappear, they are marked instead), or the counts are
+  /// not known yet.
+  private func offers(_ count: Int?, selected: Bool) -> Bool { selected || count == nil || count! > 0 }
+
+  /// Rows under the other filters for an account; nil while unknown.
+  public func accountCount(_ id: Account.ID) -> Int? {
+    facetCounts[.accounts].map { $0.accounts[id] ?? 0 }
+  }
+
+  public func eventCount(_ id: Event.ID) -> Int? {
+    facetCounts[.events].map { $0.events[id] ?? 0 }
+  }
+
+  public func typeCount(_ type: TxnType) -> Int? {
+    facetCounts[.types].map { $0.types[type] ?? 0 }
+  }
+
+  /// Rows of the category itself (not summed over children) under the other filters.
+  public func categoryCount(_ id: AbacusDomain.Category.ID) -> Int? {
+    facetCounts[.categories].map { $0.categories[id] ?? 0 }
+  }
+
+  public var uncategorisedCount: Int? { facetCounts[.categories]?.uncategorised }
+
+  /// Whether a debt has rows under the other filters (any of its accounts has some); nil while
+  /// unknown.
+  public func debtHasRows(_ debt: DebtFilterOption) -> Bool? {
+    guard let counts = facetCounts[.accounts] else { return nil }
+    return debt.accountIDs.contains { (counts.accounts[$0] ?? 0) > 0 }
   }
 
   // MARK: Filter bar
@@ -208,8 +326,48 @@ public final class TransactionsViewModel {
 
   public static let uncategorisedTitle = Uncategorised.title
 
-  /// The categories menu offers "Uncategorised" when such transactions exist or it is ticked.
-  public var showsUncategorisedOption: Bool { hasUncategorised || filters.includeUncategorised }
+  /// The categories menu offers "Uncategorised" when such rows exist under the other filters (or
+  /// the counts are not known yet), or it is ticked (C28).
+  public var showsUncategorisedOption: Bool {
+    offers(uncategorisedCount, selected: filters.includeUncategorised)
+  }
+
+  /// Ticked but no row is left under the other filters.
+  public var isUncategorisedImpossible: Bool { filters.includeUncategorised && uncategorisedCount == 0 }
+
+  /// One line of the categories menu with what the cascading filters know about it.
+  public struct CategoryMenuEntry: Identifiable, Hashable, Sendable {
+    public var option: TransactionCategoryTree.Option
+    /// Rows of the category itself under the other filters; nil for parents and while unknown.
+    public var count: Int?
+    /// Ticked, yet no row has it under the other filters (it stays visible, marked).
+    public var isImpossible: Bool
+    public var id: AbacusDomain.Category.ID { option.id }
+  }
+
+  /// The categories menu: only categories with rows under the other filters (a parent when it or
+  /// a child has some), plus every category the user ticked, even when it has none (C28).
+  public var categoryMenu: [CategoryMenuEntry] {
+    let tree = reference.categories
+    let counts = facetCounts[.categories]?.categories
+    // Categories with rows, and their parents.
+    var available = Set<AbacusDomain.Category.ID>()
+    for (id, count) in counts ?? [:] where count > 0 {
+      available.insert(id)
+      if let parent = tree.category(id)?.parentID { available.insert(parent) }
+    }
+    return tree.options.compactMap { option in
+      let selected = filters.categoryIDs.contains(option.id)
+      // A child under a ticked parent is covered by it; it needs rows of its own to be listed.
+      let childSelected = option.hasChildren && tree.children(of: option.id).contains(where: filters.categoryIDs.contains)
+      let visible = counts == nil || available.contains(option.id) || selected || childSelected
+      guard visible else { return nil }
+      let isLeaf = !option.hasChildren
+      let count = isLeaf ? counts.map { $0[option.id] ?? 0 } : nil
+      let impossible = counts != nil && selected && !available.contains(option.id)
+      return CategoryMenuEntry(option: option, count: count, isImpossible: impossible)
+    }
+  }
 
   public func toggleUncategorised() { filters.includeUncategorised.toggle() }
 
@@ -220,6 +378,9 @@ public final class TransactionsViewModel {
     let day = Day(batch.importedAt, calendar: calendar).date(calendar: calendar).formatted(style)
     return "Import: \(batch.fileName) · \(day)"
   }
+
+  /// The import's file name alone, for the narrow filter bar.
+  public var importFileLabel: String? { filters.importBatch?.fileName }
 
   /// Removes the import filter only; the other filters stay.
   public func clearImportFilter() { filters.importBatch = nil }
@@ -237,6 +398,62 @@ public final class TransactionsViewModel {
     return "Event: " + (reference.eventsByID[id]?.name ?? "Unknown")
   }
 
+  /// "All types", "Expenses", "Expenses, Income", "No types".
+  public var typeLabel: String {
+    let titles: [(TxnType, String)] = [(.expense, "Expenses"), (.income, "Income"), (.transfer, "Transfers")]
+    if filters.types.count == titles.count { return "All types" }
+    let on = titles.filter { filters.types.contains($0.0) }.map(\.1)
+    return on.isEmpty ? "No types" : on.joined(separator: ", ")
+  }
+
+  /// The type menu's lines: every type that has rows under the other filters, and every type that
+  /// is ticked while the types are being filtered; with all three on, the ones without rows are
+  /// left out (nothing is being filtered by them).
+  public var typeMenu: [(type: TxnType, title: String, count: Int?, isImpossible: Bool)] {
+    let all: [(TxnType, String)] = [(.expense, "Expense"), (.income, "Income"), (.transfer, "Transfer")]
+    return all.compactMap { type, title in
+      let count = typeCount(type)
+      let on = filters.types.contains(type)
+      let shown = count == nil || count! > 0 || (filters.isTypeFiltered && on)
+      guard shown else { return nil }
+      return (type, title, count, on && count == 0 && filters.isTypeFiltered)
+    }
+  }
+
+  /// Labels cut short for a narrow window (the filter bar scrolls instead of wrapping, C28).
+  public var compactLabels: FilterBarLabels {
+    func cut(_ text: String, _ limit: Int = 14) -> String {
+      text.count > limit ? String(text.prefix(limit - 1)) + "…" : text
+    }
+    let date: String
+    switch filters.dateRange {
+    case .preset(.last30Days): date = "30 days"
+    case .preset(.last3Months): date = "3 months"
+    case .preset(let preset): date = preset.title
+    case .custom where filters.dateRange == TransactionFilters.allDates: date = "All dates"
+    case .custom: date = "Custom"
+    }
+    var categories = categoryLabel
+    if filters.categoryIDs.isEmpty && !filters.includeUncategorised {
+      categories = "Categories"
+    } else if filters.categoryIDs.count + (filters.includeUncategorised ? 1 : 0) == 1 {
+      categories = cut(categories)
+    }
+    let accounts = filters.accountIDs.isEmpty ? "Accounts" : cut(accountLabel)
+    let debts = filters.debtIDs.isEmpty ? "Debts" : (filters.debtIDs.count == 1 ? cut(debtLabel, 16) : debtLabel)
+    let event = filters.eventID == nil ? "Events" : cut(eventLabel, 16)
+    return FilterBarLabels(
+      date: date, categories: categories, accounts: accounts, debts: debts,
+      types: filters.isTypeFiltered ? typeLabel : "Types", event: event,
+      importFile: cut(importFileLabel ?? "Import", 18), sort: filters.newestFirst ? "Newest" : "Oldest")
+  }
+
+  public var fullLabels: FilterBarLabels {
+    FilterBarLabels(
+      date: dateLabel, categories: categoryLabel, accounts: accountLabel, debts: debtLabel, types: typeLabel,
+      event: eventLabel, importFile: importLabel ?? "Import", sort: filters.newestFirst ? "Newest first" : "Oldest first")
+  }
+
   /// Accounts offered in the accounts menu: active ones, plus archived ones already selected;
   /// A–Z under their groups (R-MGMT-8).
   public var accountOptions: [Account] {
@@ -247,17 +464,31 @@ public final class TransactionsViewModel {
   public var accountSections: [AccountPickerSection] {
     AccountOrder.pickerSections(
       reference.accounts.filter { account in
+        let selected = filters.accountIDs.contains(account.id)
         // C24: while a debt filter is active, only the selected debts' accounts are offered.
-        (!filters.isDebtFiltered || filters.debtLinkedAccountIDs.contains(account.id))
-          && (!account.isArchived || filters.accountIDs.contains(account.id))
+        return (!filters.isDebtFiltered || filters.debtLinkedAccountIDs.contains(account.id))
+          // Archived accounts only when selected; accounts without rows under the other filters
+          // only when selected too (C28: they stay visible and are marked).
+          && (!account.isArchived || selected) && offers(accountCount(account.id), selected: selected)
       },
       groups: reference.accountGroups)
   }
 
-  /// Events offered in the event menu: active ones, plus the selected one.
-  public var eventOptions: [Event] {
-    reference.events.filter { !$0.isArchived || $0.id == filters.eventID }
+  /// Ticked, yet no row has this account under the other filters.
+  public func isAccountImpossible(_ id: Account.ID) -> Bool {
+    filters.accountIDs.contains(id) && accountCount(id) == 0
   }
+
+  /// Events offered in the event menu: active ones with rows under the other filters, plus the
+  /// selected one.
+  public var eventOptions: [Event] {
+    reference.events.filter { event in
+      let selected = event.id == filters.eventID
+      return (!event.isArchived || selected) && offers(eventCount(event.id), selected: selected)
+    }
+  }
+
+  public var isEventImpossible: Bool { filters.eventID.map { eventCount($0) == 0 } ?? false }
 
   public func toggleCategory(_ id: AbacusDomain.Category.ID) {
     filters.categoryIDs = reference.categories.toggled(id, in: filters.categoryIDs)
@@ -401,36 +632,26 @@ public final class TransactionsViewModel {
     }
   }
 
-  /// Selected debts, A–Z, for the removable debt chips.
-  public var selectedDebts: [DebtFilterOption] { debtOptions.filter { filters.debtIDs.contains($0.id) } }
-
-  /// "Name · CUR": same-named accounts (one per currency) stay distinguishable.
-  public func accountChipLabel(_ account: Account) -> String { "\(account.name) · \(account.currency.rawValue)" }
-
-  /// Accounts ticked on their own while a debt filter is active, A–Z, for their removable chips.
-  /// The accounts a debt added have no chips of their own: the debt chip stands for them (C24).
-  public var independentAccountChips: [Account] {
-    filters.independentAccountIDs.compactMap { reference.accountsByID[$0] }.sorted {
-      let order = $0.name.localizedCaseInsensitiveCompare($1.name)
-      return order == .orderedSame ? $0.currency.rawValue < $1.currency.rawValue : order == .orderedAscending
-    }
+  /// The debts menu: matching `text`, and only debts with rows under the other filters (any of
+  /// their accounts has some) plus the selected ones (C28).
+  public func debtMenu(matching text: String) -> [DebtFilterOption] {
+    debtOptions(matching: text).filter { offers(debtHasRows($0).map { $0 ? 1 : 0 }, selected: filters.debtIDs.contains($0.id)) }
   }
 
-  /// The debt chip's text: "<name> · 3 accounts", counting the debt's accounts still ticked.
-  public func debtChipLabel(_ debt: DebtFilterOption) -> String {
-    let count = debt.accountIDs.intersection(filters.accountIDs).count
-    return "\(debt.name) · \(count) \(count == 1 ? "account" : "accounts")"
+  /// Ticked, yet none of its accounts has rows under the other filters.
+  public func isDebtImpossible(_ debt: DebtFilterOption) -> Bool {
+    filters.debtIDs.contains(debt.id) && debtHasRows(debt) == false
   }
-
-  /// Removes one account entry; its debt stays selected.
-  public func removeAccountEntry(_ id: Account.ID) { filters.toggleAccount(id) }
 
   /// Filters for "Show transactions" of a debt: every date, the debt and its accounts selected.
+  /// The date range in use now is remembered, so removing the debt filter brings it back (C28).
   /// Nil when the debt is unknown or there is no debt repository.
   public func filters(showingDebt id: Debt.ID) async -> TransactionFilters? {
     await loadDebtOptions()
     guard let option = debtOptions.first(where: { $0.id == id }) else { return nil }
-    return .debt(id, accountIDs: option.accountIDs)
+    var shown = TransactionFilters.debt(id, accountIDs: option.accountIDs)
+    shown.dateRangeBeforeDebt = filters.dateRangeBeforeDebt ?? filters.dateRange
+    return shown
   }
 }
 
@@ -441,4 +662,16 @@ public struct DebtFilterOption: Hashable, Identifiable, Sendable {
   /// The debt's linked accounts (R-DEBT-17).
   public let accountIDs: Set<Account.ID>
   public let isSettled: Bool
+}
+
+/// The texts of the filter bar's buttons (one row; compact ones when the window is narrow).
+public struct FilterBarLabels: Hashable, Sendable {
+  public var date: String
+  public var categories: String
+  public var accounts: String
+  public var debts: String
+  public var types: String
+  public var event: String
+  public var importFile: String
+  public var sort: String
 }
