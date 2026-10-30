@@ -116,7 +116,7 @@ struct DebtsCurrencyTests {
     let zloty = try #require(Self.rates.convertAtLatest(Money(minorUnits: -250_00, currency: .PLN), to: .UAH))
     let total = try #require(model.selectedTotal)
     #expect(total.balance?.money == Money(minorUnits: euro.minorUnits + zloty.minorUnits, currency: .UAH))
-    #expect(total.isApproximate && total.caption == "Total in UAH at today's rates")
+    #expect(total.isApproximate && total.caption == "≈ total in UAH")
     let alex = try #require(model.people.first { $0.name == "Alex Example" })
     #expect(alex.balances.map(\.money) == [Money(minorUnits: 310_00, currency: .EUR), Money(minorUnits: -250_00, currency: .PLN)])
     #expect(alex.convertedText?.hasPrefix("≈ ") == true)

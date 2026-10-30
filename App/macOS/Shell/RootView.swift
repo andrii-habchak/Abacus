@@ -84,7 +84,7 @@ struct SectionDetail: View {
     case .dashboard:
       DashboardView(
         model: session.dashboard, displayCurrency: app.displayCurrency,
-        debts: AnyView(DashboardDebtsCard(model: session.dashboard) { app.section = .debts }),
+        debts: AnyView(DashboardDebtsCard(model: session.dashboard, debts: session.debts) { app.section = .debts }),
         onEditBudget: { app.openBudget() }
       ) { target in
         app.showTransactions(.drillDown(target))

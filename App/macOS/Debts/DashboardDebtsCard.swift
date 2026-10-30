@@ -2,12 +2,17 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// The dashboard Debts widget (R-DEBT-6): "Owed to you" / "You owe" in the display currency,
-/// then people with open balances, largest first, per currency. Half width (owner). Reads `DashboardModel.debts`
-/// (it follows the display currency and rates); "Open Debts" goes to the Debts tab.
+/// The dashboard Debts widget (R-DEBT-6, R-DEBT-21): "You lent" (negative, red) / "You borrowed"
+/// (positive, green) in the display currency, then people with open balances, largest first, per
+/// currency; right-click a person for Edit, Show transactions, Mark settled, Delete. Half width
+/// (owner). Reads `DashboardModel.debts` (it follows the display currency and rates); "Open Debts"
+/// goes to the Debts tab, and so does Edit (the dialog lives there).
 struct DashboardDebtsCard: View {
   let model: DashboardModel
+  /// The Debts tab's model: the menu actions run through it.
+  let debts: DebtsModel
   var onOpen: () -> Void = {}
+  @State private var deleteTarget: DebtDeleteTarget?
   /// At most this many people; the rest are counted.
   var limit = 6
 
@@ -22,8 +27,8 @@ struct DashboardDebtsCard: View {
       }
       if let debts = model.debts {
         HStack(alignment: .top, spacing: 20) {
-          figure("Owed to you", debts.owedToMeText, color: DebtStyle.owedToMe)
-          figure("You owe", debts.iOweText, color: DebtStyle.iOwe)
+          figure(DebtSign.lentTitle, debts.lentText, color: DebtStyle.lent)
+          figure(DebtSign.borrowedTitle, debts.borrowedText, color: DebtStyle.borrowed)
         }
         if debts.isEmpty {
           Text("No open debts.").font(.callout).foregroundStyle(.secondary)
@@ -45,6 +50,7 @@ struct DashboardDebtsCard: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .dashboardCard()
+    .confirmDebtDelete($deleteTarget) { id in Task { await debts.deleteDebt(id) } }
   }
 
   private func figure(_ title: String, _ value: String, color: Color) -> some View {
@@ -72,7 +78,7 @@ struct DashboardDebtsCard: View {
         ForEach(person.balances) { balance in
           VStack(alignment: .trailing, spacing: 0) {
             Text(balance.amountText).font(.callout.weight(.semibold)).monospacedDigit()
-              .foregroundStyle(balance.owesMe ? DebtStyle.owedToMe : DebtStyle.iOwe)
+              .foregroundStyle(balance.owesMe ? DebtStyle.lent : DebtStyle.borrowed)
             Text(balance.directionText).font(.caption2).foregroundStyle(.secondary)
           }
         }
@@ -80,5 +86,19 @@ struct DashboardDebtsCard: View {
       .fixedSize()
     }
     .padding(.vertical, 6)
+    .contentShape(Rectangle())
+    .contextMenu {
+      // Widget people are open with a non-zero balance, so "Mark settled" is offered but disabled
+      // until the balance is zero (R-DEBT-5).
+      DebtContextMenu(
+        model: debts, debtID: person.debtID, actions: .init(isSettled: false, canToggleSettled: false),
+        onEdit: {
+          Task {
+            await debts.edit(debtID: person.debtID)
+            onOpen()
+          }
+        },
+        onDelete: { deleteTarget = DebtDeleteTarget(id: person.debtID, name: person.name) })
+    }
   }
 }

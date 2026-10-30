@@ -2,10 +2,11 @@ import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
-/// The Debts tab (R-DEBT-5): totals and people on the left (page search, Active/Settled), the
-/// selected person's debts on the right — balance per currency with direction, due date, note,
-/// records with their accounts, totals; add / edit / delete records, edit the debt, mark it
-/// settled. Forms keep Save bottom-right (R-MGMT-10).
+/// The Debts tab (R-DEBT-5, R-DEBT-21): totals and people on the left (page search,
+/// Active/Settled, right-click menu), the selected person's debt on the right — header with
+/// "Edit debt" / "Show transactions", linked accounts, hints, a block per currency with its manual
+/// records. Money they owe me is shown negative and red, money I owe positive and green (D61, via
+/// `DebtSign`). Forms keep Save bottom-right (R-MGMT-10).
 struct DebtsView: View {
   @Bindable var model: DebtsModel
   var displayCurrency: Currency
@@ -17,7 +18,7 @@ struct DebtsView: View {
         ToolbarItem(placement: .primaryAction) {
           Button("New debt", systemImage: "plus") { model.newDebt() }
             .labelStyle(.titleAndIcon)
-            .help("A person and a currency")
+            .help("A person, with the accounts that hold the money")
         }
       }
       .sheet(isPresented: Binding(get: { model.debtDraft != nil }, set: { if !$0 { model.debtDraft = nil } })) {
@@ -63,16 +64,16 @@ struct DebtsView: View {
 
 struct DebtPeopleList: View {
   @Bindable var model: DebtsModel
+  @State private var deleteTarget: DebtDeleteTarget?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       PageSearchField(text: $model.search, prompt: "Search people")
         .padding(.horizontal, 16)
         .padding(.top, 12)
-      let summary = model.summary
       HStack(spacing: 16) {
-        DebtTotal(title: "Owed to you", money: summary.owedToMe, color: DebtStyle.owedToMe)
-        DebtTotal(title: "You owe", money: summary.iOwe, color: DebtStyle.iOwe)
+        DebtTotal(title: DebtSign.lentTitle, text: model.lentTotalText, color: DebtStyle.lent)
+        DebtTotal(title: DebtSign.borrowedTitle, text: model.borrowedTotalText, color: DebtStyle.borrowed)
       }
       .padding(.horizontal, 16)
       .padding(.top, 12)
@@ -86,29 +87,78 @@ struct DebtPeopleList: View {
       if model.people.isEmpty {
         ContentUnavailableView(
           model.filter == .active ? "No open debts" : "No settled debts", systemImage: "person.2",
-          description: Text(model.search.isEmpty ? "“New debt” adds a person and a currency." : "Nothing matches the search."))
+          description: Text(model.search.isEmpty ? "“New debt” adds a person." : "Nothing matches the search."))
         .frame(maxHeight: .infinity)
       } else {
         List(selection: $model.selectedPerson) {
           ForEach(model.people) { person in
             DebtPersonRowView(person: person).tag(person.id)
+              .contextMenu {
+                DebtContextMenu(
+                  model: model, debtID: person.debtID,
+                  actions: model.rowActions(for: person.debtID) ?? .init(isSettled: person.isSettled, canToggleSettled: false),
+                  onEdit: { model.editDebt(person.debtID) },
+                  onDelete: { deleteTarget = DebtDeleteTarget(id: person.debtID, name: person.name) })
+              }
           }
         }
         .listStyle(.inset)
       }
     }
+    .confirmDebtDelete($deleteTarget) { id in Task { await model.deleteDebt(id) } }
+  }
+}
+
+/// The debt a delete confirmation is about.
+struct DebtDeleteTarget: Identifiable, Equatable {
+  let id: Debt.ID
+  let name: String
+}
+
+extension View {
+  /// "Delete" asks first: the debt and its manual records go, its accounts and their transactions
+  /// stay (R-DEBT-21).
+  func confirmDebtDelete(_ target: Binding<DebtDeleteTarget?>, perform: @escaping (Debt.ID) -> Void) -> some View {
+    confirmationDialog(
+      "Delete this debt?",
+      isPresented: Binding(get: { target.wrappedValue != nil }, set: { if !$0 { target.wrappedValue = nil } }),
+      titleVisibility: .visible, presenting: target.wrappedValue
+    ) { item in
+      Button("Delete \(item.name)", role: .destructive) { perform(item.id) }
+    } message: { item in
+      Text("\(item.name) and the manual records are deleted. The linked accounts and their transactions stay.")
+    }
+  }
+}
+
+/// Edit, Show transactions, Mark settled / Reopen, Delete (R-DEBT-21): the right-click menu of a
+/// debt in the Debts list and on the dashboard widget.
+struct DebtContextMenu: View {
+  let model: DebtsModel
+  let debtID: Debt.ID
+  let actions: DebtsModel.RowActions
+  var onEdit: () -> Void
+  var onDelete: () -> Void
+
+  var body: some View {
+    Button("Edit…", action: onEdit)
+    Button("Show transactions") { model.showTransactions(debtID) }
+    Button(actions.settledTitle) { Task { await model.setSettled(debtID, !actions.isSettled) } }
+      .disabled(!actions.canToggleSettled)
+    Divider()
+    Button("Delete…", role: .destructive, action: onDelete)
   }
 }
 
 struct DebtTotal: View {
   let title: String
-  let money: Money
+  let text: String
   let color: Color
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(title).font(.caption).foregroundStyle(.secondary)
-      Text(DashboardFormat().money(money)).font(.title3.weight(.semibold).monospacedDigit()).foregroundStyle(color)
+      Text(text).font(.title3.weight(.semibold).monospacedDigit()).foregroundStyle(color)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -173,24 +223,22 @@ struct DebtBalanceLabel: View {
 
 struct DebtPersonDetail: View {
   @Bindable var model: DebtsModel
+  @State private var deleteTarget: DebtDeleteTarget?
 
   var body: some View {
-    if let name = model.selectedPersonName {
+    if let header = model.selectedHeader {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-          HStack(spacing: 10) {
-            DebtAvatar(name: name)
-            Text(name).font(.title2.weight(.semibold))
-            Spacer()
-            if let total = model.selectedTotal {
-              DebtPersonTotalView(total: total).padding(.trailing, 8)
-            }
-            Button("Add currency", systemImage: "plus") { model.newDebt() }
-              .help("Another debt with this person in another currency")
+          DebtHeaderView(model: model, header: header, onDelete: {
+            deleteTarget = DebtDeleteTarget(id: header.debtID, name: header.name)
+          })
+          let notices = model.selectedNotices
+          if !notices.isEmpty {
+            DebtNoticesView(notices: notices)
           }
-          let flows = model.selectedAccountFlows
-          if !flows.isEmpty {
-            DebtAccountFlowsView(flows: flows)
+          let accounts = model.selectedBreakdown
+          if !accounts.isEmpty {
+            DebtAccountsView(rows: accounts)
           }
           ForEach(model.selectedDetails) { detail in
             DebtCard(model: model, detail: detail)
@@ -198,14 +246,64 @@ struct DebtPersonDetail: View {
         }
         .padding(20)
       }
+      .confirmDebtDelete($deleteTarget) { id in Task { await model.deleteDebt(id) } }
     } else {
       ContentUnavailableView("Select a person", systemImage: "person.2", description: Text("Their debts and records show here."))
     }
   }
 }
 
-/// The person's open balances summed in the display currency (R-DEBT-15); "≈" when some
-/// balance was converted at today's rate.
+/// The whole-debt header (R-DEBT-21): name, due date, note, the person's total, and the actions
+/// "Edit debt", "Show transactions", Mark settled / Reopen. Per-currency things live in the blocks
+/// below, not here.
+struct DebtHeaderView: View {
+  @Bindable var model: DebtsModel
+  let header: DebtsModel.Header
+  var onDelete: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .top, spacing: 10) {
+        DebtAvatar(name: header.name)
+        VStack(alignment: .leading, spacing: 4) {
+          Text(header.name).font(.title2.weight(.semibold))
+          HStack(spacing: 8) {
+            if header.isSettled { Text("Settled").font(.caption).foregroundStyle(.secondary) }
+            if let due = header.dueText { Label(due, systemImage: "calendar").font(.caption).foregroundStyle(.secondary) }
+            if !header.countsInNetWorth { Text("Not in net worth").font(.caption).foregroundStyle(.secondary) }
+          }
+          if !header.note.isEmpty {
+            Text(header.note).font(.callout).foregroundStyle(.secondary)
+          }
+        }
+        Spacer()
+        if let total = model.selectedTotal {
+          DebtPersonTotalView(total: total).padding(.trailing, 8)
+        }
+      }
+      HStack {
+        Button("Edit debt", systemImage: "pencil") { model.editDebt(header.debtID) }
+          .buttonStyle(.borderedProminent)
+          .help("Name, due date, note, net worth and the linked accounts")
+        Button("Show transactions", systemImage: "list.bullet") { model.showTransactions(header.debtID) }
+          .help("The Transactions list filtered to this debt's accounts")
+        Spacer()
+        if header.isSettled {
+          Button("Reopen") { Task { await model.setSettled(header.debtID, false) } }
+        } else {
+          Button("Mark settled") { Task { await model.setSettled(header.debtID, true) } }
+            .disabled(!header.canSettle)
+            .help(header.canSettle ? "Moves the debt to Settled" : "Only a zero balance can be settled")
+        }
+        Button("Delete…", role: .destructive, action: onDelete)
+          .foregroundStyle(ManagePalette.destructive)
+      }
+    }
+  }
+}
+
+/// The person's open balances summed in the display currency (R-DEBT-15); "≈ total in UAH" when
+/// some balance was converted at today's rate.
 struct DebtPersonTotalView: View {
   let total: DebtsModel.PersonTotal
 
@@ -213,7 +311,7 @@ struct DebtPersonTotalView: View {
     VStack(alignment: .trailing, spacing: 0) {
       Text(total.caption).font(.caption).foregroundStyle(.secondary)
       if let balance = total.balance {
-        Text((total.isApproximate ? "≈ " : "") + balance.amountText)
+        Text(balance.amountText)
           .font(.title3.weight(.semibold).monospacedDigit())
           .foregroundStyle(DebtStyle.color(balance))
         Text(balance.directionText).font(.caption).foregroundStyle(.secondary)
@@ -222,13 +320,36 @@ struct DebtPersonTotalView: View {
           .help("A rate to the display currency is missing; refresh the rates")
       }
     }
+    .help(total.isApproximate ? "All balances in the display currency at today's rates" : "")
   }
 }
 
-/// R-DEBT-14: each of my accounts the person's records used, with the money out and in, in the
-/// account's currency.
-struct DebtAccountFlowsView: View {
-  let flows: [DebtsModel.AccountFlowRow]
+/// Non-blocking hints (R-DEBT-20, R-DEBT-21): nothing is merged or changed by them.
+struct DebtNoticesView: View {
+  let notices: [DebtsModel.Notice]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      ForEach(notices) { notice in
+        Label {
+          Text(notice.text).font(.callout).foregroundStyle(.secondary)
+        } icon: {
+          Image(systemName: notice.kind == .duplicate ? "exclamationmark.triangle" : "clock")
+            .foregroundStyle(notice.kind == .duplicate ? Color.orange : Color.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    .padding(12)
+    .background(ManagePalette.inspectorBackground, in: .rect(cornerRadius: 10))
+    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(ManagePalette.border))
+  }
+}
+
+/// R-DEBT-17, R-DEBT-21: each linked account of the person with its role, currency, opening
+/// balance and balance (display sign).
+struct DebtAccountsView: View {
+  let rows: [DebtsModel.AccountBreakdownRow]
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -236,23 +357,23 @@ struct DebtAccountFlowsView: View {
       Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
         GridRow {
           Text("Account")
-          Text("Money out").gridColumnAlignment(.trailing)
-          Text("Money in").gridColumnAlignment(.trailing)
-          Text("")
+          Text("Role")
+          Text("Currency")
+          Text("Opening").gridColumnAlignment(.trailing)
+          Text("Balance").gridColumnAlignment(.trailing)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-        ForEach(flows) { flow in
+        ForEach(rows) { row in
           GridRow {
-            HStack(spacing: 6) {
-              Text(flow.name).lineLimit(1)
-              Text(flow.currency.rawValue).font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 0) {
+              Text(row.name).lineLimit(1)
+              Text(row.transactionsText).font(.caption2).foregroundStyle(.secondary)
             }
-            Text(flow.outText ?? "—")
-              .foregroundStyle(flow.outText == nil ? Color.secondary : DebtStyle.iOwe)
-            Text(flow.inText ?? "—")
-              .foregroundStyle(flow.inText == nil ? Color.secondary : DebtStyle.owedToMe)
-            Text(flow.recordsText).font(.caption).foregroundStyle(.secondary)
+            Text(row.roleTitle).font(.caption).foregroundStyle(.secondary)
+            Text(row.currency.rawValue).font(.caption).foregroundStyle(.secondary)
+            Text(row.openingText).foregroundStyle(row.openingText == "—" ? Color.secondary : Color.primary)
+            Text(row.balance.amountText).foregroundStyle(DebtStyle.color(row.balance))
           }
           .font(.callout.monospacedDigit())
         }
@@ -265,6 +386,7 @@ struct DebtAccountFlowsView: View {
   }
 }
 
+/// One currency of the debt: its balance and manual records (forgive, adjustments).
 struct DebtCard: View {
   @Bindable var model: DebtsModel
   let detail: DebtsModel.DebtDetail
@@ -272,27 +394,11 @@ struct DebtCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: 4) {
-          HStack(spacing: 6) {
-            Text(detail.currency.rawValue)
-              .font(.caption.weight(.semibold))
-              .padding(.horizontal, 6)
-              .padding(.vertical, 2)
-              .background(.quaternary, in: .capsule)
-            if detail.debt.isSettled {
-              Text("Settled").font(.caption).foregroundStyle(.secondary)
-            }
-            if !detail.debt.countsInNetWorth {
-              Text("Not in net worth").font(.caption).foregroundStyle(.secondary)
-            }
-          }
-          if let due = detail.dueText {
-            Label(due, systemImage: "calendar").font(.caption).foregroundStyle(.secondary)
-          }
-          if !detail.debt.note.isEmpty {
-            Text(detail.debt.note).font(.callout).foregroundStyle(.secondary)
-          }
-        }
+        Text(detail.currency.rawValue)
+          .font(.caption.weight(.semibold))
+          .padding(.horizontal, 6)
+          .padding(.vertical, 2)
+          .background(.quaternary, in: .capsule)
         Spacer()
         DebtBalanceLabel(balance: detail.balance)
       }
@@ -300,21 +406,14 @@ struct DebtCard: View {
         Text(totals).font(.caption).foregroundStyle(.secondary)
       }
       HStack {
-        Button("Add record", systemImage: "plus") { model.newRecord(debtID: detail.debt.id) }
-          .buttonStyle(.borderedProminent)
+        Button("Add record", systemImage: "plus") { model.newRecord(debtID: detail.debt.id, currency: detail.currency) }
+          .buttonStyle(.bordered)
           .disabled(detail.debt.isSettled)
-        Button("Edit debt…") { model.editDebt(detail.debt.id) }
+          .help("A manual record in \(detail.currency.rawValue): forgive, adjustment")
         Spacer()
-        if detail.debt.isSettled {
-          Button("Reopen") { Task { await model.setSettled(detail.debt.id, false) } }
-        } else {
-          Button("Mark settled") { Task { await model.setSettled(detail.debt.id, true) } }
-            .disabled(!detail.canSettle)
-            .help(detail.canSettle ? "Moves the debt to Settled" : "Only a zero balance can be settled")
-        }
       }
       if detail.records.isEmpty {
-        Text("No records yet.").font(.callout).foregroundStyle(.secondary)
+        Text("No manual records.").font(.callout).foregroundStyle(.secondary)
       } else {
         VStack(spacing: 0) {
           ForEach(detail.records) { row in
@@ -364,7 +463,7 @@ struct DebtRecordRowView: View {
       Spacer()
       Text(row.amountText)
         .font(.callout.weight(.semibold).monospacedDigit())
-        .foregroundStyle(row.increasesBalance ? DebtStyle.owedToMe : DebtStyle.iOwe)
+        .foregroundStyle(row.increasesBalance ? DebtStyle.lent : DebtStyle.borrowed)
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
@@ -376,6 +475,7 @@ struct DebtRecordRowView: View {
 struct DebtFormSheet: View {
   @Bindable var model: DebtsModel
   @State private var confirmDelete = false
+  @State private var accountSearch = ""
 
   var body: some View {
     // Not `Binding($model.debtDraft)`: Save, Delete and Escape set the draft to nil while the
@@ -384,19 +484,27 @@ struct DebtFormSheet: View {
       let draft = presentBinding({ model.debtDraft }, { model.debtDraft = $0 }, fallback: shown)
       VStack(alignment: .leading, spacing: 0) {
         Text(draft.wrappedValue.id == nil ? "New debt" : "Edit debt").font(.headline).padding([.horizontal, .top], 20)
-        Form {
-          TextField("Person", text: draft.personName)
-          Toggle("Due date", isOn: draft.hasDueDay)
-          if draft.wrappedValue.hasDueDay {
-            DatePicker("Due", selection: draft.dueDate, displayedComponents: .date)
+        ScrollView {
+          VStack(alignment: .leading, spacing: 12) {
+            Form {
+              TextField("Person", text: draft.personName)
+              Toggle("Due date", isOn: draft.hasDueDay)
+              if draft.wrappedValue.hasDueDay {
+                DatePicker("Due", selection: draft.dueDate, displayedComponents: .date)
+              }
+              TextField("Note", text: draft.note, axis: .vertical).lineLimit(2...4)
+              Toggle("Count in net worth", isOn: draft.countsInNetWorth)
+                .help("What you lent counts as an asset, what you borrowed as a liability")
+            }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            .frame(minHeight: 200)
+            DebtAccountPicker(model: model, search: $accountSearch)
+              .padding(.horizontal, 20)
           }
-          TextField("Note", text: draft.note, axis: .vertical).lineLimit(2...4)
-          Toggle("Count in net worth", isOn: draft.countsInNetWorth)
-            .help("Owed to you counts as an asset, what you owe as a liability")
         }
-        .formStyle(.grouped)
         if let issue = model.debtDraftIssue ?? model.errorMessage {
-          Text(issue).font(.caption).foregroundStyle(ManagePalette.negative).padding(.horizontal, 20)
+          Text(issue).font(.caption).foregroundStyle(ManagePalette.negative).padding(.horizontal, 20).padding(.top, 8)
         }
         HStack {
           if let id = draft.wrappedValue.id {
@@ -417,8 +525,102 @@ struct DebtFormSheet: View {
         }
         .padding(20)
       }
-      .frame(width: 420)
+      .frame(width: 520, height: 640)
     }
+  }
+}
+
+/// The account part of the debt dialog (R-DEBT-17, R-DEBT-21): a searchable multi-select of the
+/// person's accounts (an account of another debt is disabled and names that debt), an opening
+/// balance per linked account (display sign: negative = they owe you), and "Create account" for a
+/// virtual account in a chosen currency.
+struct DebtAccountPicker: View {
+  @Bindable var model: DebtsModel
+  @Binding var search: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Accounts").font(.headline)
+      Text("Link the person's accounts (never your own). Their balances make up the debt; the opening balance is negative when they owe you.")
+        .font(.caption).foregroundStyle(.secondary)
+      PageSearchField(text: $search, prompt: "Search accounts")
+      let choices = model.accountChoices(search: search)
+      VStack(spacing: 0) {
+        if choices.isEmpty {
+          Text("No accounts match.").font(.callout).foregroundStyle(.secondary).padding(12)
+        }
+        ForEach(choices) { choice in
+          HStack(spacing: 8) {
+            Toggle(isOn: Binding(get: { choice.isSelected }, set: { _ in model.toggleAccount(choice.id) })) {
+              VStack(alignment: .leading, spacing: 0) {
+                Text(choice.name).lineLimit(1)
+                Text(choice.disabledReason ?? "\(choice.kindTitle) · \(choice.currency.rawValue)")
+                  .font(.caption).foregroundStyle(.secondary)
+              }
+            }
+            .disabled(choice.isDisabled)
+            Spacer(minLength: 8)
+            if choice.isSelected {
+              TextField("Opening", text: openingBinding(choice.id))
+                .multilineTextAlignment(.trailing)
+                .frame(width: 90)
+                .textFieldStyle(.roundedBorder)
+                .help("Opening balance of this account; negative = they owe you")
+            }
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          if choice.id != choices.last?.id { Divider() }
+        }
+      }
+      .background(ManagePalette.card, in: .rect(cornerRadius: 8))
+      .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(ManagePalette.border))
+      .frame(maxHeight: 220)
+
+      if let draft = model.debtDraft, !draft.newAccounts.isEmpty {
+        VStack(spacing: 8) {
+          ForEach(draft.newAccounts) { item in
+            NewAccountRow(
+              item: elementBinding(
+                { model.debtDraft?.newAccounts ?? [] }, { model.debtDraft?.newAccounts = $0 }, id: item.id, fallback: item),
+              onRemove: { model.removeNewAccount(item.id) })
+          }
+        }
+      }
+      Button("Create account", systemImage: "plus") { model.addNewAccount() }
+        .help("A virtual account for this person, in a currency of your choice")
+    }
+  }
+
+  private func openingBinding(_ id: Account.ID) -> Binding<String> {
+    Binding(
+      get: { model.debtDraft?.openings[id] ?? "" },
+      set: { model.debtDraft?.openings[id] = $0 })
+  }
+}
+
+/// A virtual account to create: name (optional), currency, optional opening balance.
+struct NewAccountRow: View {
+  @Binding var item: DebtsModel.NewAccountDraft
+  var onRemove: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      TextField("Name (optional)", text: $item.name)
+      Picker("Currency", selection: $item.currency) {
+        ForEach(Currency.displayOrder, id: \.self) { Text($0.rawValue).tag($0) }
+      }
+      .labelsHidden()
+      .frame(width: 80)
+      TextField("Opening", text: $item.opening)
+        .multilineTextAlignment(.trailing)
+        .frame(width: 90)
+        .help("Opening balance; negative = they owe you")
+      Button("Remove", systemImage: "minus.circle", action: onRemove)
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+    }
+    .textFieldStyle(.roundedBorder)
   }
 }
 
@@ -480,14 +682,20 @@ struct DebtRecordFormSheet: View {
 // MARK: - Style
 
 enum DebtStyle {
-  static let owedToMe = Color(nsColor: NSColor(name: nil) { appearance in
+  /// Green: money I owe ("you borrowed", positive, D61).
+  static let borrowed = Color(nsColor: NSColor(name: nil) { appearance in
     appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
       ? NSColor(red: 0.42, green: 0.85, blue: 0.55, alpha: 1) : NSColor(red: 0.10, green: 0.50, blue: 0.25, alpha: 1)
   })
-  static let iOwe = ManagePalette.negative
+  /// Red: money they owe me ("you lent", negative, D61).
+  static let lent = ManagePalette.negative
 
   static func color(_ balance: DebtsModel.BalanceText) -> Color {
-    balance.isZero ? .secondary : balance.owesMe ? owedToMe : iOwe
+    switch balance.tone {
+    case .settled: .secondary
+    case .lent: lent
+    case .borrowed: borrowed
+    }
   }
 
   static func avatar(_ name: String) -> Color {
