@@ -374,6 +374,9 @@ struct AccountFields: View {
         .labelsHidden()
         .textFieldStyle(.roundedBorder)
     }
+    if model.offersDebts {
+      AccountDebtSection(model: model, draft: $draft)
+    }
     if !draft.isNew, model.selection == draft.id, let balance = model.balanceText {
       ManageCard {
         HStack {
@@ -515,4 +518,95 @@ struct AccountGroupNameSheet: View {
   model.showArchived = true
   return AccountsView(model: model)
     .frame(width: 1000, height: 720)
+}
+
+// MARK: - Debt section (R-DEBT-17)
+
+/// The editor's "Debt" section: which debt (person) this account belongs to, a searchable list
+/// with "None" and "New debt…". Saving links, moves or unlinks through the debt repository.
+struct AccountDebtSection: View {
+  let model: AccountsModel
+  @Binding var draft: AccountDraft
+  @State private var showingList = false
+  @State private var search = ""
+
+  private var buttonTitle: String {
+    switch draft.debt {
+    case .none: "None"
+    case .existing(let id): model.debt(id)?.personName ?? "Unknown debt"
+    case .new(let name): name.trimmingCharacters(in: .whitespaces).isEmpty ? "New debt…" : "New debt: \(name)"
+    }
+  }
+
+  var body: some View {
+    ManageField("Debt") {
+      Button {
+        search = ""
+        showingList = true
+      } label: {
+        HStack {
+          Text(buttonTitle)
+          Spacer()
+          Image(systemName: "chevron.up.chevron.down").font(.system(size: 10)).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+      }
+      .accessibilityLabel("Debt")
+      .popover(isPresented: $showingList, arrowEdge: .bottom) { list }
+      if case .new(let name) = draft.debt {
+        TextField(
+          "Person", text: Binding(get: { name }, set: { draft.debt = .new(name: $0) }),
+          prompt: Text("Name of the person"))
+          .labelsHidden()
+          .textFieldStyle(.roundedBorder)
+      }
+      if let notice = model.debtNotice(draft) {
+        Text(notice).font(.system(size: 11)).foregroundStyle(.secondary)
+      }
+      if let hint = model.debtRoleHint(draft) {
+        Text(hint).font(.system(size: 11)).foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  private var list: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      TextField("Search debts", text: $search).textFieldStyle(.roundedBorder)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 0) {
+          row("None", selected: draft.debt == .none) { draft.debt = .none }
+          ForEach(model.debtOptions(matching: search)) { debt in
+            row(
+              debt.isSettled ? "\(debt.personName) (settled)" : debt.personName,
+              selected: draft.debt == .existing(debt.id)
+            ) { draft.debt = .existing(debt.id) }
+          }
+          Divider().padding(.vertical, 4)
+          row("New debt…", selected: false) {
+            let typed = search.trimmingCharacters(in: .whitespaces)
+            draft.debt = .new(name: typed.isEmpty ? draft.name : typed)
+          }
+        }
+      }
+      .frame(maxHeight: 220)
+    }
+    .padding(10)
+    .frame(width: 260)
+  }
+
+  private func row(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    Button {
+      action()
+      showingList = false
+    } label: {
+      HStack {
+        Text(title)
+        Spacer()
+        if selected { Image(systemName: "checkmark") }
+      }
+      .contentShape(Rectangle())
+      .padding(.vertical, 4)
+    }
+    .buttonStyle(.plain)
+  }
 }
