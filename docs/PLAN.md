@@ -163,6 +163,10 @@ Owner paths per lane (no edits outside them; contract changes through the orches
 - [x] **C22 Import, rules, convert** (after C19) — `R-DEBT-19`. Owns `AbacusImport/`, `AbacusFeatures/Import/`,
   `Rules/`, `DebtLinkDraft`/`DebtLinkSheet`, the import/rules store code of C17.
 - [x] **C23 Legend alignment** (merged 2026-10-30) — donut legend rows without sub-categories align with rows that have a chevron.
+- [x] **C24 Debt filter fixes** (merged 2026-10-30) — freeze on removing the filter, one chip per debt, accounts menu limited to the debt's accounts.
+- [x] **C25 Debts UI fixes** (merged 2026-10-30) — total on widget and rows, Edit debt sheet layout and linked accounts.
+- [x] **C26 Account debt link** (merged 2026-10-30) — Debt section on the account editor.
+- [x] **C27 List multi-select** (merged 2026-10-30) — Cmd/Shift selection, multi-row drag, scrolling while dragging.
 
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
 - [x] **S1 Stability and performance** (merged 2026-10-27) — crashes (binding force-unwrap, Escape), hangs, reload storms, timing on owner-size data.

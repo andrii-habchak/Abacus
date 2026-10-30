@@ -4,7 +4,14 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
-_Updated 2026-10-30 (orchestrator, latest)._ **1.4.0 is on `main`** (build 7, not tagged, DMG not built yet):
+_Updated 2026-10-30 (orchestrator, newest)._ **1.4.1 is on `main`** (build 8, not tagged): owner-test fixes C24–C27
+on top of 1.4.0 (debt filter freeze and chips, one total on widget and rows, Edit debt sheet, debt link on
+the account editor, multi-select drag). Gate green (swift test with real samples, app build). Not checked
+visually; the drag-scroll hook (C27) is the first thing for the owner to try. Open: whether removing a
+debt filter should restore the previous date range (now stays "All dates"); the per-currency caption
+under the total (C25).
+
+_Updated 2026-10-30 (orchestrator, earlier)._ **1.4.0 is on `main`** (build 7, not tagged, DMG not built yet):
 accounts drive debts (TA v1.9, D59–D61): C19 core (migration v13), C20 Debts UI + widget, C21 Transactions
 debt filter, C22 import/rules/convert as transfers to a debt account, C23 legend alignment. Gate green
 (swift test with real samples, app build). Not checked visually in the running app. Back up

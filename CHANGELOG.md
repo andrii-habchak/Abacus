@@ -2,6 +2,31 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.1] — Unreleased
+
+Fixes from owner testing of 1.4.0. No database changes beyond 1.4.0.
+
+### Fixed
+
+- Transactions: removing the debt filter no longer freezes the app (a list with thousands of rows is
+  rebuilt in one go).
+- Transactions: a debt filter shows one chip ("<name> · N accounts") instead of one chip per account;
+  accounts picked on their own show their currency. While a debt filter is on, the Accounts menu
+  lists only the debt's accounts.
+- Edit debt: every account is reachable (the list was cut off), "Create account" no longer overlaps it,
+  and the debt's linked accounts are listed at the top.
+
+### Changed
+
+- Debts: the dashboard widget header and each debt row show one total in the display currency
+  instead of lent/borrowed amounts; per-currency amounts are a small caption.
+
+### Added
+
+- Account editor: a Debt section to link an account to a debt (or move or unlink it, or create a debt).
+- Accounts and Categories: Cmd+click and Shift+click multi-selection, dragging the whole selection;
+  the mouse wheel and the list edges scroll during a drag.
+
 ## [1.4.0] — Unreleased
 
 Accounts drive debts. Opening this version updates the database (migration v13: debts merge per

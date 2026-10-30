@@ -192,6 +192,9 @@ Answers "who owes me, whom do I owe, and how much".
   (display only):** money they owe me is shown **negative and red** ("you lent"), money I owe
   **positive and green** ("you borrowed"), in the Debts tab, its header and the dashboard widget;
   stored balances keep their sign. "Count in net worth" is **off by default for new debts**.
+- `R-DEBT-21a` (v1.10) The dashboard widget header and every debt row show **one total** in the display
+  currency (signed and coloured per R-DEBT-21, "No rate" when a balance cannot be converted); per-currency
+  amounts are only a small caption for debts with several currencies.
 - `R-DEBT-22` **Transactions filter.** The Transactions list has a debt filter; selecting a debt, or
   "Show transactions" on a debt, selects all its linked accounts as removable chips (account filter
   alongside), so any account can be un-/selected.
@@ -439,6 +442,7 @@ No open questions.
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
 | 1.7 | 2026-10-27 | Debts (`R-DEBT`, owner interview, D51). |
+| 1.10 | 2026-10-30 | Owner testing of 1.4.0: one total on widget and rows (`R-DEBT-21a`); debt filter chip and accounts menu rules (`R-DEBT-22`). |
 | 1.9 | 2026-10-30 | Accounts drive debts: one debt per person without currency, linked external/virtual accounts, transfers instead of record legs, edit/rename, debt filter on Transactions, sign display, widget (`R-DEBT-16…22`, D59–D61). |
 | 1.8 | 2026-10-30 | Debts linked to bank transactions: one payment one transaction, import action, convert, rule action, matching, several accounts, currency switch (`R-DEBT-9…15`, D58). |
 | 1.6 | 2026-10-27 | Owner review of 1.1.0: budget total + currency back with unallocated (`R-BUD-1`, `R-MGMT-3`); built-in Uncategorised, sorting/search/drag-to-nest for categories (`R-MGMT-8`); account groups (`R-MGMT-9`); form button placement (`R-MGMT-10`); page search (`R-MGMT-11`); rules: amount-only condition, rollback; income donut, income vs expenses, widget reorder (`R-HOME-6`); currency switch order and Budget page; debts: design pending (owner interview). |
