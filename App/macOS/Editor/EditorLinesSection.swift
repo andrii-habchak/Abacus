@@ -67,23 +67,10 @@ struct EditorLineRow: View {
       }
       .labelsHidden()
       .frame(width: 96, alignment: .leading)
-      Picker("Line category", selection: $line.categoryID) {
-        if line.categoryID == nil {
-          Text("Category").tag(AbacusDomain.Category.ID?.none)
-        }
-        ForEach(options.primary) { option in
-          Text(option.isChild ? "\u{2003}" + option.name : option.name).tag(Optional(option.id))
-        }
-        if !options.refund.isEmpty {
-          Section("Refund to an expense category") {
-            ForEach(options.refund) { option in
-              Text(option.isChild ? "\u{2003}" + option.name : option.name).tag(Optional(option.id))
-            }
-          }
-        }
-      }
-      .labelsHidden()
-      .frame(width: 150, alignment: .leading)
+      CategoryPicker(
+        items: options.primary.map { $0.pickerItem() }
+          + options.refund.map { $0.pickerItem(section: "Refund to an expense category") },
+        selection: $line.categoryID, placeholder: "Category", width: 150)
       EditorAmountField(title: "Line amount", text: $line.amountText, width: 80)
       TextField("Line note", text: $line.note, prompt: Text("Note"))
         .labelsHidden()

@@ -249,25 +249,20 @@ struct ImportReviewCard: View {
       .controlSize(.small)
       .fixedSize()
     case .record:
-      Picker(
-        "Category",
+      CategoryPicker(
+        items: item.categoryOptions.filter { $0.choice != .none }.map(\.pickerItem),
         selection: Binding(
-          get: { item.selectedCategory.map(ImportCategoryChoice.existing) ?? .none },
+          get: { item.selectedCategory.map(ImportCategoryChoice.existing) },
           set: { choice in
-            if case .existing(let id) = choice {
+            if case .existing(let id)? = choice {
               model.selectReviewCategory(id, forRow: item.id)
             } else {
               model.selectReviewCategory(nil, forRow: item.id)
             }
-          })
-      ) {
-        ForEach(item.categoryOptions) { option in
-          Text(option.isChild ? "   \(option.label)" : option.label).tag(option.choice)
-        }
-      }
-      .labelsHidden()
+          }),
+        noneTitle: item.categoryOptions.first { $0.choice == .none }?.label
+      )
       .controlSize(.small)
-      .fixedSize()
     case .transfer:
       Picker(
         "Other account",

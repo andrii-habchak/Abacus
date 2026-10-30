@@ -234,11 +234,9 @@ struct CategoryEditorSheet: View {
       }
       if !draft.isBuiltIn {
         ManageField("Parent") {
-          Picker("Parent", selection: $draft.parentID) {
-            Text("None (top level)").tag(AbacusDomain.Category.ID?.none)
-            ForEach(model.parentOptions(draft)) { Text($0.name).tag(Optional($0.id)) }
-          }
-          .labelsHidden()
+          CategoryPicker(
+            items: model.parentOptions(draft).map { CategoryPickerItem(value: $0.id, title: $0.name) },
+            selection: $draft.parentID, noneTitle: "None (top level)", width: 200)
           .disabled(!model.canChangeParent(draft))
           if !model.canChangeParent(draft) {
             Text("Has subcategories, so it stays at the top level.")

@@ -15,6 +15,7 @@ struct TransactionFilterBar: View {
   @Bindable var model: TransactionsViewModel
   @State private var open: Popover?
   @State private var debtSearch = ""
+  @State private var categorySearch = ""
 
   enum Popover: Hashable { case date, categories, accounts, debts, types, event, importBatch }
 
@@ -177,10 +178,26 @@ struct TransactionFilterBar: View {
   }
 
   private var categoriesPopover: some View {
-    let entries = model.categoryMenu
-    return ScrollView {
+    // Search (C34): a parent that matches keeps its children, a child alone keeps its parent.
+    let all = model.categoryMenu
+    let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+    let entries = CategorySearch.hits(
+      all.map { CategoryPickerItem(value: $0.id, title: $0.option.name, isChild: $0.option.isChild) },
+      query: categorySearch
+    ).compactMap { byID[$0.item.value] }
+    return VStack(alignment: .leading, spacing: 4) {
+      TextField("Search categories", text: $categorySearch)
+        .textFieldStyle(.roundedBorder)
+        .padding([.horizontal, .top], 10)
+      categoryList(entries, searching: !categorySearch.isEmpty)
+    }
+    .frame(width: 270)
+  }
+
+  private func categoryList(_ entries: [TransactionsViewModel.CategoryMenuEntry], searching: Bool) -> some View {
+    ScrollView {
       VStack(alignment: .leading, spacing: 2) {
-        if model.showsUncategorisedOption {
+        if model.showsUncategorisedOption && !searching {
           Toggle(
             isOn: Binding(
               get: { model.filters.includeUncategorised },
@@ -197,8 +214,10 @@ struct TransactionFilterBar: View {
           .padding(.vertical, 3)
           if !entries.isEmpty { Divider().padding(.vertical, 4) }
         }
-        if entries.isEmpty && !model.showsUncategorisedOption {
+        if entries.isEmpty && !model.showsUncategorisedOption && !searching {
           emptyNote("No categories under the other filters.")
+        } else if entries.isEmpty {
+          emptyNote("No category matches.")
         }
         ForEach(entries) { entry in
           Toggle(
@@ -222,7 +241,6 @@ struct TransactionFilterBar: View {
       .padding(10)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .frame(width: 270)
     .frame(maxHeight: 360)
   }
 

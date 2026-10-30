@@ -110,37 +110,10 @@ struct RulesContent: View {
     VStack(alignment: .leading, spacing: 14) {
       // R-MGMT-11: page search, then the category filter, both full width.
       PageSearchField(text: $model.searchText, prompt: "Search rules")
-      // A menu with a full-width label (a menu picker keeps its own width on macOS).
-      Menu {
-        Picker("Category", selection: $model.categoryFilter) {
-          Text("All categories").tag(AbacusDomain.Category.ID?.none)
-          Divider()
-          ForEach(model.categoryFilterOptions) { category in
-            Text(category.parentID == nil ? category.name : "    \(category.name)").tag(Optional(category.id))
-          }
-        }
-        .pickerStyle(.inline)
-        .labelsHidden()
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "line.3.horizontal.decrease.circle")
-            .foregroundStyle(.secondary)
-          Text(categoryFilterTitle)
-          Spacer(minLength: 0)
-          Image(systemName: "chevron.up.chevron.down")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity)
-        .background(.quaternary.opacity(0.5), in: .rect(cornerRadius: 8))
-        .contentShape(.rect)
-      }
-      .menuStyle(.button)
-      .buttonStyle(.plain)
-      .menuIndicator(.hidden)
-      .frame(maxWidth: .infinity)
+      CategoryPicker(
+        items: model.categoryPickerItems(model.categoryFilterOptions), selection: $model.categoryFilter,
+        noneTitle: "All categories", width: .infinity
+      )
       .accessibilityLabel("Filter rules by category")
 
       if let notice = model.notice {
@@ -501,13 +474,9 @@ struct RuleEditorSheet: View {
       .fixedSize()
       switch draft.action {
       case .category:
-        Picker("Category", selection: binding(\.categoryID, nil)) {
-          Text("Choose…").tag(AbacusDomain.Category.ID?.none)
-          ForEach(model.categoryOptions) { category in
-            Text(category.parentID == nil ? category.name : "    \(category.name)").tag(Optional(category.id))
-          }
-        }
-        .labelsHidden()
+        CategoryPicker(
+          items: model.categoryPickerItems(model.categoryOptions), selection: binding(\.categoryID, nil),
+          noneTitle: "Choose…", width: 200)
       case .transfer:
         Picker("Account", selection: binding(\.transferAccountID, nil)) {
           Text("Choose…").tag(Account.ID?.none)
