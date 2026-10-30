@@ -150,7 +150,7 @@ Wave 2:
 
 ### Phase 3f — Accounts drive debts (2026-10-30, TA v1.9, D59–D61)
 Owner paths per lane (no edits outside them; contract changes through the orchestrator).
-- [ ] **C19 Debt core** (first, alone) — `R-DEBT-16…19`, `-20`. Owns `AbacusDomain/Model/Debts.swift`,
+- [x] **C19 Debt core** (merged 2026-10-30; migration v13) — `R-DEBT-16…19`, `-20`. Owns `AbacusDomain/Model/Debts.swift`,
   `Protocols/DebtRepository.swift`, `AbacusStore/Migrations/` (v13), `AbacusStore/Repositories/Debt*`,
   `DebtCalc` in `AbacusFeatures`' calculators, tests. Migration v13: debt–account links, record
   currency, merge debts per person, re-link `sourceAccountID`, records/legs → transfers to a virtual
@@ -162,6 +162,7 @@ Owner paths per lane (no edits outside them; contract changes through the orches
   side handed in by the orchestrator.
 - [ ] **C22 Import, rules, convert** (after C19) — `R-DEBT-19`. Owns `AbacusImport/`, `AbacusFeatures/Import/`,
   `Rules/`, `DebtLinkDraft`/`DebtLinkSheet`, the import/rules store code of C17.
+- [x] **C23 Legend alignment** (merged 2026-10-30) — donut legend rows without sub-categories align with rows that have a chevron.
 
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
 - [x] **S1 Stability and performance** (merged 2026-10-27) — crashes (binding force-unwrap, Escape), hangs, reload storms, timing on owner-size data.
