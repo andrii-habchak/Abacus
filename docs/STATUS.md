@@ -4,11 +4,12 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
-_Updated 2026-10-30 (orchestrator, latest)._ **Phase 3f started: accounts drive debts** (TA v1.9
-`R-DEBT-16…22`, D59–D61, approved by the owner after a design discussion). Lanes: C19 core first
-(model, migration v13, calculators, transfer-based linking), then C20 Debts UI + dashboard widget, C21
-Transactions debt filter, C22 import/rules/convert in parallel. Nothing implemented yet when this note
-was written; see `docs/PLAN.md` Phase 3f and `docs/status/C19.md`–`C22.md`. Release target 1.4.0.
+_Updated 2026-10-30 (orchestrator, latest)._ **1.4.0 is on `main`** (build 7, not tagged, DMG not built yet):
+accounts drive debts (TA v1.9, D59–D61): C19 core (migration v13), C20 Debts UI + widget, C21 Transactions
+debt filter, C22 import/rules/convert as transfers to a debt account, C23 legend alignment. Gate green
+(swift test with real samples, app build). Not checked visually in the running app. Back up
+`abacus.sqlite` before the first launch. Owner to confirm the interpretations in `docs/status/C19.md`,
+`C20.md`, `C22.md` (e.g. bank rows matching hand-entered transfers are linked automatically).
 
 _Updated 2026-10-30 (orchestrator, later)._ **1.3.0 is on `main`** (build 6, not tagged): debts linked to
 bank transactions (C17, migration v12) and the Debts view (C18). `dist/Abacus-1.3.0.dmg` is for owner

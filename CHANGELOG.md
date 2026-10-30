@@ -2,6 +2,31 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.0] — Unreleased
+
+Accounts drive debts. Opening this version updates the database (migration v13: debts merge per
+person, existing debt records become transfers); back up `abacus.sqlite` first.
+
+### Changed
+
+- A debt is one person with no currency. It has linked accounts of that person: external (a statement
+  you import, e.g. a bank account of theirs) or virtual (an account you keep for them). The balance is
+  the sum of the linked accounts' transactions per currency, plus manual records.
+- Payments from your own accounts are transfers to the person's virtual account, visible in the
+  Transactions list. "Convert to debt record" is now "Transfer to debt account…"; import "Debt…" and
+  the rule action do the same. A bank row for a payment already entered by hand is matched.
+- Debts show money they owe you as negative red ("you lent") and money you owe as positive green
+  ("you borrowed"), in the Debts tab and the dashboard widget. New debts do not count in net worth
+  by default.
+
+### Added
+
+- Debt dialog: rename, note, due date, searchable account links, "Create account", opening balance.
+  "Edit debt" and "Show transactions" in the header; right-click menu on debts and on the widget.
+- Transactions: a Debts filter that selects the debt's accounts as removable chips.
+- Hints for the same payment on two accounts of one debt and for an account with no recent activity.
+- Dashboard: legend rows without sub-categories align with rows that have a chevron.
+
 ## [1.3.0] — Unreleased
 
 Debts linked to bank transactions. Opening this version updates the database (a rule column for

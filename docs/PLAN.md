@@ -156,11 +156,11 @@ Owner paths per lane (no edits outside them; contract changes through the orches
   currency, merge debts per person, re-link `sourceAccountID`, records/legs → transfers to a virtual
   account, "count in net worth" default. Exposes `DebtRepository` (link/unlink accounts, rename,
   create virtual account, transfer-to-debt), balance calculator per debt, duplicate-hint calculator.
-- [ ] **C20 Debts UI + widget** (after C19) — `R-DEBT-21`. Owns `AbacusFeatures/Debts/`, `App/macOS/Debts/`.
-- [ ] **C21 Transactions debt filter** (after C19) — `R-DEBT-22`. Owns `AbacusFeatures/Transactions/` filter
+- [x] **C20 Debts UI + widget** (after C19) — `R-DEBT-21`. Owns `AbacusFeatures/Debts/`, `App/macOS/Debts/`.
+- [x] **C21 Transactions debt filter** (after C19) — `R-DEBT-22`. Owns `AbacusFeatures/Transactions/` filter
   files, `App/macOS/Transactions/` filter UI; "Show transactions" navigation is a closure on the Debts
   side handed in by the orchestrator.
-- [ ] **C22 Import, rules, convert** (after C19) — `R-DEBT-19`. Owns `AbacusImport/`, `AbacusFeatures/Import/`,
+- [x] **C22 Import, rules, convert** (after C19) — `R-DEBT-19`. Owns `AbacusImport/`, `AbacusFeatures/Import/`,
   `Rules/`, `DebtLinkDraft`/`DebtLinkSheet`, the import/rules store code of C17.
 - [x] **C23 Legend alignment** (merged 2026-10-30) — donut legend rows without sub-categories align with rows that have a chevron.
 

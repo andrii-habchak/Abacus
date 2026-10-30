@@ -107,6 +107,8 @@ public final class AppSession {
       await self.dashboard.load()
       await self.reloadManageScreens()
     }
+    // "Show transactions" on a debt opens Transactions filtered by it (R-DEBT-22).
+    self.debts.onShowTransactions = { [weak self] id in self?.showTransactions(ofDebt: id) }
     // A debt leg opened from the transaction list shows its debt (R-DEBT-3).
     app.openDebtLeg = { [weak self] id in
       guard let self, let recordID = self.transactions.rows.first(where: { $0.txn.id == id })?.txn.debtRecordID
