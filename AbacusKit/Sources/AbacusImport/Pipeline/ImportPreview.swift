@@ -49,6 +49,9 @@ public struct ImportPreview: Sendable {
   let defaultAccountMappings: [AccountMapping]
   let defaultCategoryMappings: [CategoryMapping]
   var decisions = Decisions()
+  /// C35: the existing expenses incoming rows look like the refund of (by row id), found by
+  /// the pipeline.
+  var existingRefundSuggestions: [String: ImportRefundOriginal] = [:]
   // Outputs for the commit.
   private(set) var plans: [RowPlan] = []
   private var index: [String: Int] = [:]
@@ -72,6 +75,8 @@ public struct ImportPreview: Sendable {
     var debts: [String: ImportDebtChoice?] = [:]
     /// Review rows recorded by `acceptDefaults()` into "Uncategorised" with a review note.
     var defaultHalves: Set<String> = []
+    /// C35: accepted and declined refund suggestions.
+    var refunds: [String: ImportRefundDecision] = [:]
   }
 
   init(
@@ -453,6 +458,8 @@ struct TxnShape: Hashable, Sendable {
   var fingerprints: [String]
   /// R-DEBT-10/12: the transaction becomes this debt record's leg on commit.
   var debt: PreviewDebt?
+  /// C35: the expense this refund is linked to (the commit stores the link on the new row).
+  var refundOf: ImportRefundOriginal.Ref?
 }
 
 /// What the commit does with a row.
@@ -504,8 +511,72 @@ private struct Resolver {
       rows.append(row)
       plans.append(plan)
     }
+    applyRefunds()
     learnRules()
+    finishRefundCategories()
     checkConflicts()
+  }
+
+  // MARK: Refunds (C35)
+
+  /// Offers incoming rows as refunds of an expense and turns the accepted ones into expense
+  /// refunds. The original's category is copied after the rules are learned
+  /// (`finishRefundCategories`), so a row of this file that gets its category from a learned
+  /// rule is followed too.
+  private mutating func applyRefunds() {
+    let matcher = RefundMatcher(preview: preview, rows: rows, plans: plans)
+    var used: [ImportRefundOriginal.Ref: Int64] = [:]
+    var accepted: [(Int, ImportRefundOriginal)] = []
+    var undecided: [Int] = []
+    for i in rows.indices where matcher.eligible(i) {
+      rows[i].canBeRefund = true
+      switch decisions.refunds[rows[i].id] {
+      case .declined?:
+        rows[i].refundDeclined = true
+      case .accepted(let original)?:
+        guard let valid = matcher.validate(original, forRow: i, used: used) else {
+          undecided.append(i)
+          continue
+        }
+        used[valid.ref, default: 0] += matcher.amount(i)
+        accepted.append((i, valid))
+      case nil:
+        undecided.append(i)
+      }
+    }
+    for i in undecided {
+      rows[i].refundOffer = matcher.suggestion(forRow: i, used: used)
+    }
+    for (i, original) in accepted {
+      guard case .create(var shape) = plans[i] else { continue }
+      shape.type = .expense
+      shape.isRefund = true
+      shape.refundOf = original.ref
+      shape.ruleID = nil
+      if case .existing = original.ref {
+        shape.category = original.categoryID.map(CategoryRef.existing)
+      }
+      plans[i] = .create(shape)
+      rows[i].type = .expense
+      rows[i].refundOf = original
+      rows[i].refundOffer = nil
+      rows[i].category = shape.category
+      rows[i].categorySource = .notApplicable
+      rows[i].rulePattern = nil
+    }
+  }
+
+  private mutating func finishRefundCategories() {
+    var byID: [String: Int] = [:]
+    for (i, row) in rows.enumerated() { byID[row.id] = i }
+    for i in rows.indices {
+      guard case .row(let id)? = rows[i].refundOf?.ref, let j = byID[id], case .create(let original) = plans[j],
+        case .create(var shape) = plans[i]
+      else { continue }
+      shape.category = original.category
+      plans[i] = .create(shape)
+      rows[i].category = original.category
+    }
   }
 
   // MARK: Rows

@@ -140,6 +140,20 @@ public struct SQLiteImportStore: ImportStore {
         guard try Txn.find(txn.id).fetchCount(db) > 0 else { throw RepositoryError.notFound }
         try Txn.upsert { Txn.Draft(txn) }.execute(db)
       }
+      // C35: refunds the import links to an expense (existing or created above): the expense must
+      // still be one and the linked refunds may not exceed it (rates are not known here, so a
+      // refund in another currency is not compared). Refused as a whole, like any bad commit.
+      let linked = commit.txns.map(\.txn).filter { $0.refundOfID != nil }
+      if !linked.isEmpty {
+        let currencies = try RefundRules.currencies(db)
+        for refund in linked {
+          guard let originalID = refund.refundOfID, let original = try Txn.find(originalID).fetchOne(db),
+            RefundRules.canBeOriginal(original), RefundRules.canBeRefund(refund)
+          else { throw RefundError.invalidOriginal }
+          try RefundRules.checkCap(
+            refund, against: original, currencies: currencies, rates: nil, calendar: calendar, lenient: true, db)
+        }
+      }
       try RefundLinks.repair(db)
       for chunk in commit.fingerprints.chunked(500) {
         let fingerprints = chunk.map { item in

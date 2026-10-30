@@ -35,6 +35,16 @@ struct ImportReviewStep: View {
     }
     .sheet(
       isPresented: Binding(
+        get: { model.refundPicker != nil },
+        set: { if !$0 { model.cancelRefundPicker() } })
+    ) {
+      if let picker = model.refundPicker {
+        RefundPickerSheet(
+          model: picker.model, onChoose: { model.chooseRefundOption($0) }, onCancel: { model.cancelRefundPicker() })
+      }
+    }
+    .sheet(
+      isPresented: Binding(
         get: { model.ruleSheet != nil },
         set: { if !$0 { model.dismissRuleSheet() } })
     ) {

@@ -16,13 +16,18 @@ public struct ImportPipeline: Sendable {
   /// Day rates for debt records in another currency than the row's account (R-DEBT-10); nil =
   /// none (the amount must then be entered).
   public let converter: @Sendable () async -> (any CurrencyConverter)?
+  /// Finds the expense an incoming row may be the refund of (C35); nil = no suggestions among
+  /// existing expenses (rows of the file are still matched with each other).
+  public let refunds: (any RefundRepository)?
 
   public init(
     store: any ImportStore, accounts: any AccountRepository, categories: any CategoryRepository,
     events: any EventRepository, rules: any RuleRepository, calendar: Calendar = .current,
     now: @escaping @Sendable () -> Date = { Date() },
-    converter: @escaping @Sendable () async -> (any CurrencyConverter)? = { nil }
+    converter: @escaping @Sendable () async -> (any CurrencyConverter)? = { nil },
+    refunds: (any RefundRepository)? = nil
   ) {
+    self.refunds = refunds
     self.converter = converter
     self.store = store
     self.accounts = accounts
@@ -93,10 +98,12 @@ public struct ImportPipeline: Sendable {
     let accountMappings = MappingResolver.accounts(rows: parsed.rows, source: source, context: context)
     let categoryMappings = MappingResolver.categories(rows: parsed.rows, context: context)
     let analysis = try await analyze(parsed.rows, source: source, context: context, mappings: accountMappings, target: target?.id)
-    return ImportPreview(
+    var built = ImportPreview(
       batchID: UUID(), parsed: parsed, fileName: fileName, targetAccountID: target?.id,
       targetRemembered: remembered, context: context, calendar: calendar, analysis: analysis,
       accountMappings: accountMappings, categoryMappings: categoryMappings, converter: await converter())
+    await suggestRefunds(&built)
+    return built
   }
 
   /// Same as `preview(data:fileName:targetAccountID:)`; for headless imports (command-line
@@ -122,7 +129,48 @@ public struct ImportPipeline: Sendable {
       preview.parsedRows, source: preview.source, context: preview.context, mappings: updated.accountMappings,
       target: preview.targetAccountID)
     updated.recompute()
+    await suggestRefunds(&updated)
     return updated
+  }
+
+  // MARK: - Refunds (C35)
+
+  /// Looks for the existing expense each incoming row may be the refund of and stores the
+  /// confident ones (same amount, same description: C30's score of 70) in the preview. Read-only;
+  /// a failing search just leaves the row without a suggestion.
+  private func suggestRefunds(_ preview: inout ImportPreview) async {
+    guard let refunds else { return }
+    var found: [String: ImportRefundOriginal] = [:]
+    for (rowID, probe) in preview.refundProbes {
+      guard let currency = preview.accountCurrency(ofRow: rowID),
+        let candidates = try? await refunds.refundCandidates(probe: probe, matching: "", limit: 3),
+        let top = candidates.first, top.isSameAmount, top.score >= ImportPreview.refundSuggestionScore,
+        top.currency == currency
+      else { continue }
+      found[rowID] = Self.original(top)
+    }
+    preview.setExistingRefundSuggestions(found)
+  }
+
+  static func original(_ candidate: RefundCandidate) -> ImportRefundOriginal {
+    ImportRefundOriginal(
+      ref: .existing(candidate.txn.id), payee: candidate.txn.payee, occurredAt: candidate.txn.occurredAt,
+      amountMinor: candidate.txn.amountMinor, currency: candidate.currency, remainingMinor: candidate.remainingMinor,
+      categoryID: candidate.txn.categoryID, score: candidate.score, isSameAmount: candidate.isSameAmount)
+  }
+
+  /// The expenses row `rowID` may be the refund of, best first, for "Choose another…": existing
+  /// ones in the row account's currency and the expenses of the file. A non-empty `search`
+  /// filters by description or note and drops the 60-day window.
+  public func refundOptions(
+    for preview: ImportPreview, row rowID: String, matching search: String = "", limit: Int = 30
+  ) async throws -> [ImportRefundOriginal] {
+    var options = preview.fileRefundOptions(forRow: rowID, matching: search, limit: limit)
+    if let refunds, let probe = preview.refundProbe(forRow: rowID), let currency = preview.accountCurrency(ofRow: rowID) {
+      let candidates = try await refunds.refundCandidates(probe: probe, matching: search, limit: limit)
+      options += candidates.filter { $0.currency == currency }.map(Self.original)
+    }
+    return Array(options.sorted { ($0.score, $0.occurredAt) > ($1.score, $1.occurredAt) }.prefix(max(0, limit)))
   }
 
   private func loadContext(_ source: ImportSource) async throws -> ImportContext {
