@@ -32,15 +32,8 @@ public struct SQLiteRefundRepository: RefundRepository {
       guard RefundRules.canBeOriginal(original) else { throw RefundError.invalidOriginal }
       let currencies = try RefundRules.currencies(db)
       guard let originalCurrency = currencies[original.accountID] else { throw RefundError.notFound }
-      let others = try Txn.where { $0.refundOfID.eq(originalID) && $0.id.neq(refundID) }.fetchAll(db)
-      var refunded: Int64 = 0
-      for other in others {
-        refunded += try RefundRules.amount(other, in: originalCurrency, currencies: currencies, rates: rates, calendar: calendar)
-      }
-      let incoming = try RefundRules.amount(refund, in: originalCurrency, currencies: currencies, rates: rates, calendar: calendar)
-      guard refunded + incoming <= original.amountMinor else {
-        throw RefundError.exceedsOriginal(remainingMinor: max(0, original.amountMinor - refunded), currency: originalCurrency)
-      }
+      _ = originalCurrency
+      try RefundRules.checkCap(refund, against: original, currencies: currencies, rates: rates, calendar: calendar, db)
       refund.type = .expense
       refund.isRefund = true
       refund.categoryID = original.categoryID
@@ -61,18 +54,24 @@ public struct SQLiteRefundRepository: RefundRepository {
   // MARK: Candidates
 
   public func refundCandidates(for refundID: Txn.ID, matching search: String, limit: Int) async throws -> [RefundCandidate] {
+    let refund = try await database.read { db in try Txn.find(refundID).fetchOne(db) }
+    guard let refund else { throw RefundError.notFound }
+    guard RefundRules.canBeRefund(refund) else { throw RefundError.notRefundable }
+    return try await refundCandidates(probe: RefundProbe(refund), matching: search, limit: limit)
+  }
+
+  public func refundCandidates(probe refund: RefundProbe, matching search: String, limit: Int) async throws -> [RefundCandidate] {
     let rates = await converter()
     let calendar = self.calendar
     return try await database.read { db in
-      guard let refund = try Txn.find(refundID).fetchOne(db) else { throw RefundError.notFound }
-      guard RefundRules.canBeRefund(refund) else { throw RefundError.notRefundable }
       let currencies = try RefundRules.currencies(db)
       guard let refundCurrency = currencies[refund.accountID] else { throw RefundError.notFound }
       let needle = RefundRules.fold(search)
       var condition: QueryFragment = """
         "txns"."type" = 'expense' AND NOT "txns"."isRefund" AND NOT "txns"."isBalanceCorrection" \
-        AND "txns"."debtRecordID" IS NULL AND "txns"."id" <> \(refund.id)
+        AND "txns"."debtRecordID" IS NULL
         """
+      if let ownID = refund.id { condition += #" AND "txns"."id" <> \#(ownID)"# }
       if needle.isEmpty {
         let from = calendar.date(byAdding: .day, value: -RefundRules.windowDays, to: refund.occurredAt) ?? refund.occurredAt
         condition += #" AND "txns"."occurredAt" >= \#(from) AND "txns"."occurredAt" <= \#(refund.occurredAt)"#
@@ -94,6 +93,7 @@ public struct SQLiteRefundRepository: RefundRepository {
         let remaining = expense.amountMinor - refunded
         guard remaining > 0 else { continue }
         var score = 0
+        var sameAmount = false
         let payee = RefundRules.fold(expense.payee)
         let refundPayee = RefundRules.fold(refund.payee)
         if !payee.isEmpty, !refundPayee.isEmpty {
@@ -106,6 +106,7 @@ public struct SQLiteRefundRepository: RefundRepository {
         if currency == refundCurrency {
           score += 10
           if remaining == refund.amountMinor {
+            sameAmount = true
             score += 30
           } else if refund.amountMinor > remaining {
             continue  // the refund would exceed what remains
@@ -114,7 +115,8 @@ public struct SQLiteRefundRepository: RefundRepository {
           }
         }
         if expense.accountID == refund.accountID { score += 3 }
-        result.append(RefundCandidate(txn: expense, currency: currency, refundedMinor: refunded, score: score))
+        result.append(RefundCandidate(
+          txn: expense, currency: currency, refundedMinor: refunded, score: score, isSameAmount: sameAmount))
       }
       // Stable: the SQL order (newest first) breaks ties.
       let ranked = result.enumerated().sorted {
@@ -165,7 +167,7 @@ public struct SQLiteRefundRepository: RefundRepository {
           }
         }
         if txn.occurredAt >= original.occurredAt { score += 3 }
-        result.append((RefundTargetCandidate(txn: txn, currency: currency, score: score), result.count))
+        result.append((RefundTargetCandidate(txn: txn, currency: currency, remainingMinor: remaining, score: score), result.count))
       }
       let ranked = result.sorted { ($0.candidate.score, -$0.order) > ($1.candidate.score, -$1.order) }.map(\.candidate)
       return Array(ranked.prefix(max(0, limit)))
@@ -248,6 +250,32 @@ enum RefundRules {
         Money(minorUnits: txn.amountMinor, currency: own), to: currency, on: Day(txn.occurredAt, calendar: calendar))
     else { throw RefundError.rateUnavailable }
     return money.minorUnits
+  }
+
+  /// The refunds linked to `original`, `refund` included (replacing its stored link), converted to
+  /// the original's currency at each refund's date, may not exceed the original's amount.
+  /// With `lenient`, a refund in another currency that has no rate is not checked (saving an edit
+  /// must not fail because rates are missing).
+  static func checkCap(
+    _ refund: Txn, against original: Txn, currencies: [Account.ID: Currency], rates: (any CurrencyConverter)?,
+    calendar: Calendar, lenient: Bool = false, _ db: Database
+  ) throws {
+    guard let currency = currencies[original.accountID] else { throw RefundError.notFound }
+    let refundID = refund.id
+    let originalID = original.id
+    let others = try Txn.where { $0.refundOfID.eq(originalID) && $0.id.neq(refundID) }.fetchAll(db)
+    do {
+      var refunded: Int64 = 0
+      for other in others {
+        refunded += try amount(other, in: currency, currencies: currencies, rates: rates, calendar: calendar)
+      }
+      let incoming = try amount(refund, in: currency, currencies: currencies, rates: rates, calendar: calendar)
+      guard refunded + incoming <= original.amountMinor else {
+        throw RefundError.exceedsOriginal(remainingMinor: max(0, original.amountMinor - refunded), currency: currency)
+      }
+    } catch RefundError.rateUnavailable where lenient {
+      return
+    }
   }
 
   /// Case, diacritics and surrounding whitespace folded away.

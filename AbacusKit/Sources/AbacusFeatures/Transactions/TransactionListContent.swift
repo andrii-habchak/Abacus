@@ -84,6 +84,14 @@ public struct TransactionListContent: Equatable, Sendable {
     /// received) or "→ <account>" when both sides use one currency.
     public var amountDetail: String?
     public var lines: [Line]
+    /// C30: "Refunded zł450.00" / "Partly refunded zł120.00 of zł450.00" on an expense with linked
+    /// refunds; "Refund of Booking.com · 12 Oct" on a linked refund. Nil otherwise.
+    public var refundNote: String? = nil
+    /// The other end of the link: the refund an expense's note speaks of (the first one), or the
+    /// original of a refund. Clicking the note jumps there.
+    public var refundJumpID: Txn.ID? = nil
+    /// The row is a refund linked to its original.
+    public var isLinkedRefund = false
   }
 
   public struct DaySection: Identifiable, Hashable, Sendable {
@@ -162,7 +170,7 @@ public struct TransactionListContent: Equatable, Sendable {
     rows: [TxnWithLines], reference: TransactionsReference, displayCurrency: Currency,
     converter: any CurrencyConverter, today: Day,
     categoryFilter: Set<AbacusDomain.Category.ID>? = nil, includeUncategorised: Bool = false,
-    refundsReduceSpending: Bool = false,
+    refundsReduceSpending: Bool = false, refundLinks: RefundLinkSummary = RefundLinkSummary(),
     calendar: Calendar = .current, format: TransactionMoneyFormat = TransactionMoneyFormat()
   ) {
     let builder = Builder(
@@ -170,7 +178,7 @@ public struct TransactionListContent: Equatable, Sendable {
       converter: converter, today: today, categoryFilter: categoryFilter,
       includeUncategorised: includeUncategorised, refundsReduceSpending: refundsReduceSpending,
       calendar: calendar, format: format)
-    self = builder.content(rows: rows)
+    self = builder.content(rows: rows, refundLinks: refundLinks)
   }
 
   fileprivate init(days: [DaySection], items: [Item] = [], totals: Totals, format: TransactionMoneyFormat) {
@@ -193,6 +201,7 @@ public struct TransactionListContent: Equatable, Sendable {
     public let totals: Totals
     /// The net of every day of the filtered set, in the display currency.
     let dayNets: [Day: Money]
+    let converter: any CurrencyConverter
 
     /// - Parameter summary: the whole filtered set (`TxnRepository.summary`).
     public init(
@@ -205,6 +214,7 @@ public struct TransactionListContent: Equatable, Sendable {
       self.reference = reference
       self.calendar = calendar
       self.format = format
+      self.converter = converter
       titles = TransactionDayTitles(today: today, calendar: calendar, locale: format.locale)
       let rule = TransactionTotalsRule(
         refundsReduceSpending: refundsReduceSpending, categoryFilter: categoryFilter,
@@ -262,18 +272,22 @@ public struct TransactionListContent: Equatable, Sendable {
     private let displayCurrency: Currency
 
     /// Content for the first `rows` (a page, or all of them).
-    public func content(rows: [TxnWithLines]) -> TransactionListContent {
+    public func content(rows: [TxnWithLines], refundLinks: RefundLinkSummary = RefundLinkSummary()) -> TransactionListContent {
       var content = TransactionListContent(days: [], totals: totals, format: format)
-      append(rows, to: &content)
+      append(rows, refundLinks: refundLinks, to: &content)
       return content
     }
 
     /// Adds the next page: its rows join the last day section when they share its day (a page
     /// boundary may fall inside a day), otherwise new sections start.
-    public func append(_ rows: [TxnWithLines], to content: inout TransactionListContent) {
+    public func append(
+      _ rows: [TxnWithLines], refundLinks: RefundLinkSummary = RefundLinkSummary(), to content: inout TransactionListContent
+    ) {
+      let dates = RefundNoteDates(calendar: calendar, locale: format.locale)
       for item in rows {
         let day = Day(item.txn.occurredAt, calendar: calendar)
-        let row = TransactionListContent.row(item, reference: reference, calendar: calendar, format: format)
+        var row = TransactionListContent.row(item, reference: reference, calendar: calendar, format: format)
+        refundNote(for: item.txn, links: refundLinks, dates: dates, into: &row)
         if let last = content.days.indices.last, content.days[last].day == day {
           content.days[last].rows.append(row)
         } else {

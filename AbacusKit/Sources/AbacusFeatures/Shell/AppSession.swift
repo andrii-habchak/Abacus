@@ -150,21 +150,25 @@ public final class AppSession {
       rates: RefresherRatesService(refresher: refresher), backup: SQLiteBackup(database: database),
       dataLocation: location, legacyLastExport: legacyLastExport,
       today: { Day(now(), calendar: calendar) }, now: now, formats: formats)
+    // Refunds in another currency than their expense compare at the refund's date rate (C30).
+    let currentRates: @Sendable () async -> (any CurrencyConverter)? = { await refresher.table }
+    let refunds = SQLiteRefundRepository(database: database, calendar: calendar, converter: currentRates)
     let transactions = TransactionsViewModel(
-      transactions: SQLiteTxnRepository(database: database, calendar: calendar),
+      transactions: SQLiteTxnRepository(database: database, calendar: calendar, converter: currentRates),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), converter: RateTable(),
       calendar: calendar, today: { Day(now(), calendar: calendar) },
       settings: SQLiteSettingsRepository(database: database),
-      debts: SQLiteDebtRepository(database: database, calendar: calendar))
+      debts: SQLiteDebtRepository(database: database, calendar: calendar), refunds: refunds)
     var editor = TransactionEditorDependencies(
-      transactions: SQLiteTxnRepository(database: database, calendar: calendar),
+      transactions: SQLiteTxnRepository(database: database, calendar: calendar, converter: currentRates),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),
       categories: SQLiteCategoryRepository(database: database),
       events: SQLiteEventRepository(database: database), rules: SQLiteRuleRepository(database: database),
       settings: SQLiteSettingsRepository(database: database), converter: RateTable(), calendar: calendar,
       now: now)
+    editor.refunds = refunds
     // An old day picked in the editor loads its rates (R-EDIT-4, R-FX-1).
     editor.requestRates = { days in
       await refresher.ensureRates(for: days)

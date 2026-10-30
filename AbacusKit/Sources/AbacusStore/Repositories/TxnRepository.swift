@@ -6,10 +6,17 @@ import SQLiteData
 public struct SQLiteTxnRepository: TxnRepository {
   public let database: any DatabaseWriter
   public let calendar: Calendar
+  /// Rates for checking a refund in another currency than its original on save (C30); without
+  /// them only same-currency refunds are checked.
+  let converter: @Sendable () async -> (any CurrencyConverter)?
 
-  public init(database: any DatabaseWriter, calendar: Calendar = .current) {
+  public init(
+    database: any DatabaseWriter, calendar: Calendar = .current,
+    converter: @escaping @Sendable () async -> (any CurrencyConverter)? = { nil }
+  ) {
     self.database = database
     self.calendar = calendar
+    self.converter = converter
   }
 
   /// R-LIST-1…6: every `TxnQuery` filter, combined with AND:
@@ -78,8 +85,22 @@ public struct SQLiteTxnRepository: TxnRepository {
   }
 
   /// Saves the transaction and replaces its attached records with `lines` (R-TX-6).
+  /// A refund link it carries must keep the original valid and within its amount (C30):
+  /// `RefundError.invalidOriginal` / `exceedsOriginal`.
   public func save(_ txn: Txn, lines: [AttachedRecord]) async throws {
-    try await database.write { db in try Self.save(txn, lines: lines, db) }
+    let rates = txn.refundOfID == nil ? nil : await converter()
+    let calendar = self.calendar
+    try await database.write { db in
+      if txn.isLinkedRefund, let originalID = txn.refundOfID {
+        guard let original = try Txn.find(originalID).fetchOne(db), RefundRules.canBeOriginal(original),
+          original.id != txn.id
+        else { throw RefundError.invalidOriginal }
+        try RefundRules.checkCap(
+          txn, against: original, currencies: try RefundRules.currencies(db), rates: rates, calendar: calendar,
+          lenient: true, db)
+      }
+      try Self.save(txn, lines: lines, db)
+    }
   }
 
   /// Deletes the transaction; attached records and fingerprints go with it (R-TX-6). A debt

@@ -1,3 +1,4 @@
+import AbacusDomain
 import AbacusFeatures
 import SwiftUI
 
@@ -45,6 +46,8 @@ struct TransactionDayHeader: View {
 /// account, amount in the account currency with "Charged …" or the received amount.
 struct TransactionRowView: View {
   let row: TransactionListContent.Row
+  /// Clicking the refund text (C30) shows the transaction at the other end of the link.
+  var onJump: (Txn.ID) -> Void = { _ in }
 
   var body: some View {
     HStack(spacing: TxnMetrics.gap) {
@@ -89,11 +92,28 @@ struct TransactionRowView: View {
           TransactionBadge(badge: badge)
         }
       }
-      Text(row.subtitle)
-        .font(.system(size: 12))
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .truncationMode(.tail)
+      HStack(spacing: 4) {
+        Text(row.subtitle)
+          .lineLimit(1)
+          .truncationMode(.tail)
+        if let note = row.refundNote {
+          Text("·")
+          if let target = row.refundJumpID {
+            Button {
+              onJump(target)
+            } label: {
+              Text(note).lineLimit(1).truncationMode(.tail)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+            .help("Show the linked transaction")
+          } else {
+            Text(note).lineLimit(1).truncationMode(.tail)
+          }
+        }
+      }
+      .font(.system(size: 12))
+      .foregroundStyle(.secondary)
     }
   }
 

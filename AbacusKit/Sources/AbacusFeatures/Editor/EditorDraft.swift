@@ -79,6 +79,10 @@ public struct EditorDraft: Hashable, Sendable {
   public var categoryChosen: Bool
   /// Expense refund / income reversal (R-TX-4).
   public var isRefund: Bool
+  /// The expense this refund returns money for (C30); only kept for an expense refund.
+  public var refundOfID: Txn.ID?
+  /// "Booking.com · 12 Oct 2026": what the "Refund of" field shows for `refundOfID`.
+  public var refundOfLabel: String?
   public var fromID: Account.ID?
   public var toID: Account.ID?
   /// "Amount received" in the To currency (cross-currency transfers, R-TX-5).
@@ -138,6 +142,7 @@ public struct EditorDraft: Hashable, Sendable {
     eventID = txn.eventID
     eventChosen = true
     isRefund = txn.type != .transfer && txn.isRefund
+    refundOfID = txn.type == .expense && txn.isRefund ? txn.refundOfID : nil
     accountID = txn.accountID
     switch txn.type {
     case .transfer:

@@ -14,6 +14,30 @@ public enum RefundError: Error, Equatable, Sendable {
   case rateUnavailable
 }
 
+/// What the candidate search needs to know about a refund, which may not be saved yet (the
+/// transaction editor).
+public struct RefundProbe: Hashable, Sendable {
+  /// The refund's own id when it exists: never offered as a candidate, and its own link does not
+  /// count against an expense's remainder.
+  public var id: Txn.ID?
+  public var accountID: Account.ID
+  public var amountMinor: Int64
+  public var payee: String
+  public var occurredAt: Date
+
+  public init(id: Txn.ID? = nil, accountID: Account.ID, amountMinor: Int64, payee: String, occurredAt: Date) {
+    self.id = id
+    self.accountID = accountID
+    self.amountMinor = amountMinor
+    self.payee = payee
+    self.occurredAt = occurredAt
+  }
+
+  public init(_ txn: Txn) {
+    self.init(id: txn.id, accountID: txn.accountID, amountMinor: txn.amountMinor, payee: txn.payee, occurredAt: txn.occurredAt)
+  }
+}
+
 /// An expense a refund may be linked to, with how much of it is still open.
 public struct RefundCandidate: Hashable, Identifiable, Sendable {
   public var txn: Txn
@@ -23,14 +47,17 @@ public struct RefundCandidate: Hashable, Identifiable, Sendable {
   public var refundedMinor: Int64
   /// Higher is a better match (same description, same amount, same currency, same account).
   public var score: Int
+  /// The refund is in the expense's currency and equals what is still open.
+  public var isSameAmount: Bool
   public var id: Txn.ID { txn.id }
   public var remainingMinor: Int64 { max(0, txn.amountMinor - refundedMinor) }
 
-  public init(txn: Txn, currency: Currency, refundedMinor: Int64, score: Int) {
+  public init(txn: Txn, currency: Currency, refundedMinor: Int64, score: Int, isSameAmount: Bool = false) {
     self.txn = txn
     self.currency = currency
     self.refundedMinor = refundedMinor
     self.score = score
+    self.isSameAmount = isSameAmount
   }
 }
 
@@ -38,13 +65,17 @@ public struct RefundCandidate: Hashable, Identifiable, Sendable {
 /// an expense.
 public struct RefundTargetCandidate: Hashable, Identifiable, Sendable {
   public var txn: Txn
+  /// The currency of the expense and of `remainingMinor`.
   public var currency: Currency
+  /// What the expense still has open (the same for every candidate of one expense).
+  public var remainingMinor: Int64
   public var score: Int
   public var id: Txn.ID { txn.id }
 
-  public init(txn: Txn, currency: Currency, score: Int) {
+  public init(txn: Txn, currency: Currency, remainingMinor: Int64, score: Int) {
     self.txn = txn
     self.currency = currency
+    self.remainingMinor = remainingMinor
     self.score = score
   }
 }
@@ -92,6 +123,12 @@ public struct RefundLinkSummary: Hashable, Sendable {
     self.refundsByOriginal = refundsByOriginal
     self.originalByRefund = originalByRefund
   }
+
+  /// Adds the links of another page.
+  public mutating func merge(_ other: RefundLinkSummary) {
+    refundsByOriginal.merge(other.refundsByOriginal) { current, _ in current }
+    originalByRefund.merge(other.originalByRefund) { current, _ in current }
+  }
 }
 
 /// Links a refund to the expense it returns money for (R-TX-4, C30).
@@ -108,6 +145,8 @@ public protocol RefundRepository: Sendable {
   /// days before the refund, same currency first; fully refunded ones are left out. A non-empty
   /// `search` (description or note) drops the 60-day window and filters by text.
   func refundCandidates(for refund: Txn.ID, matching search: String, limit: Int) async throws -> [RefundCandidate]
+  /// The same for a refund that is not saved yet (the editor).
+  func refundCandidates(probe: RefundProbe, matching search: String, limit: Int) async throws -> [RefundCandidate]
   /// Incoming transactions on the original's account that may be its refund (income not yet
   /// refunding anything, or an unlinked expense refund), amount not above what remains, equal
   /// amounts first.

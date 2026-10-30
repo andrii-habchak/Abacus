@@ -31,6 +31,16 @@ struct TransactionEditorSheet: View {
     .background(EditorPalette.body)
     .font(.system(size: 13))
     .disabled(!model.isLoaded && model.errorMessage == nil)
+    .sheet(
+      isPresented: Binding(
+        get: { model.refundPicker != nil },
+        set: { if !$0 { model.cancelRefundPicker() } })
+    ) {
+      if let picker = model.refundPicker {
+        RefundPickerSheet(
+          model: picker, onChoose: { model.chooseRefundOriginal($0) }, onCancel: { model.cancelRefundPicker() })
+      }
+    }
     .alert("Delete this transaction?", isPresented: $confirmingDelete) {
       Button("Delete", role: .destructive) {
         Task {
@@ -148,6 +158,24 @@ struct EditorHeader: View {
         Toggle(model.refundLabel, isOn: $model.isRefund)
           .toggleStyle(.checkbox)
           .font(.system(size: 12))
+      }
+      if model.offersRefundOf {
+        // R-TX-4 (C30): the expense this refund returns money for; its category follows it.
+        HStack(spacing: 8) {
+          Text("Refund of").foregroundStyle(.secondary)
+          Text(model.refundOfText)
+            .fontWeight(model.refundOfID == nil ? .regular : .medium)
+            .foregroundStyle(model.refundOfID == nil ? Color.secondary : Color.primary)
+            .lineLimit(1)
+          Button(model.refundOfID == nil ? "Choose…" : "Change…") {
+            Task { await model.beginChooseRefundOriginal() }
+          }
+          if model.refundOfID != nil {
+            Button("Remove") { model.clearRefundOriginal() }
+          }
+        }
+        .font(.system(size: 12))
+        .controlSize(.small)
       }
       if let hint = model.defaultsHint {
         EditorHint(text: hint)

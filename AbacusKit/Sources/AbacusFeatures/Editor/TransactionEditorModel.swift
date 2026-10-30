@@ -99,6 +99,7 @@ public final class TransactionEditorModel {
           return
         }
         draft = EditorDraft(editing: row, accounts: reference.accountsByID)
+        await loadRefundOfLabel()
       } catch {
         errorMessage = "Couldn't load the transaction."
         return
@@ -224,7 +225,67 @@ public final class TransactionEditorModel {
 
   public var isRefund: Bool {
     get { draft.isRefund }
-    set { draft.isRefund = newValue && !isTransfer }
+    set {
+      draft.isRefund = newValue && !isTransfer
+      if !draft.isRefund { clearRefundOriginal() }
+    }
+  }
+
+  // MARK: Refund of (R-TX-4, C30)
+
+  /// The "Refund of" field: an expense marked as refund, when the editor can search expenses.
+  public var offersRefundOf: Bool {
+    dependencies.refunds != nil && draft.type == .expense && draft.isRefund && draft.stored?.debtRecordID == nil
+  }
+
+  /// The original a refund is linked to, nil when unlinked.
+  public var refundOfID: Txn.ID? { offersRefundOf ? draft.refundOfID : nil }
+  /// "Booking.com · 12 Oct 2026", or "None".
+  public var refundOfText: String { refundOfID == nil ? "None" : draft.refundOfLabel ?? "An expense" }
+  /// The search sheet of the field; nil when closed.
+  public var refundPicker: RefundPickerModel?
+
+  /// Opens the search over expenses for this refund (it need not be saved yet).
+  public func beginChooseRefundOriginal() async {
+    guard offersRefundOf, let refunds = dependencies.refunds, let account else { return }
+    let minor = (isForeign ? chargedMinor : amountMinor) ?? 0
+    let probe = RefundProbe(
+      id: isNew ? nil : draft.id, accountID: account.id, amountMinor: minor,
+      payee: draft.payee.trimmingCharacters(in: .whitespacesAndNewlines), occurredAt: draft.occurredAt)
+    let names = Dictionary(reference.accounts.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+    let payee = probe.payee
+    let picker = RefundPickerModel(
+      kind: .chooseOriginal, subjectID: isNew ? nil : draft.id, probe: probe, title: "Refund of",
+      subtitle: payee.isEmpty ? "Choose the expense this refund returns" : "“\(payee)”: choose the expense it returns",
+      repository: refunds, accountNames: names, calendar: calendar)
+    refundPicker = picker
+    await picker.load()
+  }
+
+  public func cancelRefundPicker() { refundPicker = nil }
+
+  /// Takes the chosen expense: the refund keeps the original's category. The link is saved with
+  /// the transaction (the repository checks the amount then).
+  public func chooseRefundOriginal(_ option: RefundPickerModel.Option) {
+    draft.refundOfID = option.id
+    draft.refundOfLabel = option.title + " · " + option.occurredAt.formatted(Self.dayFormat)
+    draft.categoryID = option.categoryID
+    draft.categoryChosen = option.categoryID != nil
+    refundPicker = nil
+  }
+
+  public func clearRefundOriginal() {
+    draft.refundOfID = nil
+    draft.refundOfLabel = nil
+  }
+
+  /// The stored link's text ("Booking.com · 12 Oct 2026").
+  private func loadRefundOfLabel() async {
+    guard let refunds = dependencies.refunds, let original = draft.refundOfID,
+      let links = try? await refunds.refundLinks(for: [draft.id]),
+      let info = links.originalByRefund[draft.id], info.originalID == original
+    else { return }
+    draft.refundOfLabel = (info.payee.isEmpty ? "An expense" : info.payee) + " · " + info.occurredAt.formatted(Self.dayFormat)
   }
 
   public var fromID: Account.ID? {
@@ -576,7 +637,8 @@ public final class TransactionEditorModel {
       if crossCurrency, toAmountMinor == nil { issues.append(.receivedAmount) }
     } else {
       if isForeign, chargedMinor == nil { issues.append(.charged) }
-      if effectiveCategoryID == nil { issues.append(.category) }
+      // A refund linked to its original takes the original's category, which may be none.
+      if effectiveCategoryID == nil, refundOfID == nil { issues.append(.category) }
     }
     if let account {
       for line in draft.lines {
@@ -622,6 +684,7 @@ public final class TransactionEditorModel {
       txn.toAccountID = nil
       txn.toAmountMinor = nil
       txn.isRefund = draft.isRefund
+      txn.refundOfID = txn.type == .expense && txn.isRefund ? draft.refundOfID : nil
       if isForeign, let charged = chargedMinor {
         txn.amountMinor = charged
         txn.originalAmountMinor = amountMinor
@@ -657,7 +720,7 @@ public final class TransactionEditorModel {
     do {
       try await dependencies.transactions.save(row.txn, lines: row.lines)
     } catch {
-      errorMessage = "Couldn't save the transaction."
+      errorMessage = error is RefundError ? RefundMessages.text(for: error) : "Couldn't save the transaction."
       return nil
     }
     errorMessage = nil
@@ -722,6 +785,7 @@ public final class TransactionEditorModel {
     mode = .new
     draft.id = UUID()
     draft.stored = nil
+    clearRefundOriginal()
     draft.occurredAt = dependencies.now()
     draft.eventChosen = true
     draft.lines = draft.lines.map { line in
