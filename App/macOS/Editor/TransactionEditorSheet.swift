@@ -366,16 +366,9 @@ struct EditorAccountPicker: View {
   let sections: [AccountPickerSection]
 
   var body: some View {
-    Picker(title, selection: $selection) {
-      if selection == nil {
-        Text("Choose an account").tag(Account.ID?.none)
-      }
-      AccountPickerItems(sections: sections) { account in
-        Text(EditorReference.accountLabel(account)).tag(Optional(account.id))
-      }
-    }
-    .labelsHidden()
-    .frame(maxWidth: .infinity, alignment: .leading)
+    AccountPicker(
+      sections: sections, selection: $selection, placeholder: "Choose an account", width: .infinity,
+      accessibilityTitle: title)
   }
 }
 

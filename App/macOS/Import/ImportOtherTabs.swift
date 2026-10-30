@@ -72,14 +72,27 @@ struct ImportMappingRow: View {
         if item.kind == .fixed {
           Text(item.selectionLabel).lineLimit(1)
         } else {
-          Picker("Map \(item.source)", selection: binding) {
-            ForEach(item.options) { option in
-              Text(option.label).tag(option.choice)
+          if item.kind == .account {
+            // C37: searchable; "Create …" is the picker's none row.
+            AccountPicker(
+              items: item.options.compactMap(\.account),
+              selection: Binding(
+                get: { if case .existing(let id) = item.selection { id } else { nil } },
+                set: { id in binding.wrappedValue = id.map(ImportMappingChoice.existing) ?? .create }),
+              noneTitle: item.options.first { $0.choice == .create }?.label ?? "Create new",
+              width: 240, accessibilityTitle: "Map \(item.source)"
+            )
+            .controlSize(.small)
+          } else {
+            Picker("Map \(item.source)", selection: binding) {
+              ForEach(item.options) { option in
+                Text(option.label).tag(option.choice)
+              }
             }
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(maxWidth: 240, alignment: .leading)
           }
-          .labelsHidden()
-          .controlSize(.small)
-          .frame(maxWidth: 240, alignment: .leading)
         }
         if let note = item.note {
           ImportNoteText(note: note)
@@ -279,19 +292,14 @@ struct ImportReviewCard: View {
       )
       .controlSize(.small)
     case .transfer:
-      Picker(
-        "Other account",
+      AccountPicker(
+        items: item.transferAccounts.map(\.pickerItem),
         selection: Binding(
           get: { item.selectedTransferAccount },
-          set: { if let id = $0 { model.selectTransferAccount(id, forRow: item.id) } })
-      ) {
-        ForEach(item.transferAccounts) { account in
-          Text(account.label).tag(Account.ID?.some(account.id))
-        }
-      }
-      .labelsHidden()
+          set: { if let id = $0 { model.selectTransferAccount(id, forRow: item.id) } }),
+        accessibilityTitle: "Other account"
+      )
       .controlSize(.small)
-      .fixedSize()
     case .debt:
       HStack(spacing: 6) {
         Text(item.debtLabel ?? "Transfer to debt").font(.system(size: 12)).lineLimit(1)

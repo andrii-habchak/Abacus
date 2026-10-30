@@ -256,11 +256,11 @@ struct RuleEditorSheet: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      HStack {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
         Text(draft.isNew ? "New rule" : "Edit rule")
           .font(.system(size: 15, weight: .semibold))
           .accessibilityAddTraits(.isHeader)
-        Spacer()
+        Spacer(minLength: 8)
         if !draft.isNew {
           Button("Delete", systemImage: "trash", role: .destructive) { confirmsDelete = true }
             .labelStyle(.titleAndIcon)
@@ -269,6 +269,7 @@ struct RuleEditorSheet: View {
             .focusable(false)
         }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
 
       section("Condition", "Which transactions should be affected?") { conditions }
       section("Action", "What should happen to these transactions?") { action }
@@ -279,11 +280,17 @@ struct RuleEditorSheet: View {
         Text(updateCaption)
           .font(.caption)
           .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
           .padding(.leading, 20)
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
       rollback
       if let message = model.editorValidation {
-        Text(message).font(.caption).foregroundStyle(.secondary)
+        Text(message)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
       HStack {
         Spacer()
@@ -297,7 +304,7 @@ struct RuleEditorSheet: View {
     }
     .font(.system(size: 13))
     .padding(20)
-    .frame(width: 540)
+    .frame(width: 560, alignment: .topLeading)
     .alert(
       model.confirmation?.title ?? "",
       isPresented: Binding(get: { model.confirmation != nil }, set: { if !$0 { model.cancelConfirmation() } })
@@ -371,18 +378,16 @@ struct RuleEditorSheet: View {
           .textFieldStyle(.roundedBorder)
           .multilineTextAlignment(.trailing)
           .frame(width: 110)
-        Text("in the account's currency").font(.caption).foregroundStyle(.secondary)
+        Text("in the account's currency")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
     if draft.hasAccountCondition {
       conditionRow(isFirst: false, remove: { model.removeAccountCondition() }) {
         Text("Account is")
-        Picker("Account", selection: binding(\.accountID, nil)) {
-          Text("Choose…").tag(Account.ID?.none)
-          AccountPickerItems(sections: model.accountSections) { Text($0.name).tag(Optional($0.id)) }
-        }
-        .labelsHidden()
-        .fixedSize()
+        AccountPicker(sections: model.accountSections, selection: binding(\.accountID, nil), width: 200)
       }
     }
     if draft.canAddCondition {
@@ -446,6 +451,7 @@ struct RuleEditorSheet: View {
           .foregroundStyle(.secondary)
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   // MARK: Roll back
@@ -478,6 +484,8 @@ struct RuleEditorSheet: View {
 
   // MARK: Action
 
+  /// Two lines so nothing overflows the sheet: the action (and the category kind), then the
+  /// target picker (category, account or debt) at full width.
   @ViewBuilder private var action: some View {
     HStack(spacing: 8) {
       Picker("Action", selection: binding(\.action, .category)) {
@@ -487,25 +495,27 @@ struct RuleEditorSheet: View {
       }
       .labelsHidden()
       .fixedSize()
-      switch draft.action {
-      case .category:
+      if draft.action == .category {
         Picker("Category kind", selection: Binding(get: { draft.categoryKind }, set: { model.setCategoryKind($0) })) {
           Text("Expense").tag(CategoryKind.expense)
           Text("Income").tag(CategoryKind.income)
         }
         .labelsHidden()
         .fixedSize()
-        CategoryPicker(
-          items: model.categoryPickerItems(model.categoryOptions(kind: draft.categoryKind), kinds: [draft.categoryKind]),
-          selection: binding(\.categoryID, nil), noneTitle: "Choose…", width: 200)
-      case .transfer:
-        Picker("Account", selection: binding(\.transferAccountID, nil)) {
-          Text("Choose…").tag(Account.ID?.none)
-          AccountPickerItems(sections: model.accountSections) { Text($0.name).tag(Optional($0.id)) }
-        }
-        .labelsHidden()
-      case .debt:
+      }
+      Spacer(minLength: 0)
+    }
+    switch draft.action {
+    case .category:
+      CategoryPicker(
+        items: model.categoryPickerItems(model.categoryOptions(kind: draft.categoryKind), kinds: [draft.categoryKind]),
+        selection: binding(\.categoryID, nil), noneTitle: "Choose…", width: .infinity)
+    case .transfer:
+      AccountPicker(sections: model.accountSections, selection: binding(\.transferAccountID, nil), width: .infinity)
+    case .debt:
+      HStack(spacing: 0) {
         debtPicker
+        Spacer(minLength: 0)
       }
     }
     Text(actionHelp)

@@ -106,16 +106,9 @@ struct ImportFileBar: View {
           Text("Import into")
             .foregroundStyle(ImportPalette.label)
             .fixedSize()
-          Picker("Import into", selection: target) {
-            if model.targetAccountID == nil {
-              Text("Choose account…").tag(Account.ID?.none)
-            }
-            AccountPickerItems(sections: model.targetSections) { account in
-              Text("\(account.name) · \(account.currency.rawValue)").tag(Account.ID?.some(account.id))
-            }
-          }
-          .labelsHidden()
-          .fixedSize()
+          AccountPicker(
+            sections: model.targetSections, selection: target, placeholder: "Choose account…",
+            accessibilityTitle: "Import into")
           if model.targetRemembered {
             Text("remembered")
               .font(.system(size: 11))
