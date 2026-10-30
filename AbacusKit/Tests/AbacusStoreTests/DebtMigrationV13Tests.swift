@@ -24,6 +24,9 @@ struct DebtMigrationV13Tests {
     let database = try DatabaseQueue(configuration: configuration)
     try AbacusDatabase.migrator().migrate(database, upTo: v12)
     try database.write { db in
+      // The test reads this database with the current model before v13: v14's column is added early.
+      try db.execute(
+        sql: #"ALTER TABLE "txns" ADD COLUMN "isBalanceCorrection" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
       func account(_ id: Int, _ name: String, _ currency: String, _ kind: String, opening: Int64 = 0, archived: Bool = false) throws {
         try db.execute(
           sql: """

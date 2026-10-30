@@ -57,6 +57,7 @@ struct DashboardDebtsCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .dashboardCard()
     .confirmDebtDelete($deleteTarget) { id in Task { await debts.deleteDebt(id) } }
+    .settlePromptSheet(model: debts)
   }
 
   /// One person, compact enough for a half-width card: the name on the left, ONE main figure (the

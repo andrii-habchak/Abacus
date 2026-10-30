@@ -766,7 +766,87 @@ public final class DebtsModel {
     }
   }
 
+  // MARK: Settle prompt (R-DEBT-5, R-DEBT-17, C29)
+
+  /// One linked account of the debt that is not archived yet, with the checkbox of the prompt.
+  public struct SettleAccountChoice: Identifiable, Equatable, Sendable {
+    public let id: Account.ID
+    public let name: String
+    public let role: DebtAccountRole
+    /// The account's balance in its own currency ("€310.00"); a settled debt can hold accounts
+    /// with a balance (they are archived as is).
+    public let balanceText: String
+    public var archive: Bool
+
+    /// "virtual" / "external" for the row's caption.
+    public var roleText: String { role == .virtual ? "Virtual account" : "External account" }
+  }
+
+  /// "Archive the related accounts?" asked when a debt with non-archived linked accounts is
+  /// marked settled.
+  public struct SettlePrompt: Identifiable, Equatable, Sendable {
+    public let debtID: Debt.ID
+    public let personName: String
+    public var accounts: [SettleAccountChoice]
+    public var id: Debt.ID { debtID }
+  }
+
+  public private(set) var settlePrompt: SettlePrompt?
+
+  /// "Mark settled" in the Debts tab and the row / widget menus (R-DEBT-5, C29). A debt with no
+  /// non-archived linked account is settled at once; otherwise `settlePrompt` asks which of them to
+  /// archive: virtual accounts ticked by default (they exist only for this person), external ones
+  /// not (they may be statements still imported). Nothing changes until `confirmSettle`.
+  public func requestSettle(_ id: Debt.ID) async {
+    await ensureLoaded()
+    guard let debt = book.debts.first(where: { $0.id == id }), !debt.isSettled, canSettle(id) else { return }
+    let roles = Dictionary(book.links(of: id).map { ($0.accountID, $0.role) }, uniquingKeysWith: { first, _ in first })
+    let open = book.accounts(of: id).filter { !$0.isArchived }
+    guard !open.isEmpty else { return await setSettled(id, true) }
+    let balances = Calc.balances(
+      accounts: open, txns: book.txns, through: dependencies.today(), calendar: format.calendar)
+    let choices = open.map { account -> SettleAccountChoice in
+      let role = roles[account.id] ?? .external
+      let balance = balances[account.id] ?? .zero(account.currency)
+      return SettleAccountChoice(
+        id: account.id, name: account.name, role: role, balanceText: format.money(balance), archive: role == .virtual)
+    }
+    settlePrompt = SettlePrompt(
+      debtID: id, personName: debt.personName.trimmingCharacters(in: .whitespacesAndNewlines), accounts: choices)
+  }
+
+  public func setArchiveOnSettle(_ accountID: Account.ID, _ archive: Bool) {
+    guard let index = settlePrompt?.accounts.firstIndex(where: { $0.id == accountID }) else { return }
+    settlePrompt?.accounts[index].archive = archive
+  }
+
+  public func cancelSettlePrompt() { settlePrompt = nil }
+
+  /// "Settle": marks the debt settled and archives the ticked accounts **as they are**, with no
+  /// compensation and no forgive record: the debt is already at zero in every currency, so an
+  /// account with a balance of its own keeps it in its (archived) history. Reopening the debt
+  /// later does not unarchive anything.
+  public func confirmSettle() async {
+    guard let prompt = settlePrompt, var debt = book.debts.first(where: { $0.id == prompt.debtID }) else {
+      settlePrompt = nil
+      return
+    }
+    settlePrompt = nil
+    guard canSettle(debt.id) else { return }
+    debt.isSettled = true
+    let archive = prompt.accounts.filter(\.archive).map(\.id)
+    await perform {
+      try await self.dependencies.debts.save(debt)
+      for id in archive { try await self.dependencies.accounts.setArchived(id, true) }
+    }
+    if people.isEmpty || !people.contains(where: { $0.id == debt.personKey }) {
+      filter = .settled
+      selectedPerson = debt.personKey
+    }
+  }
+
   /// R-DEBT-5: settled (zero balances only) moves the debt to Settled; unsettle moves it back.
+  /// Direct, without the prompt: the UI's "Mark settled" goes through `requestSettle`.
   public func setSettled(_ id: Debt.ID, _ settled: Bool) async {
     await ensureLoaded()
     guard var debt = book.debts.first(where: { $0.id == id }) else { return }

@@ -22,6 +22,28 @@ struct BalanceCorrectionStoreTests {
     #expect(try await f.txns.transaction(F.id(101))?.txn.isBalanceCorrection == false)
   }
 
+  @Test("R-ACC-4: v14 adds the column to a v13 database; existing transactions are not corrections; running it again is a no-op")
+  func migration() throws {
+    let queue = try DatabaseQueue()
+    try AbacusDatabase.migrator().migrate(queue, upTo: "v13: accounts drive debts")
+    try queue.write { db in
+      let before = try db.columns(in: "txns").map(\.name)
+      #expect(!before.contains("isBalanceCorrection"))
+      try db.execute(
+        sql: #"INSERT INTO "accounts" ("id", "name", "currency", "kind", "openingBalanceMinor", "openingDate") VALUES ('a1', 'A', 'PLN', 'bank', 0, '2026-01-01 00:00:00.000')"#)
+      try db.execute(
+        sql: #"INSERT INTO "txns" ("id", "type", "occurredAt", "accountID", "amountMinor", "createdAt") VALUES ('t1', 'expense', '2026-03-01 12:00:00.000', 'a1', 100, '2026-03-01 12:00:00.000')"#)
+    }
+    try AbacusDatabase.migrator().migrate(queue)
+    try AbacusDatabase.migrator().migrate(queue)
+    try queue.read { db in
+      let after = try db.columns(in: "txns").map(\.name)
+      let flag = try Int.fetchOne(db, sql: #"SELECT "isBalanceCorrection" FROM "txns" WHERE "id" = 't1'"#)
+      #expect(after.contains("isBalanceCorrection"))
+      #expect(flag == 0)
+    }
+  }
+
   @Test("R-ACC-4: the SQL spending report leaves a correction out")
   func spendingQuery() async throws {
     let f = try F()
