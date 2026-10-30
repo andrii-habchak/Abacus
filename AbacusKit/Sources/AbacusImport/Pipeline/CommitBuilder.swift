@@ -213,6 +213,8 @@ struct CommitBuilder {
         // R-IMP-PKO-2: the settled amount wins, the purchase day stays, the booking day is kept.
         hold.amountMinor = settled.amountMinor
         hold.isPendingAtBank = false
+        // The settled payment is money out (C16: older builds could store a hold as a refund).
+        hold.isRefund = false
         if let booked = settled.bookedDay, booked != Day(hold.occurredAt, calendar: calendar) {
           hold.bookedDay = booked.string
         }

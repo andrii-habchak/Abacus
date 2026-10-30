@@ -161,7 +161,12 @@ public struct PKOParser: ImportParser {
     var counterAmount: Int64?
     var transferHalf: TransferHalf?
     switch type {
-    case .hold, .cardPayment, .webPayment:
+    case .hold:
+      // A hold is money the bank has blocked for a card payment: always money out, whatever
+      // sign the export gives the amount (C16). PKO has no pending credit; a card refund
+      // arrives as a settled `Płatność kartą` with a positive amount.
+      kind = .expense
+    case .cardPayment, .webPayment:
       kind = .expense
       isRefund = isCredit
     case .outgoingTransfer, .incomingTransfer, .phoneTransfer:

@@ -134,7 +134,9 @@ struct RowAnalyzer {
       if source == .pko, row.kind == .expense, !row.isRefund, !row.isPending,
         case .existing(let accountID) = ref(row.account)
       {
-        for hold in pending where hold.accountID == accountID && hold.type == .expense && !hold.isRefund {
+        // A hold stored by a build before C16 may carry `isRefund` (a hold amount without a
+        // minus sign); it is still a hold of money out and the settlement repairs it.
+        for hold in pending where hold.accountID == accountID && hold.type == .expense {
           let gap = abs(rowDay.distance(to: Day(hold.occurredAt, calendar: calendar), calendar: calendar))
           guard gap <= PendingSettlement.dayWindow,
             PendingSettlement.amountMatches(pending: hold.amountMinor, settled: row.amountMinor),

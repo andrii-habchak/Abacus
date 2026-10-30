@@ -35,7 +35,7 @@ they are first imported._
 | Przelew na telefon przychodz. zew. | BLIK phone transfer | expense/income by sign |
 | Wypłata w bankomacie - kod mobilny | ATM withdrawal | transfer to a cash account (user picks once; remembered) |
 | WYMIANA W KANTORZE - UZNANIE | in-bank currency exchange (credit side) | transfer from the PKO currency account (pair with its export) |
-| Blokada | pending card hold | expense marked *pending*, upgraded when it settles (`R-IMP-PKO-2`) |
+| Blokada | pending card hold | expense marked *pending*, upgraded when it settles (`R-IMP-PKO-2`); always money out, whatever the amount's sign (C16) |
 
 Unknown types → *needs review*, sign decides expense/income.
 
