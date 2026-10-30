@@ -161,6 +161,41 @@ Answers "who owes me, whom do I owe, and how much".
   person's total converted to the display currency.
   Imports that would create a debt account create/find a debt instead.
 
+**v1.9 — accounts drive debts (D59–D61).** `R-DEBT-16…22` supersede the parts of `R-DEBT-1`, `-3`, `-9`,
+`-11` that tie a debt to one currency and that make a payment a record leg. Where they conflict, v1.9 wins.
+- `R-DEBT-16` A debt is **one person** (name, optional due date, note, "Count in net worth", settled)
+  and has **no currency**; there is no separate Person entity (D60). The name is editable (rename);
+  autocomplete over existing names is offered in the import, convert and rule dialogs.
+- `R-DEBT-17` A debt has **many linked accounts**; an account belongs to at most one debt. Two kinds,
+  both *the person's* accounts, never my own: **external** (the person's real account whose statement
+  I import, e.g. Revolut Anna) and **virtual** (a debt-kind account I keep for the person, no statement;
+  created from the debt dialog with "Create account"). The new/edit dialog has an account search.
+- `R-DEBT-18` **Balance** per currency = signed sum of the transactions on the linked accounts (money
+  into the person's account = they owe me more; out = they repaid) + the account's opening balance +
+  manual records (forgive, adjustments; each with its own currency). Never netted across currencies;
+  the display-currency switch adds a converted total. Importing a statement of a linked account
+  updates the debt with no per-row action. Linked accounts' balances are counted in net worth only
+  through the debt (flag on), never twice.
+- `R-DEBT-19` **Payments from my own accounts** (PKO → Anna) are an ordinary **transfer** between my
+  account and the person's virtual account, visible in the Transactions list under both accounts.
+  "Convert to debt record" becomes "Transfer to debt account…"; the import row action "Debt…" and the
+  rule action "Record as debt for <person>" produce the same transfer; a bank row for a payment already
+  entered by hand is matched (same amount, direction, ±3 days) and shown as Already imported.
+  Existing C17 records and legs are migrated to such transfers; their fingerprints stay on the
+  transaction of my own account, so a repeated import never duplicates them.
+- `R-DEBT-20` A hint (not an automatic merge) when two accounts of one debt show the same amount in a
+  short window (the same payment on an external and a virtual account).
+- `R-DEBT-21` **Debts UI.** Header: "Edit debt" and "Show transactions" (replace "Add currency");
+  right-click menu on a debt in the list and on the dashboard widget: Edit, Show transactions, Mark
+  settled, Delete; per-account breakdown (account, currency, balance) and an opening balance per
+  account; a hint for a linked account with no transactions in the last period. **Sign convention
+  (display only):** money they owe me is shown **negative and red** ("you lent"), money I owe
+  **positive and green** ("you borrowed"), in the Debts tab, its header and the dashboard widget;
+  stored balances keep their sign. "Count in net worth" is **off by default for new debts**.
+- `R-DEBT-22` **Transactions filter.** The Transactions list has a debt filter; selecting a debt, or
+  "Show transactions" on a debt, selects all its linked accounts as removable chips (account filter
+  alongside), so any account can be un-/selected.
+
 ### 3.7 Exchange rates — `R-FX`
 - `R-FX-1` **Automatic:** on launch and then daily (and on demand via "Refresh rates") the app
   requests the latest official NBU rates for the 4 currencies from
@@ -404,6 +439,7 @@ No open questions.
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
 | 1.7 | 2026-10-27 | Debts (`R-DEBT`, owner interview, D51). |
+| 1.9 | 2026-10-30 | Accounts drive debts: one debt per person without currency, linked external/virtual accounts, transfers instead of record legs, edit/rename, debt filter on Transactions, sign display, widget (`R-DEBT-16…22`, D59–D61). |
 | 1.8 | 2026-10-30 | Debts linked to bank transactions: one payment one transaction, import action, convert, rule action, matching, several accounts, currency switch (`R-DEBT-9…15`, D58). |
 | 1.6 | 2026-10-27 | Owner review of 1.1.0: budget total + currency back with unallocated (`R-BUD-1`, `R-MGMT-3`); built-in Uncategorised, sorting/search/drag-to-nest for categories (`R-MGMT-8`); account groups (`R-MGMT-9`); form button placement (`R-MGMT-10`); page search (`R-MGMT-11`); rules: amount-only condition, rollback; income donut, income vs expenses, widget reorder (`R-HOME-6`); currency switch order and Budget page; debts: design pending (owner interview). |
 | 1.5 | 2026-10-27 | Owner review of v1.0.0: per-category budget currencies, no separate total (`R-BUD-1/2`, `R-MGMT-3`); Saldo-like rules with amount conditions and a transfer action (`R-IMP-8`, `R-MGMT-6`); colours for categories, accounts, events (`R-MGMT-7`, `R-EVT-1`); click-only drill-down (`R-HOME-3`); budget edit button (`R-HOME-2`); currency switch only where it applies (`R-HOME-4`). |

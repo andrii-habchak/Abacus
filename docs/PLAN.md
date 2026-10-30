@@ -148,6 +148,21 @@ Wave 2:
 - [x] **C18 Debts view** (merged 2026-10-30) — `R-DEBT-14/15` (D58).
 - [x] **Release 1.2.0** — test build only; superseded by 1.2.1.
 
+### Phase 3f — Accounts drive debts (2026-10-30, TA v1.9, D59–D61)
+Owner paths per lane (no edits outside them; contract changes through the orchestrator).
+- [ ] **C19 Debt core** (first, alone) — `R-DEBT-16…19`, `-20`. Owns `AbacusDomain/Model/Debts.swift`,
+  `Protocols/DebtRepository.swift`, `AbacusStore/Migrations/` (v13), `AbacusStore/Repositories/Debt*`,
+  `DebtCalc` in `AbacusFeatures`' calculators, tests. Migration v13: debt–account links, record
+  currency, merge debts per person, re-link `sourceAccountID`, records/legs → transfers to a virtual
+  account, "count in net worth" default. Exposes `DebtRepository` (link/unlink accounts, rename,
+  create virtual account, transfer-to-debt), balance calculator per debt, duplicate-hint calculator.
+- [ ] **C20 Debts UI + widget** (after C19) — `R-DEBT-21`. Owns `AbacusFeatures/Debts/`, `App/macOS/Debts/`.
+- [ ] **C21 Transactions debt filter** (after C19) — `R-DEBT-22`. Owns `AbacusFeatures/Transactions/` filter
+  files, `App/macOS/Transactions/` filter UI; "Show transactions" navigation is a closure on the Debts
+  side handed in by the orchestrator.
+- [ ] **C22 Import, rules, convert** (after C19) — `R-DEBT-19`. Owns `AbacusImport/`, `AbacusFeatures/Import/`,
+  `Rules/`, `DebtLinkDraft`/`DebtLinkSheet`, the import/rules store code of C17.
+
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
 - [x] **S1 Stability and performance** (merged 2026-10-27) — crashes (binding force-unwrap, Escape), hangs, reload storms, timing on owner-size data.
 - [x] **S2 Accounts and categories lists** (merged 2026-10-27) — native outline drag and drop, sheet editors, split New account button, new-tx prefill for accounts.
