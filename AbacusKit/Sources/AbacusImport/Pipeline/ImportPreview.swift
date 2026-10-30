@@ -403,7 +403,8 @@ private struct Resolver {
 
   init(preview: ImportPreview) {
     self.preview = preview
-    self.matcher = RuleMatcher(rules: preview.context.rules, categories: preview.context.categories, accounts: preview.context.accounts)
+    self.matcher = RuleMatcher(rules: preview.context.rules, categories: preview.context.categories, accounts: preview.context.accounts,
+      debts: preview.context.debts)
   }
 
   var parsed: [NormalizedRow] { preview.parsedRows }

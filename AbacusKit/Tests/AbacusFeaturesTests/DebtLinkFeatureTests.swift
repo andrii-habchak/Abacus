@@ -194,21 +194,24 @@ struct DebtLinkFeatureTests {
 
   // MARK: Rules
 
-  @Test("R-DEBT-12: the rule editor's debt action needs a person and reads as Transfer to debt of <person>")
+  @Test("R-DEBT-12, C32: the rule editor's debt action needs a picked debt and reads as Transfer to debt · <person>")
   func ruleEditorDebtAction() async throws {
-    let model = RulesModel(dependencies: ManageFixture.dependencies(ManagePreviewStore.sample()))
+    let database = try AbacusDatabase.open(at: nil)
+    var dependencies = ManageFixture.dependencies(ManagePreviewStore.sample())
+    dependencies.debts = SQLiteDebtRepository(database: database, calendar: Self.calendar)
+    let model = RulesModel(dependencies: dependencies)
     await model.load()
     model.newRule()
     model.editor?.pattern = "salary"
     model.editor?.action = .debt
-    #expect(model.editorValidation == "Enter the person's name.")
-    model.editor?.debtPersonName = "  Ann "
+    #expect(model.editorValidation == "Choose a debt.")
+    await model.createDebt(named: "  Ann ")
     #expect(model.editorValidation == nil)
     let rule = try #require(model.editorRule)
     #expect(rule.action == .debt)
     #expect(rule.debtPersonName == "Ann")
     #expect(rule.categoryID == nil && rule.transferAccountID == nil)
-    #expect(model.actionText(rule) == "Transfer to debt of Ann")
+    #expect(model.actionText(rule) == "Transfer to debt · Ann")
     await model.loadEditorTransactions()
     let changes = try #require(model.editorChanges)
     #expect(!changes.isEmpty)
