@@ -7,10 +7,10 @@ import Testing
 
 @testable import AbacusFeatures
 
-/// C18: a person's records on several accounts (R-DEBT-14) and the display-currency switch on
-/// the Debts tab (R-DEBT-15). Synthetic data only (`DebtSample`, `PreviewData`).
+/// C18 on the C19 core: a person's linked accounts (R-DEBT-17, R-DEBT-18) and the display-currency
+/// switch on the Debts tab (R-DEBT-15). Synthetic data only (`DebtSample`, `PreviewData`).
 @MainActor
-@Suite("Debts: several accounts and the currency switch (C18)")
+@Suite("Debts: linked accounts and the currency switch (C18, C19)")
 struct DebtsCurrencyTests {
   nonisolated static let rates = RateTable(rates: PreviewData.fxRates, today: PreviewData.today)
 
@@ -29,83 +29,82 @@ struct DebtsCurrencyTests {
     model.selectedPerson = try #require(model.people.first { $0.name == name }).id
   }
 
-  @Test("Calc.debtAccountFlows: money out and in per account, in the account's currency; no-account records left out")
+  @Test("R-DEBT-18: Calc.debtAccountFlows — money out and in per linked account, in its currency; other debts' accounts left out")
   func accountFlowsCalc() {
-    let euro = Debt(personName: "Pat Test", currency: .EUR)
-    let zloty = Debt(personName: "Pat Test", currency: .PLN)
-    let other = Debt(personName: "Other", currency: .EUR)
-    let a = UUID()
-    let b = UUID()
-    func entry(_ debt: Debt, _ kind: DebtRecordKind, _ amount: Int64, leg: (UUID, Int64)?) -> DebtRecordEntry {
-      let record = DebtRecord(debtID: debt.id, kind: kind, day: "2026-10-01", amountMinor: amount)
-      let txn = leg.map { Txn(type: .transfer, occurredAt: Date(), accountID: $0.0, amountMinor: $0.1) }
-      return DebtRecordEntry(record: record, leg: txn)
+    let pat = Debt(personName: "Pat Test")
+    let other = Debt(personName: "Other")
+    let day = Date(timeIntervalSince1970: 1_790_000_000)
+    let virtual = Account(name: "Pat EUR", currency: .EUR, kind: .debt, openingDate: day)
+    let external = Account(name: "Pat bank", currency: .PLN, kind: .bank, openingDate: day)
+    let foreign = Account(name: "Other EUR", currency: .EUR, kind: .debt, openingDate: day)
+    let mine = UUID()
+    func transfer(from: UUID, to: UUID, _ amount: Int64, received: Int64? = nil) -> TxnWithLines {
+      TxnWithLines(
+        txn: Txn(type: .transfer, occurredAt: day, accountID: from, amountMinor: amount, toAccountID: to, toAmountMinor: received),
+        lines: [])
     }
     let book = DebtBook(
-      debts: [euro, zloty, other],
-      entries: [
-        entry(euro, .lent, 100_00, leg: (a, 100_00)),
-        entry(euro, .lent, 20_00, leg: (b, 900_00)),  // EUR debt paid from a UAH account
-        entry(euro, .theyRepaid, 30_00, leg: (a, 30_00)),
-        entry(zloty, .borrowed, 50_00, leg: (b, 480_00)),
-        entry(euro, .forgaveThem, 10_00, leg: nil),
-        entry(other, .lent, 999_00, leg: (a, 999_00)),
+      debts: [pat, other],
+      links: [
+        DebtAccountLink(accountID: virtual.id, debtID: pat.id, role: .virtual),
+        DebtAccountLink(accountID: external.id, debtID: pat.id, role: .external),
+        DebtAccountLink(accountID: foreign.id, debtID: other.id, role: .virtual),
+      ],
+      accounts: [virtual, external, foreign],
+      txns: [
+        transfer(from: mine, to: virtual.id, 100_00),
+        transfer(from: mine, to: virtual.id, 900_00, received: 20_00),  // paid from a UAH account
+        transfer(from: virtual.id, to: mine, 30_00),
+        transfer(from: mine, to: external.id, 480_00),
+        transfer(from: mine, to: foreign.id, 999_00),
       ])
-    let flows = Calc.debtAccountFlows(book, debtIDs: [euro.id, zloty.id])
-    #expect(flows.map(\.accountID) == [a, b])
-    #expect(flows[0].outMinor == 100_00 && flows[0].inMinor == 30_00 && flows[0].records == 2)
-    #expect(flows[1].outMinor == 900_00 && flows[1].inMinor == 480_00 && flows[1].records == 2)
+    let flows = Calc.debtAccountFlows(book, debtIDs: [pat.id])
+    #expect(flows.map(\.accountID) == [virtual.id, external.id])
+    #expect(flows[0].inMinor == 120_00 && flows[0].outMinor == 30_00 && flows[0].transactions == 3 && flows[0].role == .virtual)
+    #expect(flows[1].inMinor == 480_00 && flows[1].outMinor == 0 && flows[1].transactions == 1 && flows[1].role == .external)
   }
 
-  @Test("R-DEBT-14: the person's detail lists every account used, out/in in the account's currency, and each record's account")
+  @Test("R-DEBT-17, R-DEBT-18: the person's detail lists every linked account with money out/in in the account's currency")
   func perAccountSummary() async throws {
     let model = try await Self.loadedModel()
     try Self.select("Alex Example", in: model)
     let flows = model.selectedAccountFlows
-    // EUR debt via Revolut and Monobank (UAH), PLN debt via PKO.
-    #expect(Set(flows.map(\.id)) == [PreviewData.revolutEUR.id, PreviewData.monobank.id, PreviewData.pkoPersonal.id])
+    // Two virtual accounts: EUR (paid from Revolut and Monobank) and PLN.
+    #expect(Set(flows.map(\.id)) == [DebtSample.alexEUR.id, DebtSample.alexPLN.id])
     #expect(flows.map(\.name) == flows.map(\.name).sorted { $0.localizedStandardCompare($1) == .orderedAscending })
     let format = model.format
-    let revolut = try #require(flows.first { $0.id == PreviewData.revolutEUR.id })
-    #expect(revolut.currency == .EUR)
-    #expect(revolut.outText == "−" + format.money(Money(minorUnits: 380_00, currency: .EUR)))
-    #expect(revolut.inText == "+" + format.money(Money(minorUnits: 120_00, currency: .EUR)))
-    #expect(revolut.recordsText == "3 records")
-    let mono = try #require(flows.first { $0.id == PreviewData.monobank.id })
-    #expect(mono.currency == .UAH && mono.inText == nil)
-    #expect(mono.outText == "−" + format.money(Money(minorUnits: 2_400_00, currency: .UAH)))
-    let pko = try #require(flows.first { $0.id == PreviewData.pkoPersonal.id })
-    #expect(pko.outText == nil && pko.inText == "+" + format.money(Money(minorUnits: 250_00, currency: .PLN)))
+    let eur = try #require(flows.first { $0.id == DebtSample.alexEUR.id })
+    #expect(eur.currency == .EUR)
+    #expect(eur.inText == "+" + format.money(Money(minorUnits: 430_00, currency: .EUR)))  // 300 + 80 + 50
+    #expect(eur.outText == "−" + format.money(Money(minorUnits: 120_00, currency: .EUR)))
+    #expect(eur.recordsText == "4 transactions · virtual")
+    let pln = try #require(flows.first { $0.id == DebtSample.alexPLN.id })
+    #expect(pln.inText == nil && pln.outText == "−" + format.money(Money(minorUnits: 250_00, currency: .PLN)))
 
-    // Every record names its account; the EUR debt shows both of its accounts.
-    let euro = try #require(model.selectedDetails.first { $0.debt.currency == .EUR })
-    #expect(euro.records.contains { $0.accountText.hasPrefix(PreviewData.monobank.name) })
-    #expect(euro.records.contains { $0.accountText.hasPrefix(PreviewData.revolutEUR.name) })
-
-    // A record without an account says so and is not in the account summary.
+    // Maria: a virtual account with payments and an external account without any yet.
     try Self.select("Maria Sample", in: model)
-    #expect(model.selectedDetails.flatMap(\.records).contains { $0.accountText == "No account" })
-    #expect(model.selectedAccountFlows.map(\.id) == [PreviewData.monobank.id])
+    let maria = model.selectedAccountFlows
+    #expect(Set(maria.map(\.id)) == [DebtSample.mariaUAH.id, DebtSample.mariaBank.id])
+    let bank = try #require(maria.first { $0.id == DebtSample.mariaBank.id })
+    #expect(bank.recordsText == "0 transactions · external" && bank.inText == nil && bank.outText == nil)
+    // Manual records name no account.
+    #expect(model.selectedDetails.flatMap(\.records).contains { $0.accountText == "Manual record" && $0.kindTitle.hasPrefix("Forgave") })
   }
 
-  @Test("R-DEBT-14: the record form offers every open account, grouped; a cross-currency record saves both amounts")
-  func recordFormAccounts() async throws {
+  @Test("R-DEBT-18: one detail per currency of the debt; a manual record keeps its own currency")
+  func detailsPerCurrency() async throws {
     let model = try await Self.loadedModel()
-    model.newRecord(debtID: DebtSample.alex.id)
-    let offered = model.accountSections.flatMap(\.accounts).map(\.id)
-    let open = model.accounts.filter { !$0.isArchived }.map(\.id)
-    #expect(Set(offered) == Set(open) && offered.count == open.count)
-    #expect(model.accountSections.contains { $0.group != nil })
-    // EUR debt from the PLN account.
+    try Self.select("Alex Example", in: model)
+    #expect(model.selectedDetails.map(\.currency) == [.EUR, .PLN])
+    model.newRecord(debtID: DebtSample.alex.id, kind: .forgaveThem, currency: .USD)
+    #expect(model.recordDraft?.currency == .USD)
     model.recordDraft?.amount = "10"
-    model.recordDraft?.accountID = PreviewData.pkoPersonal.id
-    #expect(model.recordNeedsAccountAmount)
-    model.recordDraft?.accountAmount = "43"
     await model.saveRecordDraft()
     #expect(model.recordDraft == nil)
-    try Self.select("Alex Example", in: model)
-    let pko = try #require(model.selectedAccountFlows.first { $0.id == PreviewData.pkoPersonal.id })
-    #expect(pko.outText == "−" + model.format.money(Money(minorUnits: 43_00, currency: .PLN)))
+    let record = try #require(model.book.records(of: DebtSample.alex.id).first)
+    #expect(record.currency == .USD && record.amountMinor == 10_00)
+    #expect(model.selectedDetails.map(\.currency) == [.EUR, .USD, .PLN])
+    #expect(model.selectedDetails.first { $0.currency == .USD }?.balance.money == Money(minorUnits: -10_00, currency: .USD))
   }
 
   @Test("R-DEBT-15: a person's total is their open balances converted to the display currency at today's rate")

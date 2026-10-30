@@ -105,7 +105,7 @@ struct DefaultCategoriesTests {
     #expect(limits.contains { $0.categoryID == groceries.id })
     let ids = Set(list.map(\.id))
     #expect(limits.allSatisfy { ids.contains($0.categoryID) })
-    #expect(s.transactions.reference.accounts.count == PreviewData.accounts.count)
+    #expect(s.transactions.reference.accounts.count == PreviewData.accounts.count + DebtSample.accounts.count)
   }
 
   @Test("R-CAT-4 sample categories keep their ids on an empty database, and never reuse a taken id")

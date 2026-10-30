@@ -1,60 +1,76 @@
 import Foundation
 
-/// The money a debt record moves on my account (R-DEBT-3): the account and the amount in the
-/// account's currency (equal to the record's amount when the currencies match).
-public struct DebtLegInput: Hashable, Sendable {
-  public var accountID: Account.ID
-  public var amountMinor: Int64
-
-  public init(accountID: Account.ID, amountMinor: Int64) {
-    self.accountID = accountID
-    self.amountMinor = amountMinor
-  }
-}
-
 public enum DebtRepositoryError: Error, Equatable, Sendable {
-  /// R-DEBT-1: a debt's currency is fixed once it has records.
-  case currencyLocked
-  /// A leg needs a money-moving record kind and a positive amount on an existing account.
-  case invalidLeg
-  /// Only an expense or income that is not a leg yet can become a debt record (R-DEBT-11).
+  /// R-DEBT-16: another debt already has this person (the id of that debt).
+  case personExists(Debt.ID)
+  /// R-DEBT-17: the account already belongs to a debt (the id of that debt).
+  case accountLinkedElsewhere(Debt.ID)
+  /// A record needs a positive-or-zero amount and a valid day.
+  case invalidRecord
+  /// Only an expense or income that is not yet a transfer can be turned into a transfer to a
+  /// debt account (R-DEBT-19), and its own account must not belong to a debt.
   case notLinkable
-  /// The debt's currency differs from the account's and no amount in it was given.
+  /// The person's account is in another currency than the transaction's and no amount in it was
+  /// given or known (the transaction's original amount).
   case amountUnknown
+  /// The target account is not a linked account of the debt.
+  case notDebtAccount
+  /// The transaction is not a transfer between an own account and a debt account.
+  case notDebtTransfer
 }
 
-/// Turns an existing transaction into a debt record's leg (R-DEBT-9…12, docs/status/C17.md):
-/// one payment, one transaction. Used by the import row action, rules and "Convert to debt
-/// record".
+/// Where a payment of mine goes (R-DEBT-19): the person's debt and the account of theirs that
+/// takes it. Input of `DebtRepository.transferToDebt`, of the import row action, rules and
+/// "Transfer to debt account…".
 public struct DebtLink: Hashable, Sendable {
+  /// The person; used when `debtID` is nil. A missing debt is created.
   public var personName: String
-  /// The debt to add the record to; nil = the person's debt in `currency` (an unsettled one
-  /// first), created when there is none.
+  /// The debt (wins over `personName`); nil = the person's debt by name.
   public var debtID: Debt.ID?
-  /// The debt's currency (used when `debtID` is nil).
-  public var currency: Currency
-  /// nil = suggested from the money's direction and the debt's balance at that moment
-  /// (`DebtRecordKind.suggested`).
-  public var kind: DebtRecordKind?
-  /// In the debt's currency; nil = the transaction's amount (same currency only).
+  /// The debt's linked account that takes or gives the money; nil = the debt's **virtual**
+  /// account in `currency` (created when there is none, R-DEBT-17).
+  public var accountID: Account.ID?
+  /// The currency of the virtual account to find or create (used when `accountID` is nil);
+  /// the transaction's account currency when nil.
+  public var currency: Currency?
+  /// The amount on the person's side, in that account's currency; nil = the transaction's amount
+  /// (same currency), else the transaction's original amount when it is in that currency.
   public var amountMinor: Int64?
-  /// "Count as expense" / "Count as income" where the kind offers it (R-DEBT-4); off by default.
-  public var countsInReports: Bool
 
   public init(
-    personName: String, debtID: Debt.ID? = nil, currency: Currency, kind: DebtRecordKind? = nil,
-    amountMinor: Int64? = nil, countsInReports: Bool = false
+    personName: String, debtID: Debt.ID? = nil, accountID: Account.ID? = nil, currency: Currency? = nil,
+    amountMinor: Int64? = nil
   ) {
     self.personName = personName
     self.debtID = debtID
+    self.accountID = accountID
     self.currency = currency
-    self.kind = kind
     self.amountMinor = amountMinor
-    self.countsInReports = countsInReports
   }
 }
 
-/// A transaction an import commit turns into a debt record's leg right after inserting it.
+/// What `transferToDebt` did.
+public struct DebtTransferResult: Hashable, Sendable {
+  public let txnID: Txn.ID
+  public let debtID: Debt.ID
+  /// The person's account on the other side of the transfer.
+  public let accountID: Account.ID
+  /// The debt was created by this call.
+  public let createdDebt: Bool
+  /// The virtual account was created by this call.
+  public let createdAccount: Bool
+
+  public init(txnID: Txn.ID, debtID: Debt.ID, accountID: Account.ID, createdDebt: Bool, createdAccount: Bool) {
+    self.txnID = txnID
+    self.debtID = debtID
+    self.accountID = accountID
+    self.createdDebt = createdDebt
+    self.createdAccount = createdAccount
+  }
+}
+
+/// A transaction an import commit turns into a transfer to a debt account right after
+/// inserting it.
 public struct ImportDebtLink: Hashable, Sendable {
   public var txnID: Txn.ID
   public var link: DebtLink
@@ -65,33 +81,67 @@ public struct ImportDebtLink: Hashable, Sendable {
   }
 }
 
-/// Debts and their records (R-DEBT). Saving a record writes its leg — or removes it — in the
-/// same database transaction; deleting a record or a debt deletes the legs.
+/// Debts, their linked accounts and manual records (R-DEBT-16…20, docs/status/C19.md).
+///
+/// A payment is **not** a record: it is a transaction on a linked account (R-DEBT-18, R-DEBT-19).
+/// Records are manual only (forgive, adjustments).
 public protocol DebtRepository: Sendable {
-  /// Every debt with every record and its leg.
+  /// Every debt with its links, linked accounts, their transactions and manual records.
   func book() async throws -> DebtBook
-  /// Inserts or updates. Throws `currencyLocked` when the currency changes on a debt with records.
+
+  /// Inserts or updates (create, edit, rename: R-DEBT-16). Throws `personExists` when another
+  /// debt already has this person (key match).
   func save(_ debt: Debt) async throws
-  /// Deletes the debt, its records and their legs.
+  /// Deletes the debt, its manual records and its links. Its accounts and their transactions stay
+  /// (they are ordinary accounts again), so no balance of mine changes.
   func delete(_ id: Debt.ID) async throws
-  /// Inserts or updates a record. `leg` nil (or a kind that moves no money) = no money moved
-  /// through my accounts. A flagged record (`reportKind`) without a category gets the "Debts"
-  /// category of that kind (found or created).
-  func save(_ record: DebtRecord, leg: DebtLegInput?) async throws
-  /// Deletes the record and its leg.
+
+  /// Inserts or updates a manual record. A flagged record (`reportKind`) without a category gets
+  /// the "Debts" category of that kind (found or created).
+  func save(_ record: DebtRecord) async throws
   func deleteRecord(_ id: DebtRecord.ID) async throws
-  /// R-DEBT-11: the transaction becomes the leg of a new record in place (same id, date,
-  /// description, attached records, fingerprints, import batch); no second transaction.
-  /// Throws `notLinkable` for transfers and legs, `amountUnknown` across currencies without an
-  /// amount.
+
+  /// R-DEBT-17: links an existing account to the debt. Throws `accountLinkedElsewhere` when it
+  /// belongs to another debt; linking it again to the same debt only updates the role.
+  func link(_ accountID: Account.ID, to debtID: Debt.ID, role: DebtAccountRole) async throws
+  /// Removes the link; the account and its transactions stay. No-op for an account without link.
+  func unlink(_ accountID: Account.ID) async throws
+  /// R-DEBT-17: a new `.debt`-kind account in `currency`, linked as `virtual`. `name` nil =
+  /// "<person> (<CCY>)"; the opening balance is that account's own (R-DEBT-18).
   @discardableResult
-  func convert(_ txnID: Txn.ID, to link: DebtLink) async throws -> DebtRecord
+  func createVirtualAccount(
+    for debtID: Debt.ID, currency: Currency, name: String?, openingBalanceMinor: Int64
+  ) async throws -> Account
+
+  /// R-DEBT-19: turns an expense/income on my own account into a transfer between it and the
+  /// person's account, **in place** (same id, date, description, event, attached records,
+  /// fingerprints, import batch): money out → my account to theirs (they owe me more), money in →
+  /// theirs to mine. Missing debt/virtual account are created.
+  @discardableResult
+  func transferToDebt(_ txnID: Txn.ID, to link: DebtLink) async throws -> DebtTransferResult
+  /// The reverse: the transfer becomes an expense (money out) or income (money in) on my account
+  /// again, without category.
+  func unlinkTransfer(_ txnID: Txn.ID) async throws
+
+  /// R-DEBT-16: person names for autocomplete, prefix matches first (every name for blank text).
+  func personNames(matching text: String) async throws -> [String]
 }
 
 extension DebtRepository {
-  /// Fakes without linking.
+  /// Fakes without transfers.
   @discardableResult
-  public func convert(_ txnID: Txn.ID, to link: DebtLink) async throws -> DebtRecord {
+  public func transferToDebt(_ txnID: Txn.ID, to link: DebtLink) async throws -> DebtTransferResult {
     throw DebtRepositoryError.notLinkable
+  }
+
+  public func unlinkTransfer(_ txnID: Txn.ID) async throws { throw DebtRepositoryError.notDebtTransfer }
+
+  public func personNames(matching text: String) async throws -> [String] {
+    try await book().personNames(matching: text)
+  }
+
+  @discardableResult
+  public func createVirtualAccount(for debtID: Debt.ID, currency: Currency) async throws -> Account {
+    try await createVirtualAccount(for: debtID, currency: currency, name: nil, openingBalanceMinor: 0)
   }
 }

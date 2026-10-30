@@ -8,7 +8,7 @@ import Testing
 @testable import AbacusFeatures
 
 @MainActor
-@Suite("Debts tab and widget (C14)")
+@Suite("Debts tab and widget (C14, C19)")
 struct DebtsModelTests {
   nonisolated static let rates = RateTable(rates: PreviewData.fxRates, today: PreviewData.today)
 
@@ -27,7 +27,7 @@ struct DebtsModelTests {
     #expect(model.phase == .loaded)
     let names = model.people.map(\.name)
     #expect(names.contains("Alex Example") && names.contains("Maria Sample") && !names.contains("Kim Settled"))
-    // The converted sample debt account is a person too (R-DEBT-8).
+    // The sample debt-kind account got its debt, a person too (R-DEBT-17).
     #expect(names.contains(PreviewData.loanFromFriend.name))
     let alex = try #require(model.people.first { $0.name == "Alex Example" })
     #expect(alex.balances.map(\.money.currency) == [.EUR, .PLN])
@@ -40,38 +40,37 @@ struct DebtsModelTests {
     #expect(model.people.map(\.name) == ["Kim Settled"])
   }
 
-  @Test("R-DEBT-3, R-DEBT-4: a record added in the form moves the account; forgive counts as expense by default")
+  @Test("R-DEBT-18, R-DEBT-4: a manual record added in the form changes the balance in its currency; forgive counts as expense by default")
   func addRecord() async throws {
     let (model, database) = try Self.model()
     await model.load()
     let maria = DebtSample.maria
-    let before = Calc.debtBalances(model.book)[maria.id]!.minorUnits
-    let accountBefore = try await SQLiteAccountRepository(database: database).balances(asOf: Day("2100-01-01")!)
+    func uah() -> Int64 {
+      Calc.debtBalance(model.book, debtID: maria.id, currency: .UAH).minorUnits
+    }
+    let before = uah()
+    let accountsBefore = try await SQLiteAccountRepository(database: database).balances(asOf: Day("2100-01-01")!)
 
     model.newRecord(debtID: maria.id)
+    #expect(model.recordDraft?.kind == .forgaveThem && model.recordDraft?.currency == .UAH)
+    #expect(model.recordDraft?.countsInReports == true)
     model.setRecordKind(.theyRepaid)
     #expect(model.recordDraft?.countsInReports == false)
     #expect(model.recordReportKind == .income)
     model.recordDraft?.amount = "100"
-    model.recordDraft?.accountID = PreviewData.monobank.id
     #expect(model.recordDraftIssue == nil)
     await model.saveRecordDraft()
     #expect(model.recordDraft == nil)
-    #expect(Calc.debtBalances(model.book)[maria.id]!.minorUnits == before - 100_00)
-    let accountAfter = try await SQLiteAccountRepository(database: database).balances(asOf: Day("2100-01-01")!)
-    #expect(accountAfter[PreviewData.monobank.id] == accountBefore[PreviewData.monobank.id]! + 100_00)
+    #expect(uah() == before - 100_00)
+    // A manual record moves no money on my accounts.
+    let accountsAfter = try await SQLiteAccountRepository(database: database).balances(asOf: Day("2100-01-01")!)
+    #expect(accountsAfter == accountsBefore)
 
     model.newRecord(debtID: maria.id)
     model.setRecordKind(.forgaveThem)
     #expect(model.recordDraft?.countsInReports == true)
-    #expect(model.recordDraft?.accountID == nil)
-
-    // A different-currency account needs the account amount, pre-filled at the day's rate.
-    model.newRecord(debtID: DebtSample.alex.id)
-    model.recordDraft?.amount = "10"
-    model.recordDraft?.accountID = PreviewData.monobank.id
-    #expect(model.recordNeedsAccountAmount)
-    #expect(model.suggestedAccountAmount != nil)
+    model.recordDraft?.amount = "0"
+    #expect(model.recordDraftIssue == "Enter an amount above zero.")
   }
 
   @Test("R-DEBT-5: only a zero balance can be marked settled; it moves to Settled")
@@ -81,7 +80,7 @@ struct DebtsModelTests {
     await model.setSettled(DebtSample.maria.id, true)
     #expect(model.book.debts.first { $0.id == DebtSample.maria.id }?.isSettled == false)
     let debt = DebtSample.sam
-    let balance = Calc.debtBalances(model.book)[debt.id]!.minorUnits
+    let balance = Calc.debtBalance(model.book, debtID: debt.id, currency: .PLN).minorUnits
     model.newRecord(debtID: debt.id)
     model.setRecordKind(.forgaveThem)
     model.recordDraft?.amount = ManageFormat().amountInput(balance)
@@ -110,7 +109,7 @@ struct DebtsModelTests {
     #expect(widget.owedToMe.minorUnits > 0 && widget.iOwe.minorUnits > 0)
     #expect(model.netWorth?.debtsText != nil)
 
-    // The forgiven debt (Count as expense, no leg) is in October's expenses under Debts.
+    // The forgiven debt (Count as expense, a manual record) is in October's expenses under Debts.
     let debtsCategory = try await SQLiteCategoryRepository(database: database).categories(kind: .expense, includeArchived: false)
       .first { $0.name == "Debts" }
     let slice = model.expenses?.slices.first { $0.categoryID == debtsCategory?.id }

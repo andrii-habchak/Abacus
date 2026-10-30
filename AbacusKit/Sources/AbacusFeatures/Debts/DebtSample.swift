@@ -3,68 +3,103 @@ import AbacusStore
 import Foundation
 import SQLiteData
 
-/// Synthetic debts for "Load Sample Data", previews and screenshots (R-DEBT): three made-up
-/// people in several currencies, every record kind, legs on the `PreviewData` accounts. Also
-/// converts the sample "Loan from friend" debt account the way migration v10 does.
+/// Synthetic debts for "Load Sample Data", previews and screenshots (R-DEBT-16…19): four made-up
+/// people, each with virtual (and one with an external) account of the person, payments as
+/// transfers between the `PreviewData` accounts and those accounts, a manual forgive record. Also
+/// links the sample "Loan from friend" debt account to its own debt.
 public enum DebtSample {
   public static let alex = Debt(
-    id: PreviewData.id(1401), personName: "Alex Example", currency: .EUR, dueDay: "2026-12-01",
-    note: "Concert tickets and the flat deposit", createdAt: Date(timeIntervalSince1970: 1_780_000_000))
-  public static let alexPLN = Debt(
-    id: PreviewData.id(1402), personName: "Alex Example", currency: .PLN, createdAt: Date(timeIntervalSince1970: 1_780_000_001))
+    id: PreviewData.id(1401), personName: "Alex Example", dueDay: "2026-12-01",
+    note: "Concert tickets and the flat deposit", countsInNetWorth: true,
+    createdAt: Date(timeIntervalSince1970: 1_780_000_000))
   public static let maria = Debt(
-    id: PreviewData.id(1403), personName: "Maria Sample", currency: .UAH, createdAt: Date(timeIntervalSince1970: 1_780_000_002))
+    id: PreviewData.id(1403), personName: "Maria Sample", countsInNetWorth: true,
+    createdAt: Date(timeIntervalSince1970: 1_780_000_002))
   public static let sam = Debt(
-    id: PreviewData.id(1404), personName: "Sam Placeholder", currency: .PLN, countsInNetWorth: false,
+    id: PreviewData.id(1404), personName: "Sam Placeholder", countsInNetWorth: false,
     createdAt: Date(timeIntervalSince1970: 1_780_000_003))
   public static let kim = Debt(
-    id: PreviewData.id(1405), personName: "Kim Settled", currency: .USD, isSettled: true,
+    id: PreviewData.id(1405), personName: "Kim Settled", countsInNetWorth: true, isSettled: true,
     createdAt: Date(timeIntervalSince1970: 1_780_000_004))
 
-  public static let debts = [alex, alexPLN, maria, sam, kim]
+  public static let debts = [alex, maria, sam, kim]
 
-  /// Records with the account each one moved money on (nil = none).
-  public static let records: [(DebtRecord, DebtLegInput?)] = {
-    func record(
-      _ n: Int, _ debt: Debt, _ kind: DebtRecordKind, _ day: String, _ amount: Int64, note: String = "",
-      reportKind: CategoryKind? = nil
-    ) -> DebtRecord {
-      DebtRecord(
-        id: PreviewData.id(1500 + n), debtID: debt.id, kind: kind, day: day, amountMinor: amount, note: note,
-        reportKind: reportKind, createdAt: Date(timeIntervalSince1970: 1_780_000_000 + Double(n)))
+  private static func account(_ n: Int, _ name: String, _ currency: Currency, kind: AccountKind = .debt, opening: Int64 = 0)
+    -> Account
+  {
+    Account(
+      id: PreviewData.id(n), name: name, currency: currency, kind: kind, openingBalanceMinor: opening,
+      openingDate: Date(timeIntervalSince1970: 1_700_000_000), position: 50 + n - 1410)
+  }
+
+  /// The people's accounts: virtual ones (debt kind) and one external account of Maria's.
+  public static let alexEUR = account(1410, "Alex Example (EUR)", .EUR)
+  public static let alexPLN = account(1411, "Alex Example (PLN)", .PLN)
+  public static let mariaUAH = account(1412, "Maria Sample (UAH)", .UAH)
+  public static let samPLN = account(1413, "Sam Placeholder (PLN)", .PLN)
+  public static let kimUSD = account(1414, "Kim Settled (USD)", .USD)
+  /// Maria's own bank account whose statement the owner imports (R-DEBT-17 external).
+  public static let mariaBank = account(1415, "Maria bank", .UAH, kind: .bank)
+
+  public static let accounts = [alexEUR, alexPLN, mariaUAH, samPLN, kimUSD, mariaBank]
+
+  public static let links: [DebtAccountLink] = [
+    DebtAccountLink(accountID: alexEUR.id, debtID: alex.id, role: .virtual, createdAt: Date(timeIntervalSince1970: 1_780_000_010)),
+    DebtAccountLink(accountID: alexPLN.id, debtID: alex.id, role: .virtual, createdAt: Date(timeIntervalSince1970: 1_780_000_011)),
+    DebtAccountLink(accountID: mariaUAH.id, debtID: maria.id, role: .virtual, createdAt: Date(timeIntervalSince1970: 1_780_000_012)),
+    DebtAccountLink(accountID: mariaBank.id, debtID: maria.id, role: .external, createdAt: Date(timeIntervalSince1970: 1_780_000_013)),
+    DebtAccountLink(accountID: samPLN.id, debtID: sam.id, role: .virtual, createdAt: Date(timeIntervalSince1970: 1_780_000_014)),
+    DebtAccountLink(accountID: kimUSD.id, debtID: kim.id, role: .virtual, createdAt: Date(timeIntervalSince1970: 1_780_000_015)),
+  ]
+
+  /// Payments as transfers: out of my account into the person's, or the other way round.
+  public static let txns: [Txn] = {
+    func transfer(
+      _ n: Int, _ day: String, from: Account, to: Account, _ amount: Int64, toAmount: Int64? = nil, _ payee: String
+    ) -> Txn {
+      Txn(
+        id: PreviewData.id(1600 + n), type: .transfer, occurredAt: PreviewData.at(day), accountID: from.id,
+        amountMinor: amount, toAccountID: to.id, toAmountMinor: toAmount, payee: payee,
+        createdAt: PreviewData.at(day))
     }
-    let revolut = PreviewData.revolutEUR.id
-    let pko = PreviewData.pkoPersonal.id
-    let mono = PreviewData.monobank.id
-    let pkoUSD = PreviewData.pkoUSD.id
+    let revolut = PreviewData.revolutEUR
+    let pko = PreviewData.pkoPersonal
+    let mono = PreviewData.monobank
+    let pkoUSD = PreviewData.pkoUSD
     return [
-      (record(1, alex, .lent, "2026-08-14", 300_00, note: "Flat deposit"), DebtLegInput(accountID: revolut, amountMinor: 300_00)),
-      (record(2, alex, .paidOnTheirBehalf, "2026-09-03", 80_00, note: "Concert tickets"),
-       DebtLegInput(accountID: revolut, amountMinor: 80_00)),
-      (record(3, alex, .theyRepaid, "2026-10-02", 120_00), DebtLegInput(accountID: revolut, amountMinor: 120_00)),
-      // The EUR debt paid from a UAH account too (R-DEBT-14): the leg is in hryvnias.
-      (record(11, alex, .lent, "2026-10-08", 50_00, note: "Train tickets"),
-       DebtLegInput(accountID: mono, amountMinor: 2_400_00)),
-      (record(4, alexPLN, .borrowed, "2026-10-05", 250_00, note: "Taxi home"), DebtLegInput(accountID: pko, amountMinor: 250_00)),
-      (record(5, maria, .lent, "2026-07-20", 6_000_00), DebtLegInput(accountID: mono, amountMinor: 6_000_00)),
-      (record(6, maria, .theyRepaid, "2026-09-25", 2_500_00), DebtLegInput(accountID: mono, amountMinor: 2_500_00)),
-      (record(7, maria, .forgaveThem, "2026-10-10", 500_00, note: "Birthday", reportKind: .expense), nil),
-      (record(8, sam, .paidOnTheirBehalf, "2026-10-12", 140_00, note: "Dinner", reportKind: .expense),
-       DebtLegInput(accountID: pko, amountMinor: 140_00)),
-      (record(9, kim, .lent, "2026-06-01", 50_00), DebtLegInput(accountID: pkoUSD, amountMinor: 50_00)),
-      (record(10, kim, .theyRepaid, "2026-06-20", 50_00), DebtLegInput(accountID: pkoUSD, amountMinor: 50_00)),
+      transfer(1, "2026-08-14", from: revolut, to: alexEUR, 300_00, "Flat deposit"),
+      transfer(2, "2026-09-03", from: revolut, to: alexEUR, 80_00, "Concert tickets"),
+      transfer(3, "2026-10-02", from: alexEUR, to: revolut, 120_00, "Alex repaid"),
+      // The EUR debt paid from a UAH account too: €50 left as ₴2,400.
+      transfer(11, "2026-10-08", from: mono, to: alexEUR, 2_400_00, toAmount: 50_00, "Train tickets"),
+      transfer(4, "2026-10-05", from: alexPLN, to: pko, 250_00, "Taxi home"),
+      transfer(5, "2026-07-20", from: mono, to: mariaUAH, 6_000_00, "To Maria"),
+      transfer(6, "2026-09-25", from: mariaUAH, to: mono, 2_500_00, "Maria repaid"),
+      transfer(8, "2026-10-12", from: pko, to: samPLN, 140_00, "Dinner"),
+      transfer(9, "2026-06-01", from: pkoUSD, to: kimUSD, 50_00, "To Kim"),
+      transfer(10, "2026-06-20", from: kimUSD, to: pkoUSD, 50_00, "Kim repaid"),
     ]
   }()
 
-  /// Converts debt-kind accounts, then inserts the sample debts and records (with legs) into
-  /// `db`, which must hold the `PreviewData` accounts.
+  /// Manual records: a forgiven part of Maria's debt (counted as an expense).
+  public static let records: [DebtRecord] = [
+    DebtRecord(
+      id: PreviewData.id(1507), debtID: maria.id, kind: .forgaveThem, day: "2026-10-10", amountMinor: 500_00,
+      currency: .UAH, note: "Birthday", reportKind: .expense, createdAt: Date(timeIntervalSince1970: 1_780_000_007))
+  ]
+
+  /// Links debt-kind accounts of the database, then inserts the sample debts, accounts, links,
+  /// transfers and records into `db`, which must hold the `PreviewData` accounts.
   public static func seed(_ db: Database, calendar: Calendar = .current) throws {
     try DebtConversion.convertDebtAccounts(db, calendar: calendar)
     try db.seed {
+      for account in accounts { account }
       for debt in debts { debt }
+      for link in links { link }
+      for txn in txns { txn }
     }
-    for (record, leg) in records {
-      try SQLiteDebtRepository.save(record, leg: leg, calendar: calendar, db)
+    for record in records {
+      try SQLiteDebtRepository.save(record, db)
     }
   }
 

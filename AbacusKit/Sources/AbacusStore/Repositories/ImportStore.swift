@@ -165,9 +165,9 @@ public struct SQLiteImportStore: ImportStore {
         (dates[$0.element.txnID] ?? .distantPast, $0.offset) < (dates[$1.element.txnID] ?? .distantPast, $1.offset)
       }
       for (_, item) in links {
-        try DebtLinking.convert(item.txnID, to: item.link, calendar: calendar, db)
+        try DebtLinking.transfer(item.txnID, to: item.link, db)
       }
-      // R-DEBT-8: what landed on debt-kind accounts (Saldo LIABILITIES) becomes debt records.
+      // R-DEBT-17: a debt-kind account an import created (Saldo LIABILITIES) gets its debt.
       if convertsDebtAccounts { try DebtConversion.convertDebtAccounts(db, calendar: calendar) }
     }
   }
@@ -192,16 +192,11 @@ public struct SQLiteImportStore: ImportStore {
     try await database.write { db in
       guard let batch = try ImportBatch.find(batchID).fetchOne(db) else { throw RepositoryError.notFound }
       guard !batch.isUndone else { return }
-      // Debt records converted from the batch's rows go first (their legs with them), then the
-      // debts the batch created that have no records left.
+      // Manual debt records the batch carries go with it; its transactions (transfers to a debt
+      // account included) go next; debts the batch created are removed below, once nothing is
+      // left in them.
       try DebtRecord.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
       try Txn.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
-      for debt in try Debt.where({ $0.importBatchID.eq(batchID) }).fetchAll(db) {
-        let debtID = debt.id
-        if try DebtRecord.where({ $0.debtID.eq(debtID) }).fetchCount(db) == 0 {
-          try Debt.find(debtID).delete().execute(db)
-        }
-      }
       try ImportFingerprint.where { $0.batchID.eq(batchID) }.delete().execute(db)
 
       let events = try Event.where { $0.importBatchID.eq(batchID) }.fetchAll(db)
@@ -231,6 +226,16 @@ public struct SQLiteImportStore: ImportStore {
         if try Txn.where({ $0.accountID.eq(id) || $0.toAccountID.eq(id) }).fetchCount(db) == 0 {
           try Account.find(id).delete().execute(db)
           removedAccounts.append(id)
+        }
+      }
+      // Debts the batch created that keep no manual record and no linked account (the batch's
+      // own accounts are gone by now; their links went with them).
+      for debt in try Debt.where({ $0.importBatchID.eq(batchID) }).fetchAll(db) {
+        let debtID = debt.id
+        if try DebtRecord.where({ $0.debtID.eq(debtID) }).fetchCount(db) == 0,
+          try DebtAccountLink.where({ $0.debtID.eq(debtID) }).fetchCount(db) == 0
+        {
+          try Debt.find(debtID).delete().execute(db)
         }
       }
       let removed = removedCategories + removedAccounts

@@ -214,13 +214,14 @@ struct CommitBuilder {
         txns.append(TxnWithLines(txn: txn, lines: lines))
         fingerprints += shape.fingerprints.map { ImportFingerprint(id: $0, txnID: txn.id) }
         if let debt = shape.debt {
-          // R-DEBT-10/12: the store turns the new transaction into the record's leg.
+          // R-DEBT-10/12/19: the store turns the new transaction into a transfer to the person's
+          // virtual account (C22 reshapes the import choice; kind and report flag no longer apply).
           debtLinks.append(
             ImportDebtLink(
               txnID: txn.id,
               link: DebtLink(
-                personName: debt.personName, debtID: debt.debtID, currency: debt.currency, kind: debt.kind,
-                amountMinor: debt.amountMinor, countsInReports: debt.countsInReports)))
+                personName: debt.personName, debtID: debt.debtID, currency: debt.currency,
+                amountMinor: debt.amountMinor)))
           summary.debtRecords += 1
         }
         if let rule = shape.ruleID { ruleHits[rule, default: 0] += 1 }

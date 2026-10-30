@@ -21,9 +21,9 @@ struct AppSessionTests {
     #expect(try await SampleData.loadIfEmpty(into: database))
     #expect(try await SampleData.loadIfEmpty(into: database) == false)
     let (accounts, txns) = try await database.read { db in (try Account.fetchCount(db), try Txn.fetchCount(db)) }
-    #expect(accounts == PreviewData.accounts.count)
-    // Plus the legs of the sample debt records (C14).
-    #expect(txns == PreviewData.txns.count + DebtSample.records.filter { $0.1 != nil }.count)
+    #expect(accounts == PreviewData.accounts.count + DebtSample.accounts.count)
+    // Plus the sample debts' accounts and their transfers (C19).
+    #expect(txns == PreviewData.txns.count + DebtSample.txns.count)
   }
 
   @Test("Load Sample Data fills the screens; a second time it explains why not")
@@ -35,7 +35,7 @@ struct AppSessionTests {
     await s.loadSampleData()
     #expect(s.sampleDataMessage?.hasPrefix("Sample data loaded") == true)
     #expect(s.dashboard.phase == .loaded)
-    #expect(s.transactions.reference.accounts.count == PreviewData.accounts.count)
+    #expect(s.transactions.reference.accounts.count == PreviewData.accounts.count + DebtSample.accounts.count)
     await s.loadSampleData()
     #expect(s.sampleDataMessage?.hasPrefix("Abacus already has accounts") == true)
   }
@@ -113,7 +113,7 @@ struct AppSessionTests {
     s.app.data.askRestore(from: backupFile)
     await s.app.data.confirmRestore()
     #expect(s.app.data.messageIsError == false)
-    #expect(s.transactions.reference.accounts.count == PreviewData.accounts.count)
+    #expect(s.transactions.reference.accounts.count == PreviewData.accounts.count + DebtSample.accounts.count)
   }
 
   @Test("A saved transaction shows up in the list and the dashboard after the editor closes")

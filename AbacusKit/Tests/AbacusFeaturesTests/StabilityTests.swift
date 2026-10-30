@@ -12,14 +12,14 @@ struct StabilityTests {
     let model = DebtsModel(dependencies: .preview())
     await model.load()
     let debt = try #require(model.selectedDetails.first?.debt)
-    let before = model.book.entries(of: debt.id).count
+    let before = model.book.records(of: debt.id).count
     model.newRecord(debtID: debt.id, kind: .forgaveThem)
     model.recordDraft?.amount = "5"
     async let first: Void = model.saveRecordDraft()
     async let second: Void = model.saveRecordDraft()
     _ = await (first, second)
     #expect(model.recordDraft == nil)
-    #expect(model.book.entries(of: debt.id).count == before + 1)
+    #expect(model.book.records(of: debt.id).count == before + 1)
     #expect(!model.isSaving)
   }
 
@@ -32,12 +32,9 @@ struct StabilityTests {
     model.recordDraft = nil
     #expect(model.recordDraftIssue == nil)
     #expect(model.recordReportKind == nil)
-    #expect(model.recordAccount == nil)
-    #expect(!model.recordNeedsAccountAmount)
     model.editDebt(debt.id)
     model.debtDraft = nil
     #expect(model.debtDraftIssue == nil)
-    #expect(!model.debtCurrencyLocked)
     await model.saveRecordDraft()
     await model.saveDebtDraft()
     #expect(model.errorMessage == nil)

@@ -72,7 +72,7 @@ struct DataFolderMoveTests {
     #expect(next.app.section == .accounts)
     // The data came along; the old file is gone; the next launch opens the new one.
     await next.transactions.load()
-    #expect(next.transactions.reference.accounts.count == PreviewData.accounts.count)
+    #expect(next.transactions.reference.accounts.count == PreviewData.accounts.count + DebtSample.accounts.count)
     #expect(!FileManager.default.fileExists(atPath: setup.oldFile.path))
     #expect(!FileManager.default.fileExists(atPath: setup.oldFile.path + "-wal"))
     #expect(try DatabaseLocation.resolve(defaults: setup.defaults).path == newFile.standardizedFileURL.path)
@@ -103,8 +103,8 @@ struct DataFolderMoveTests {
     #expect(DatabaseLocation.remembered(in: setup.defaults) == nil)
     // The old database is still in use.
     await first.transactions.load()
-    #expect(first.transactions.reference.accounts.count == PreviewData.accounts.count)
-    #expect(try await setup.database.read { try Account.fetchCount($0) } == PreviewData.accounts.count)
+    #expect(first.transactions.reference.accounts.count == PreviewData.accounts.count + DebtSample.accounts.count)
+    #expect(try await setup.database.read { try Account.fetchCount($0) } == PreviewData.accounts.count + DebtSample.accounts.count)
   }
 
   @Test("R-SET-1 without a window to switch, the copy is removed and the old file kept")

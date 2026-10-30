@@ -201,26 +201,38 @@ public enum LargeSampleData {
       for rate in rates { rate }
     }
 
-    // Debts with records (legs on active accounts in the debt's currency when there is one).
+    // Debts: one per person with a virtual account in one currency (and a second one for every
+    // other person), payments as transfers to / from it, and a forgiven part as manual record.
     let debtCurrencies: [Currency] = [.EUR, .PLN, .UAH, .USD]
-    let recordKinds: [DebtRecordKind] = [.lent, .theyRepaid, .paidOnTheirBehalf, .forgaveThem, .borrowed, .iRepaid]
+    let recordKinds: [DebtRecordKind] = [.lent, .theyRepaid, .paidOnTheirBehalf, .borrowed, .iRepaid]
     for index in 0..<size.debts {
-      let currency = debtCurrencies[index % debtCurrencies.count]
       let debt = Debt(
-        personName: "Person \(index / 2 + 1)", currency: index % 2 == 0 ? currency : debtCurrencies[(index + 1) % debtCurrencies.count],
+        personName: "Person \(index + 1)",
         dueDay: index % 3 == 0 ? today.adding(days: 30 + index, calendar: calendar).string : nil,
         countsInNetWorth: index % 4 != 3, createdAt: created)
       try db.seed { debt }
-      let legAccount = active.first { $0.currency == debt.currency && !$0.kind.isLiability }
-      for step in 0..<6 {
-        let kind = recordKinds[(index + step) % recordKinds.count]
-        let recordDay = today.adding(days: -(200 - step * 30 - index), calendar: calendar)
-        let record = DebtRecord(
-          debtID: debt.id, kind: kind, day: recordDay.string, amountMinor: Int64(50_00 + step * 25_00 + index * 10_00),
-          reportKind: kind == .forgaveThem ? .expense : nil, createdAt: created.addingTimeInterval(Double(step)))
-        let leg = kind.movesMoney ? legAccount.map { DebtLegInput(accountID: $0.id, amountMinor: record.amountMinor) } : nil
-        try SQLiteDebtRepository.save(record, leg: leg, calendar: calendar, db)
+      var currencies = [debtCurrencies[index % debtCurrencies.count]]
+      if index % 2 == 0 { currencies.append(debtCurrencies[(index + 1) % debtCurrencies.count]) }
+      for (offset, currency) in currencies.enumerated() {
+        let virtual = try SQLiteDebtRepository.createVirtualAccount(
+          for: debt.id, currency: currency, name: nil, importBatchID: nil, db)
+        guard let own = active.first(where: { $0.currency == currency && !$0.kind.isLiability }) else { continue }
+        for step in 0..<6 {
+          let kind = recordKinds[(index + step + offset) % recordKinds.count]
+          let day = today.adding(days: -(200 - step * 30 - index), calendar: calendar)
+          let noon = calendar.date(byAdding: .hour, value: 12, to: day.date(calendar: calendar)) ?? day.date(calendar: calendar)
+          let amount = Int64(50_00 + step * 25_00 + index * 10_00)
+          let txn = Txn(
+            type: .transfer, occurredAt: noon, accountID: kind.isInflow ? virtual.id : own.id, amountMinor: amount,
+            toAccountID: kind.isInflow ? own.id : virtual.id, payee: "Person \(index + 1)",
+            createdAt: created.addingTimeInterval(Double(step)))
+          try db.seed { txn }
+        }
       }
+      let forgive = DebtRecord(
+        debtID: debt.id, kind: .forgaveThem, day: today.adding(days: -20 - index, calendar: calendar).string,
+        amountMinor: 20_00, currency: currencies[0], reportKind: .expense, createdAt: created)
+      try SQLiteDebtRepository.save(forgive, db)
     }
     try ColorFill.fillAll(db)
   }
