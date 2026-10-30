@@ -4,12 +4,12 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
-_Updated 2026-10-30 (orchestrator)._ **1.2.2 is on `main`** (build 5, not tagged): C15 rule
+_Updated 2026-10-30 (orchestrator)._ **1.2.2 is released** (build 5, tag `v1.2.2`, GitHub release with the DMG, 2026-10-30): C15 rule
 conditions (starts with / equals) and C16 PKO hold sign fix on top of 1.2.1.
-`dist/Abacus-1.2.2.dmg` is the build for owner testing; no database changes.
+No database changes. Released so far: `v1.0.0`, `v1.2.1` (2026-10-27), `v1.2.2`.
 
-_Updated 2026-10-27 (orchestrator)._ **1.2.1 is on `main`** (version 1.2.1, build 4) and is the
-build the owner is testing; it is **not tagged**. Released so far: only `v1.0.0` (tag, 2026-10-27).
+_Updated 2026-10-27 (orchestrator)._ **1.2.1** (version 1.2.1, build 4) was released as `v1.2.1`
+on 2026-10-27.
 1.1.0 and 1.2.0 were test builds and are folded into 1.2.1 (see CHANGELOG).
 
 - Done since v1.0.0 (all merged, gate green, 695 tests incl. real-data tests):
@@ -26,9 +26,10 @@ build the owner is testing; it is **not tagged**. Released so far: only `v1.0.0`
   full dashboard; sample data only.
 - `build.noindex/` is the build output folder (Spotlight skips it); the old `build/` can be deleted.
 
-**Waiting on the owner**: test 1.2.1 (`dist/Abacus-1.2.1.dmg`), especially real mouse drag and
-drop, then the OK to tag `v1.2.1`; confirm the lane interpretations in `docs/status/C6.md` to
-`C14.md` and `S1.md`–`S3.md`.
+**Waiting on the owner**: feedback on 1.2.2; confirm the lane interpretations in `docs/status/C6.md` to
+`C16.md` and `S1.md`–`S3.md`. Open import ideas offered 2026-10-30, not started: multi-file import,
+"Uncategorised" card in the import wizard, PKO exchange fee line, IBAN hint on unpaired halves,
+moving import mappings when a category is merged or deleted.
 
 ## Done
 
@@ -41,11 +42,8 @@ drop, then the OK to tag `v1.2.1`; confirm the lane interpretations in `docs/sta
 
 ## Next
 
-1. Owner tests 1.2.1; fix what they report on a lane, rebuild the DMG.
-2. On the owner's OK: set the CHANGELOG date for 1.2.1, commit, tag `v1.2.1`, push the tag,
-   attach `dist/Abacus-1.2.1.dmg` (+ `.sha256`) to a GitHub release (text drafted in the session:
-   fixed / changed / install / back up first).
-3. Deferred, only on request: merge the "card" and "bank account" kinds (they behave the same);
+1. Owner tests 1.2.2; fix what they report on a lane, rebuild the DMG, release as the next patch.
+2. Deferred, only on request: merge the "card" and "bank account" kinds (they behave the same);
    SQL aggregates for balances/usage counts beyond ~20k transactions (S1); combine the save
    cascade's per-screen reloads (S1).
 
