@@ -23,9 +23,30 @@ public struct RuleRow: Identifiable, Equatable, Sendable {
 
 /// The kind of a rule's first condition row (TA v1.6): a description or an amount condition.
 public enum RuleFirstCondition: Hashable, Sendable, CaseIterable {
-  case descriptionContains, descriptionExactly, amountBiggerThan, amountSmallerThan
+  case descriptionContains, descriptionStartsWith, descriptionExactly, amountBiggerThan, amountSmallerThan
 
-  public var isDescription: Bool { self == .descriptionContains || self == .descriptionExactly }
+  /// The description kinds, in picker order.
+  public static let descriptionChoices: [RuleFirstCondition] = [.descriptionContains, .descriptionStartsWith, .descriptionExactly]
+
+  public var isDescription: Bool { matchKind != nil }
+
+  /// The description match kind this row stands for; nil for an amount row.
+  public var matchKind: RuleMatchKind? {
+    switch self {
+    case .descriptionContains: .contains
+    case .descriptionStartsWith: .startsWith
+    case .descriptionExactly: .exactly
+    case .amountBiggerThan, .amountSmallerThan: nil
+    }
+  }
+
+  public init(_ kind: RuleMatchKind) {
+    switch kind {
+    case .contains: self = .descriptionContains
+    case .startsWith: self = .descriptionStartsWith
+    case .exactly: self = .descriptionExactly
+    }
+  }
 }
 
 /// The rule editor sheet (new or existing rule), laid out like Saldo's (D44): a condition card
@@ -85,13 +106,13 @@ public struct RuleDraft: Equatable, Sendable {
   /// turn a description row into an amount row and back (the text / amount are kept).
   public var firstCondition: RuleFirstCondition {
     get {
-      if hasDescriptionCondition { return matchKind == .exactly ? .descriptionExactly : .descriptionContains }
+      if hasDescriptionCondition { return RuleFirstCondition(matchKind) }
       return amountComparison == .smallerThan ? .amountSmallerThan : .amountBiggerThan
     }
     set {
       switch newValue {
-      case .descriptionContains, .descriptionExactly:
-        matchKind = newValue == .descriptionExactly ? .exactly : .contains
+      case .descriptionContains, .descriptionStartsWith, .descriptionExactly:
+        if let kind = newValue.matchKind { matchKind = kind }
         if !hasDescriptionCondition {
           hasDescriptionCondition = true
           hasAmountCondition = false
@@ -109,7 +130,7 @@ public struct RuleDraft: Equatable, Sendable {
   /// The kinds the first row may switch to: both kinds while it is the only description/amount
   /// condition, otherwise only its own kind.
   public var firstConditionChoices: [RuleFirstCondition] {
-    if hasDescriptionCondition && hasAmountCondition { return [.descriptionContains, .descriptionExactly] }
+    if hasDescriptionCondition && hasAmountCondition { return RuleFirstCondition.descriptionChoices }
     return RuleFirstCondition.allCases
   }
 }
@@ -214,8 +235,13 @@ public final class RulesModel {
   public func conditionText(_ rule: CategoryRule) -> String {
     var parts: [String] = []
     if rule.hasDescriptionCondition {
-      parts.append(
-        rule.matchKind == .exactly ? "Description is exactly “\(rule.pattern)”" : "Description contains “\(rule.pattern)”")
+      let verb =
+        switch rule.matchKind {
+        case .contains: "contains"
+        case .startsWith: "starts with"
+        case .exactly: "equals"
+        }
+      parts.append("Description \(verb) “\(rule.pattern)”")
     }
     if let comparison = rule.amountComparison, let amount = rule.amountMinor {
       let word = comparison == .biggerThan ? "bigger" : "smaller"

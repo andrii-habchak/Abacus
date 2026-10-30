@@ -540,7 +540,7 @@ struct ManageRulesTests {
     #expect(model.rows[0].origin == "Learned from an import")
     #expect(model.rows[5].action == "Health")
     #expect(model.rows[6].summary == "Description contains “zalando” and amount bigger than 100.00 → Clothing")
-    #expect(model.rows[7].condition == "Description is exactly “pizzeria napoli” on Monobank Black")
+    #expect(model.rows[7].condition == "Description equals “pizzeria napoli” on Monobank Black")
     #expect(model.rows[8].summary == "Description contains “friend” → Transfer to/from Loan from friend")
   }
 
@@ -595,7 +595,7 @@ struct ManageRulesTests {
     #expect(saved.action == .transfer)
     #expect(saved.categoryID == nil)
     #expect(saved.transferAccountID == PreviewData.cashPLN.id)
-    #expect(model.rows.last?.summary == "Description is exactly “Rent” and amount smaller than 1000.50 on PKO Personal → Transfer to/from Cash PLN")
+    #expect(model.rows.last?.summary == "Description equals “Rent” and amount smaller than 1000.50 on PKO Personal → Transfer to/from Cash PLN")
 
     // Editing it back to a category rule drops the transfer account; removing a condition drops it.
     model.edit(saved.id)
@@ -732,12 +732,34 @@ struct ManageRulesTests {
     #expect(try await store.txnRepository.transaction(PreviewData.id(933))?.txn.categoryID == PreviewData.id(209))
   }
 
+  @Test("C15: the condition picker switches between contains, starts with and equals; the summary names the kind")
+  func descriptionMatchKinds() async throws {
+    let model = await model()
+    model.newRule()
+    model.editor?.pattern = "Uber"
+    model.editor?.firstCondition = .descriptionStartsWith
+    #expect(model.editor?.matchKind == .startsWith)
+    #expect(model.editor?.hasDescriptionCondition == true)
+    model.editor?.categoryID = PreviewData.id(205)
+    await model.saveEditor()
+    let saved = try #require(model.rules.last)
+    #expect(saved.matchKind == .startsWith)
+    #expect(model.rows.last?.condition == "Description starts with “Uber”")
+    model.edit(saved.id)
+    #expect(model.editor?.firstCondition == .descriptionStartsWith)
+    model.editor?.firstCondition = .descriptionExactly
+    #expect(model.editor?.matchKind == .exactly)
+    await model.saveEditor()
+    #expect(model.rules.last?.matchKind == .exactly)
+    #expect(model.rows.last?.condition == "Description equals “Uber”")
+  }
+
   @Test("TA v1.6: an amount-only rule — the first condition switches to amount, the description is optional")
   func amountOnlyRule() async throws {
     let model = await model()
     model.newRule()
     #expect(model.editor?.firstCondition == .descriptionContains)
-    #expect(model.editor?.firstConditionChoices.count == 4)
+    #expect(model.editor?.firstConditionChoices.count == 5)
     model.editor?.firstCondition = .amountBiggerThan
     #expect(model.editor?.hasDescriptionCondition == false)
     #expect(model.editor?.hasAmountCondition == true)
@@ -763,7 +785,7 @@ struct ManageRulesTests {
     #expect(model.editor?.hasDescriptionCondition == false)
     #expect(model.editor?.firstCondition == .amountBiggerThan)
     model.addDescriptionCondition()
-    #expect(model.editor?.firstConditionChoices == [.descriptionContains, .descriptionExactly])
+    #expect(model.editor?.firstConditionChoices == [.descriptionContains, .descriptionStartsWith, .descriptionExactly])
     #expect(model.editorValidation == "Enter the description text.")
     model.editor?.pattern = "rent"
     #expect(model.editor?.canRemoveDescription == true && model.editor?.canRemoveAmount == true)

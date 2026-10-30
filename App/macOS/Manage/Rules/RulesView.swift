@@ -428,7 +428,8 @@ struct RuleEditorSheet: View {
   private static func title(_ choice: RuleFirstCondition) -> String {
     switch choice {
     case .descriptionContains: "Description contains"
-    case .descriptionExactly: "Description exactly matches"
+    case .descriptionStartsWith: "Description starts with"
+    case .descriptionExactly: "Description equals"
     case .amountBiggerThan: "Amount is bigger than"
     case .amountSmallerThan: "Amount is smaller than"
     }

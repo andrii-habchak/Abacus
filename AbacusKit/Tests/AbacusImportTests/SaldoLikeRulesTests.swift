@@ -53,6 +53,46 @@ struct SaldoLikeRulesTests {
     #expect(matcher.match(Self.subject("Coffee shop")) == nil)
   }
 
+  @Test("C15: starts with matches a folded prefix only")
+  func startsWithCondition() {
+    let matcher = RuleMatcher(rules: [Self.category(0, "  Uber   Trip", F.taxi, kind: .startsWith)], categories: Self.categories)
+    #expect(matcher.match(Self.subject("UBER TRIP help.uber.com"))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("   uber   trip"))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("Übér trip 12"))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("uber trip"))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("Payment UBER TRIP")) == nil)
+    #expect(matcher.match(Self.subject("uber")) == nil)
+    #expect(matcher.match(Self.subject("")) == nil)
+  }
+
+  @Test("C15: equals (stored as exactly) needs the whole folded description")
+  func equalsCondition() {
+    let matcher = RuleMatcher(rules: [Self.category(0, "Coffee Kiosk", Self.food, kind: .exactly)], categories: Self.categories)
+    #expect(matcher.match(Self.subject("coffee kiosk"))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("  COFFEE \t KIOSK  "))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("Coffee Kiosk 12")) == nil)
+    #expect(matcher.match(Self.subject("The coffee kiosk")) == nil)
+    #expect(matcher.match(Self.subject("coffee")) == nil)
+    #expect(RuleMatchKind(rawValue: "exactly") == .exactly)
+    #expect(RuleMatchKind.startsWith.rawValue == "startsWith")
+  }
+
+  @Test("C15: contains still matches anywhere, folded")
+  func containsCondition() {
+    let matcher = RuleMatcher(rules: [Self.category(0, "kiosk", Self.food)], categories: Self.categories)
+    #expect(matcher.match(Self.subject("  The KIOSK  12 "))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("kiosk"))?.id == F.id(100))
+    #expect(matcher.match(Self.subject("kios k")) == nil)
+  }
+
+  @Test("C15: rules keep the user's order whatever the kind — a contains rule first wins over an equals rule")
+  func kindsDoNotReorder() {
+    let matcher = RuleMatcher(
+      rules: [Self.category(0, "uber", F.taxi), Self.category(1, "uber", Self.food, kind: .exactly)],
+      categories: Self.categories)
+    #expect(matcher.match(Self.subject("Uber"))?.id == F.id(100))
+  }
+
   @Test("TA v1.6: an amount-only rule (empty pattern) matches any description by amount; a rule without conditions never matches")
   func amountOnlyConditions() {
     let amountOnly = Self.category(0, "", F.groceries, amount: (.biggerThan, 500_00))
