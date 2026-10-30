@@ -35,6 +35,8 @@ struct RowAnalysis: Sendable {
   var completesTransfer: Txn?
   /// R-IMP-4: the existing transaction this row probably duplicates.
   var duplicate: Txn?
+  /// R-DEBT-13: the leg of a debt record entered by hand for this payment.
+  var debtLeg: Txn?
   var review: ReviewReason?
   /// Unpaired halves of this file the user may pair this one with, best first.
   var pairRows: [String] = []
@@ -81,7 +83,7 @@ struct RowAnalyzer {
 
   /// A match competing for an existing transaction; each transaction serves one row.
   private struct Claim {
-    enum Kind: Int { case settle = 0, sameTransfer, completes, duplicate }
+    enum Kind: Int { case settle = 0, sameTransfer, completes, debtLeg, duplicate }
     var row: Int
     var kind: Kind
     var txn: Txn
@@ -124,9 +126,12 @@ struct RowAnalyzer {
       } else if row.kind == .transferHalf {
         result[i].review = .unpairedTransferHalf(row.transferHalf?.direction ?? .outgoing)
         result[i].pairExisting = try await existingPairs(row, rowDay: rowDay)
+        // A half for a payment to or from a person may already be a debt record (R-DEBT-13).
+        claims += try await debtLegs(i, row, rowDay: rowDay, transfer: nil)
         continue
       } else if row.isUnknownPKOType {
         result[i].review = .unknownOperationType
+        claims += try await debtLegs(i, row, rowDay: rowDay, transfer: nil)
         continue
       }
 
@@ -146,6 +151,8 @@ struct RowAnalyzer {
         }
       }
 
+      // R-DEBT-13: a debt record entered by hand for this payment, on any account it touches.
+      claims += try await debtLegs(i, row, rowDay: rowDay, transfer: result[i].ownTransfer)
       // R-IMP-4: fuzzy duplicates on the first existing account the row touches.
       claims += try await duplicates(i, row, rowDay: rowDay, transfer: result[i].ownTransfer)
     }
@@ -162,6 +169,7 @@ struct RowAnalyzer {
       case .settle: result[claim.row].settles = claim.txn
       case .sameTransfer: result[claim.row].sameTransfer = claim.txn
       case .completes: result[claim.row].completesTransfer = claim.txn
+      case .debtLeg: result[claim.row].debtLeg = claim.txn
       case .duplicate: result[claim.row].duplicate = claim.txn
       }
     }
@@ -236,7 +244,8 @@ struct RowAnalyzer {
 
   // MARK: - Fuzzy duplicates
 
-  private func duplicates(_ i: Int, _ row: NormalizedRow, rowDay: Day, transfer: OwnTransfer?) async throws -> [Claim] {
+  /// The accounts a row touches with its amount and direction on each (own side first).
+  private func sides(_ row: NormalizedRow, transfer: OwnTransfer?) -> [(AccountRef, Int64, Flow)] {
     var sides: [(AccountRef, Int64, Flow)] = []
     if let transfer {
       sides = [(transfer.from, transfer.amountMinor, .out)]
@@ -249,13 +258,37 @@ struct RowAnalyzer {
     } else if let flow = row.flow {
       sides = [(ref(row.account), row.amountMinor, flow)]
     }
+    return sides
+  }
+
+  /// R-DEBT-13: legs of debt records on every existing account the row touches, same amount and
+  /// direction, ±3 days, any description, from another source (`DebtLegMatch`).
+  private func debtLegs(_ i: Int, _ row: NormalizedRow, rowDay: Day, transfer: OwnTransfer?) async throws -> [Claim] {
+    var claims: [Claim] = []
+    for (account, amount, flow) in sides(row, transfer: transfer) {
+      guard case .existing(let accountID) = account else { continue }
+      let (start, end) = window(rowDay, DebtLegMatch.dayWindow)
+      for txn in try await store.candidates(accountID: accountID, amountMinor: amount, from: start, to: end)
+      where txn.accountID == accountID && Flow.of(txn, on: accountID) == flow {
+        let txnDay = Day(txn.occurredAt, calendar: calendar)
+        guard DebtLegMatch.matches(rowSource: source, rowDay: rowDay, candidate: txn, candidateDay: txnDay, calendar: calendar)
+        else { continue }
+        claims.append(Claim(row: i, kind: .debtLeg, txn: txn, dayGap: abs(rowDay.distance(to: txnDay, calendar: calendar)), amountGap: 0))
+      }
+    }
+    return claims
+  }
+
+  private func duplicates(_ i: Int, _ row: NormalizedRow, rowDay: Day, transfer: OwnTransfer?) async throws -> [Claim] {
+    let sides = sides(row, transfer: transfer)
     guard let (account, amount, flow) = sides.first(where: { if case .existing = $0.0 { true } else { false } }),
       case .existing(let accountID) = account
     else { return [] }
     let (start, end) = window(rowDay, FuzzyDuplicate.dayWindow)
     return try await store.candidates(accountID: accountID, amountMinor: amount, from: start, to: end)
       .filter { txn in
-        Flow.of(txn, on: accountID) == flow
+        // Debt legs are matched by `debtLegs` (R-DEBT-13), never as a possible duplicate.
+        txn.debtRecordID == nil && Flow.of(txn, on: accountID) == flow
           && FuzzyDuplicate.matches(
             rowSource: source, rowPayee: row.payee, rowDay: rowDay, candidate: txn,
             candidateDay: Day(txn.occurredAt, calendar: calendar), calendar: calendar)

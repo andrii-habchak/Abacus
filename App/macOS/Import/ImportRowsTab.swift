@@ -153,9 +153,29 @@ struct ImportRowActions: View {
             .strokeBorder(needsCategory ? ImportPalette.attentionBorder : .clear)
         )
       }
+      if let debt = row.debt, row.status != .needsReview {
+        // R-DEBT-10/12: the debt record this row becomes.
+        Text(debt)
+          .font(.system(size: 12))
+          .lineLimit(1)
+          .help(debt)
+      }
       HStack(spacing: 6) {
         if let note = row.note {
           ImportNoteText(note: note)
+        }
+        if row.canRecordDebt {
+          Button(row.debt == nil ? "Debt…" : "Edit…") {
+            Task { await model.openDebt(forRow: row.id) }
+          }
+          .buttonStyle(.link)
+          .font(.system(size: 11))
+          .help("Record this payment as a debt record (lent, repaid, borrowed)")
+          if row.debt != nil {
+            Button("Not a debt") { model.removeDebt(forRow: row.id) }
+              .buttonStyle(.link)
+              .font(.system(size: 11))
+          }
         }
         if let saves = row.savesRule {
           Button(saves ? "Don't save" : "Save as rule") {

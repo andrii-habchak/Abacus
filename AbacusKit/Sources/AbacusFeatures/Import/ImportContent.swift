@@ -87,6 +87,10 @@ public struct ImportRowItem: Identifiable, Hashable, Sendable {
   public var note: ImportNote?
   /// The row's pick is saved as a rule unless turned off; nil when no rule is involved.
   public var savesRule: Bool?
+  /// "I lent · Ann": the debt record the row becomes (R-DEBT-10/12).
+  public var debt: String? = nil
+  /// The row offers "Debt…" (a new expense/income, or one already recorded as a debt).
+  public var canRecordDebt: Bool = false
 }
 
 // MARK: - Accounts & categories tab
@@ -146,6 +150,8 @@ public enum ImportReviewOption: Hashable, Sendable {
   case pair
   case record(CategoryKind)
   case transfer
+  /// "Debt record…" (R-DEBT-10): opens the debt sheet.
+  case debt
   case skip
 }
 
@@ -185,6 +191,8 @@ public struct ImportReviewItem: Identifiable, Hashable, Sendable {
   public var selectedCategory: AbacusDomain.Category.ID?
   public var transferAccounts: [AccountOption]
   public var selectedTransferAccount: Account.ID?
+  /// "I lent · Ann" when recorded as a debt record.
+  public var debtLabel: String? = nil
 }
 
 // MARK: - History
@@ -346,6 +354,7 @@ extension ImportWizardModel {
     case .skipped: "Skipped"
     }
     if row.status == .new, row.type == .transfer { label = "New transfer" }
+    if row.status == .new, row.debt != nil { label = "Debt record" }
     if row.status == .new, row.source.kind == .openingBalance { label = "Opening balance" }
 
     var item = ImportRowItem(
@@ -354,10 +363,17 @@ extension ImportWizardModel {
       amount: format.amount(row.amountMinor, code, inflow: row.isInflow), isInflow: row.isInflow,
       isDimmed: row.status == .alreadyImported || row.status == .skipped || (row.status == .possibleDuplicate && row.duplicate?.action == .skip),
       category: .none, duplicateAction: row.duplicate?.action, note: nil, savesRule: nil)
+    item.canRecordDebt = row.canRecordDebt && row.review == nil
+    item.debt = row.debt.map(debtLabel)
+    if let debt = row.debt, row.review == nil, row.status != .alreadyImported, row.status != .skipped {
+      item.note = ImportNote(
+        debt.ruleID != nil ? "Debt record by rule" : (debt.createsDebt ? "Creates the debt" : "Debt record"), .info)
+      return item
+    }
 
     switch row.status {
     case .alreadyImported:
-      item.note = ImportNote("Skipped")
+      item.note = ImportNote(row.linkedDebtLeg != nil ? "Linked to the debt record" : "Skipped")
       return item
     case .skipped:
       item.note = ImportNote("Not imported")
@@ -664,6 +680,7 @@ extension ImportWizardModel {
       options = [
         .init(option: .pair, label: candidates.isEmpty ? "Pair with — no candidates found" : "Pair with", isEnabled: !candidates.isEmpty),
         .init(option: .record(recordKind), label: recordKind == .expense ? "Record as expense" : "Record as income", isEnabled: true),
+        .init(option: .debt, label: "Debt record…", isEnabled: true),
         .init(option: .skip, label: "Skip", isEnabled: true),
       ]
     case .unknownOperationType, .transferAmountUnknown:
@@ -678,6 +695,7 @@ extension ImportWizardModel {
       options = [
         .init(option: .record(recordKind), label: recordKind == .expense ? "Expense" : "Income", isEnabled: true),
         .init(option: .transfer, label: "Transfer to my account", isEnabled: true),
+        .init(option: .debt, label: "Debt record…", isEnabled: true),
         .init(option: .skip, label: "Skip", isEnabled: true),
       ]
     }
@@ -696,6 +714,8 @@ extension ImportWizardModel {
     case .transfer(let id):
       selected = .transfer
       selectedTransfer = id
+    case .debt:
+      selected = .debt
     case .skip:
       selected = .skip
     case nil:
@@ -705,6 +725,7 @@ extension ImportWizardModel {
     case .pair, .pairExisting: .pair
     case .record(let kind, _): .record(kind)
     case .transfer: .transfer
+    case .debt: .debt
     case .skip: .skip
     }
     let ownID: Account.ID? = if case .existing(let id) = row.account { id } else { nil }
@@ -714,7 +735,18 @@ extension ImportWizardModel {
       id: row.id, title: title, date: format.day(row.day), detail: detail, options: options, selected: selected,
       suggested: suggested, pairCandidates: candidates, selectedPair: selectedPair, recordKind: recordKind,
       categoryOptions: [ImportCategoryOption(choice: .none, label: "No category", isChild: false)] + categoryOptions(recordKind),
-      selectedCategory: selectedCategory, transferAccounts: transferAccounts, selectedTransferAccount: selectedTransfer)
+      selectedCategory: selectedCategory, transferAccounts: transferAccounts, selectedTransferAccount: selectedTransfer,
+      debtLabel: row.debt.map(debtLabel))
+  }
+
+  /// "I lent · Ann · €46.50 (new debt)".
+  func debtLabel(_ debt: PreviewDebt) -> String {
+    var text = "\(debt.kind.title) · \(debt.personName)"
+    if let amount = debt.amountMinor {
+      text += " · " + format.money.string(minor: amount, code: debt.currency.rawValue)
+    }
+    if debt.createsDebt { text += " (new debt)" }
+    return text
   }
 
   // MARK: Footer
@@ -751,6 +783,7 @@ extension ImportWizardModel {
     return preview.transactionsToCreate > 0 || preview.counts.settlesPending > 0
       || preview.rows.contains { $0.source.kind == .openingBalance && $0.status == .new }
       || preview.rows.contains { $0.duplicate?.action == .link }
+      || preview.rows.contains { $0.linkedDebtLeg != nil }
       || preview.rows.contains { $0.status == .alreadyImported && $0.type == .transfer && $0.counterAccount != nil }
   }
 

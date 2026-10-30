@@ -55,7 +55,9 @@ public enum Flow: Equatable, Sendable {
       switch txn.type {
       case .expense: return txn.isRefund ? .in : .out
       case .income: return txn.isRefund ? .out : .in
-      case .transfer: return .out
+      // A debt leg without destination marked `isRefund` brings money in (C14); a transfer
+      // between my accounts takes it out of its source.
+      case .transfer: return txn.isOneSidedInflow ? .in : .out
       }
     }
     if txn.type == .transfer, txn.toAccountID == accountID { return .in }
@@ -101,6 +103,20 @@ public enum FuzzyDuplicate {
     let gap = abs(rowDay.distance(to: candidateDay, calendar: calendar))
     guard gap <= dayWindow else { return false }
     return gap == 0 || candidate.type == .transfer || DescriptionSimilarity.isSimilar(rowPayee, candidate.payee)
+  }
+}
+
+/// A bank row for a payment already recorded by hand as a debt record (R-DEBT-13): the
+/// record's leg on an account the row touches, same amount in the account's currency, same
+/// direction, at most three days apart, any description. The leg must come from another source
+/// than the row: a leg made from this bank's own row carries its fingerprint (an exact match),
+/// and two equal repayments a day apart must not swallow each other.
+public enum DebtLegMatch {
+  public static let dayWindow = 3
+
+  public static func matches(rowSource: ImportSource, rowDay: Day, candidate: Txn, candidateDay: Day, calendar: Calendar) -> Bool {
+    guard candidate.debtRecordID != nil, candidate.source.rawValue != rowSource.rawValue else { return false }
+    return abs(rowDay.distance(to: candidateDay, calendar: calendar)) <= dayWindow
   }
 }
 

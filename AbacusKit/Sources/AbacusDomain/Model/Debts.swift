@@ -193,3 +193,62 @@ public struct DebtBook: Hashable, Sendable {
     entries.filter { $0.record.debtID == debtID }
   }
 }
+
+// MARK: - Linking transactions to debts (R-DEBT-9…13, TA v1.8, docs/status/C17.md)
+
+extension Debt {
+  /// The grouping key of a person name (see `personKey`).
+  public static func personKey(_ name: String) -> String {
+    name.trimmingCharacters(in: .whitespacesAndNewlines)
+      .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+  }
+}
+
+extension DebtRecordKind {
+  /// The kinds a transaction moving money in (`inflow`) or out can become (R-DEBT-10/11):
+  /// out → I lent, I repaid, Paid on their behalf; in → They repaid, I borrowed.
+  public static func linkable(inflow: Bool) -> [DebtRecordKind] {
+    inflow ? [.theyRepaid, .borrowed] : [.lent, .iRepaid, .paidOnTheirBehalf]
+  }
+
+  /// The kind suggested for money moving in or out with the debt at `balance` (positive = they
+  /// owe me): out → I repaid while I owe them, else I lent; in → They repaid while they owe me,
+  /// else I borrowed.
+  public static func suggested(inflow: Bool, balance: Int64) -> DebtRecordKind {
+    if inflow { return balance > 0 ? .theyRepaid : .borrowed }
+    return balance < 0 ? .iRepaid : .lent
+  }
+}
+
+extension DebtBook {
+  /// The person's debt in `currency` (person key match): an unsettled one first.
+  public func debt(person: String, currency: Currency) -> Debt? {
+    let key = Debt.personKey(person)
+    let matching = debts.filter { $0.personKey == key && $0.currency == currency }
+    return matching.first { !$0.isSettled } ?? matching.first
+  }
+
+  /// The person's debts, unsettled first, then in the display order of currencies.
+  public func debts(person: String) -> [Debt] {
+    let key = Debt.personKey(person)
+    let order = Dictionary(uniqueKeysWithValues: Currency.displayOrder.enumerated().map { ($1, $0) })
+    return debts.filter { $0.personKey == key }.sorted {
+      ($0.isSettled ? 1 : 0, order[$0.currency] ?? 99) < ($1.isSettled ? 1 : 0, order[$1.currency] ?? 99)
+    }
+  }
+
+  /// One name per person (the first spelling), A–Z.
+  public var personNames: [String] {
+    var seen: Set<String> = []
+    var names: [String] = []
+    for debt in debts where seen.insert(debt.personKey).inserted {
+      names.append(debt.personName.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    return names.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+  }
+
+  /// The debt's balance (positive = they owe me), in minor units of its currency.
+  public func balance(of debtID: Debt.ID) -> Int64 {
+    entries.reduce(0) { $1.record.debtID == debtID ? $0 + $1.record.balanceEffect : $0 }
+  }
+}

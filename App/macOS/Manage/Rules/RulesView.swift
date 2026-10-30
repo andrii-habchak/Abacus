@@ -495,6 +495,7 @@ struct RuleEditorSheet: View {
       Picker("Action", selection: binding(\.action, .category)) {
         Text("Assign category").tag(RuleAction.category)
         Text("Transfer to/from account").tag(RuleAction.transfer)
+        Text("Record as debt for").tag(RuleAction.debt)
       }
       .labelsHidden()
       .fixedSize()
@@ -513,7 +514,28 @@ struct RuleEditorSheet: View {
           AccountPickerItems(sections: model.accountSections) { Text($0.name).tag(Optional($0.id)) }
         }
         .labelsHidden()
+      case .debt:
+        TextField("Person", text: binding(\.debtPersonName, ""), prompt: Text("Person's name"))
+          .frame(minWidth: 160)
+        if !model.debtPeople.isEmpty {
+          Menu {
+            ForEach(model.debtPeople, id: \.self) { name in
+              Button(name) { model.editor?.debtPersonName = name }
+            }
+          } label: {
+            Image(systemName: "person.crop.circle")
+          }
+          .menuStyle(.borderlessButton)
+          .fixedSize()
+          .help("People with debts")
+        }
       }
+    }
+    if draft.action == .debt {
+      Text("The transaction becomes a debt record for this person: the person's debt in the account's currency (created when missing); money out is I lent (I repaid while you owe them), money in is They repaid (I borrowed while they owe you nothing).")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
     if draft.action == .transfer {
       Text("The transaction stays on its account and becomes a transfer: money out goes to this account, money in comes from it. Existing transfers are never changed.")

@@ -70,7 +70,60 @@ public enum ReviewChoice: Hashable, Sendable {
   /// Record as expense or income in a category (nil = uncategorised). Money keeps its
   /// direction: income recorded for money out is an income reversal, and so on.
   case record(CategoryKind, categoryID: AbacusDomain.Category.ID?)
+  /// Record as a debt record; the row's transaction becomes its leg (R-DEBT-10).
+  case debt(ImportDebtChoice)
   case skip
+}
+
+/// A row recorded as a debt record (R-DEBT-10, docs/status/C17.md): the person, the debt (an
+/// existing one, or the person's debt in `currency` created on commit), the kind and the
+/// expense/income flag. The row's transaction becomes the record's leg.
+public struct ImportDebtChoice: Hashable, Sendable {
+  public var personName: String
+  /// nil = the person's debt in `currency`, created on commit when there is none.
+  public var debtID: Debt.ID?
+  /// The debt's currency.
+  public var currency: Currency
+  public var kind: DebtRecordKind
+  /// "Count as expense" / "Count as income" where the kind offers it (R-DEBT-4).
+  public var countsInReports: Bool
+  /// In the debt's currency when it differs from the account's; nil = converted at the day's
+  /// rate (or the row's original amount in that currency).
+  public var amountMinor: Int64?
+
+  public init(
+    personName: String, debtID: Debt.ID? = nil, currency: Currency, kind: DebtRecordKind,
+    countsInReports: Bool = false, amountMinor: Int64? = nil
+  ) {
+    self.personName = personName
+    self.debtID = debtID
+    self.currency = currency
+    self.kind = kind
+    self.countsInReports = countsInReports
+    self.amountMinor = amountMinor
+  }
+}
+
+/// The debt record a row becomes, as the preview shows it (R-DEBT-10/12).
+public struct PreviewDebt: Hashable, Sendable {
+  public var personName: String
+  public var debtID: Debt.ID?
+  public var currency: Currency
+  public var kind: DebtRecordKind
+  public var countsInReports: Bool
+  /// In the debt's currency; nil when unknown (another currency without a rate).
+  public var amountMinor: Int64?
+  /// The rule that recorded it ("Record as debt for …"); nil = chosen in the preview.
+  public var ruleID: CategoryRule.ID?
+  /// The commit creates the debt (the person has none in this currency yet).
+  public var createsDebt: Bool { debtID == nil }
+
+  /// The choice that reproduces it (the sheet starts from it).
+  public var choice: ImportDebtChoice {
+    ImportDebtChoice(
+      personName: personName, debtID: debtID, currency: currency, kind: kind, countsInReports: countsInReports,
+      amountMinor: amountMinor)
+  }
 }
 
 /// Where a row's category comes from.
@@ -128,6 +181,11 @@ public struct PreviewRow: Identifiable, Hashable, Sendable {
   public internal(set) var rulePattern: String?
   public internal(set) var duplicate: DuplicateInfo?
   public internal(set) var review: ReviewInfo?
+  /// The debt record the row becomes (R-DEBT-10/12).
+  public internal(set) var debt: PreviewDebt?
+  /// R-DEBT-13: the leg of the hand-entered debt record this row matches (status Already
+  /// imported; the commit stores the row's fingerprints on it).
+  public internal(set) var linkedDebtLeg: Txn?
   /// The tag's event when the tag is ticked (R-IMP-SALDO-4).
   public internal(set) var eventTag: String?
   /// True when committing creates a new transaction for this row.
@@ -135,7 +193,17 @@ public struct PreviewRow: Identifiable, Hashable, Sendable {
 
   public var warnings: [String] { source.warnings }
   public var day: Date { source.occurredAt }
-  public var needsCategory: Bool { createsTransaction && (type == .expense || type == .income) && category == nil }
+  public var needsCategory: Bool {
+    createsTransaction && debt == nil && (type == .expense || type == .income) && category == nil
+  }
+
+  /// The row can be recorded as a debt record: a new expense/income (also a possible duplicate
+  /// imported anyway), a row already recorded as one, or a row in Needs review.
+  public var canRecordDebt: Bool {
+    if review != nil { return true }
+    if debt != nil { return true }
+    return createsTransaction && (type == .expense || type == .income)
+  }
 }
 
 /// A Saldo tag the user may turn into an event (R-IMP-SALDO-4).

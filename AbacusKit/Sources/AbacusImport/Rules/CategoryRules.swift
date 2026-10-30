@@ -79,6 +79,8 @@ public struct RuleMatcher: Sendable {
       guard let target = rule.transferAccountID else { return false }
       if let own = subject.accountID, own == target { return false }
       return activeAccounts.map { $0.contains(target) } ?? true
+    case .debt:
+      return rule.debtPerson != nil
     }
   }
 
@@ -93,7 +95,7 @@ public struct RuleMatcher: Sendable {
     rules.first { Self.conditionsHold($0, for: subject) && actionApplies($0, for: subject) }
   }
 
-  /// The first *category* rule matching a transaction of `kind` (transfer rules are skipped):
+  /// The first *category* rule matching a transaction of `kind` (transfer and debt rules are skipped):
   /// the editor's suggestion (R-EDIT-3).
   public func categoryMatch(_ subject: RuleSubject) -> CategoryRule? {
     rules.first { $0.action == .category && Self.conditionsHold($0, for: subject) && actionApplies($0, for: subject) }

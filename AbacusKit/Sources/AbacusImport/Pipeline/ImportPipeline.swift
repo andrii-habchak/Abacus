@@ -13,12 +13,17 @@ public struct ImportPipeline: Sendable {
   /// Days, Saldo's zone-less times and dedupe windows are read in this calendar.
   public let calendar: Calendar
   public let now: @Sendable () -> Date
+  /// Day rates for debt records in another currency than the row's account (R-DEBT-10); nil =
+  /// none (the amount must then be entered).
+  public let converter: @Sendable () async -> (any CurrencyConverter)?
 
   public init(
     store: any ImportStore, accounts: any AccountRepository, categories: any CategoryRepository,
     events: any EventRepository, rules: any RuleRepository, calendar: Calendar = .current,
-    now: @escaping @Sendable () -> Date = { Date() }
+    now: @escaping @Sendable () -> Date = { Date() },
+    converter: @escaping @Sendable () async -> (any CurrencyConverter)? = { nil }
   ) {
+    self.converter = converter
     self.store = store
     self.accounts = accounts
     self.categories = categories
@@ -91,7 +96,7 @@ public struct ImportPipeline: Sendable {
     return ImportPreview(
       batchID: UUID(), parsed: parsed, fileName: fileName, targetAccountID: target?.id,
       targetRemembered: remembered, context: context, calendar: calendar, analysis: analysis,
-      accountMappings: accountMappings, categoryMappings: categoryMappings)
+      accountMappings: accountMappings, categoryMappings: categoryMappings, converter: await converter())
   }
 
   /// Same as `preview(data:fileName:targetAccountID:)`; for headless imports (command-line
@@ -126,8 +131,9 @@ public struct ImportPipeline: Sendable {
     async let events = events.events(includeArchived: true)
     async let rules = rules.rules()
     async let mappings = store.mappings(source: source)
+    async let debts = store.debtBook()
     return try await ImportContext(
-      accounts: accounts, categories: categories, events: events, rules: rules, mappings: mappings)
+      accounts: accounts, categories: categories, events: events, rules: rules, mappings: mappings, debts: debts)
   }
 
   private func analyze(

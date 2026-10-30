@@ -21,13 +21,17 @@ public struct ManageDependencies: Sendable {
   public var converter: @Sendable () async -> any CurrencyConverter
   public var today: @Sendable () -> Day
   public var format: ManageFormat
+  /// People with debts for the rule editor's debt action (R-DEBT-12); nil = none offered.
+  public var debts: (any DebtRepository)?
 
   public init(
     accounts: any AccountRepository, categories: any CategoryRepository, txns: any TxnRepository,
     budget: any BudgetRepository, events: any EventRepository, rules: any RuleRepository,
     settings: any SettingsRepository, converter: @escaping @Sendable () async -> any CurrencyConverter,
-    today: @escaping @Sendable () -> Day = { Day(Date()) }, format: ManageFormat = ManageFormat()
+    today: @escaping @Sendable () -> Day = { Day(Date()) }, format: ManageFormat = ManageFormat(),
+    debts: (any DebtRepository)? = nil
   ) {
+    self.debts = debts
     self.accounts = accounts
     self.categories = categories
     self.txns = txns
@@ -62,10 +66,11 @@ extension ManageDependencies {
       txns: SQLiteTxnRepository(database: database, calendar: calendar),
       budget: SQLiteBudgetRepository(database: database),
       events: SQLiteEventRepository(database: database),
-      rules: SQLiteRuleRepository(database: database),
+      rules: SQLiteRuleRepository(database: database, calendar: calendar),
       settings: SQLiteSettingsRepository(database: database),
       converter: { await refresher.snapshot.table },
-      today: { Day(Date(), calendar: calendar) }, format: format)
+      today: { Day(Date(), calendar: calendar) }, format: format,
+      debts: SQLiteDebtRepository(database: database, calendar: calendar))
   }
 
   /// In-memory fakes over `store` (default: `ManagePreviewStore.sample()`, i.e. `PreviewData`

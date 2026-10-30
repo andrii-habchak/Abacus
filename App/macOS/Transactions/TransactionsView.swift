@@ -37,6 +37,17 @@ struct TransactionsView: View {
         .background(TxnPalette.barBackground)
     }
     .navigationTitle("Transactions")
+    .sheet(
+      isPresented: Binding(
+        get: { model.debtDraft != nil },
+        set: { if !$0 { model.cancelConvertToDebt() } })
+    ) {
+      if let draft = model.debtDraft {
+        DebtLinkSheet(
+          initial: draft, saveTitle: "Convert", onCancel: { model.cancelConvertToDebt() },
+          onSave: { saved in Task { await model.saveConvertToDebt(saved) } })
+      }
+    }
     .onChange(of: displayCurrency, initial: true) { _, currency in
       model.displayCurrency = currency
     }
@@ -92,7 +103,13 @@ struct TransactionsView: View {
       }
       .listStyle(.plain)
       .scrollContentBackground(.hidden)
-      .contextMenu(forSelectionType: Txn.ID.self) { _ in
+      .contextMenu(forSelectionType: Txn.ID.self) { ids in
+        // R-DEBT-11: an expense or income becomes a debt record's money in place.
+        if ids.count == 1, let id = ids.first, model.canConvertToDebt(id) {
+          Button("Convert to Debt Record…") {
+            Task { await model.beginConvertToDebt(id) }
+          }
+        }
       } primaryAction: { ids in
         if let id = ids.first { onOpen?(id) }
       }
