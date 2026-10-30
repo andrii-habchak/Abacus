@@ -89,11 +89,16 @@ public enum AccountSheet: Identifiable, Equatable, Sendable {
 /// both; the page asks for its name first (`defaultName`: the target's first word).
 public struct AccountGroupPrompt: Identifiable, Equatable, Sendable {
   public let id: UUID
-  /// The dragged account.
+  /// The dragged account (the first one of a multi-selection drag, C27).
   public let moving: Account.ID
+  /// The other dragged accounts of a multi-selection drag, in list order (C27).
+  public let alsoMoving: [Account.ID]
   /// The ungrouped account it was dropped onto; the group takes its place.
   public let target: Account.ID
   public let defaultName: String
+
+  /// Every dragged account in order.
+  public var allMoving: [Account.ID] { [moving] + alsoMoving }
 }
 
 /// The Accounts screen (approved prototype group 4, R-MGMT-1, R-MGMT-9, R-ACC-1…5, D48): page
@@ -124,8 +129,18 @@ public final class AccountsModel {
   public private(set) var sort: AccountSort = .default
   /// Group sums are in this currency (the app's display currency).
   public private(set) var displayCurrency: Currency
-  /// An account or a group id.
-  public private(set) var selection: UUID?
+  /// An account or a group id: the one selected row. nil while several rows are selected
+  /// (`multiSelection`) or none is.
+  public private(set) var selection: UUID? {
+    didSet { if selection != nil { multiSelection = [] } }
+  }
+  /// Two or more selected rows (Cmd / Shift click, C27); empty otherwise. Only dragging uses it:
+  /// the inspector, "New transaction" and the sheets work on `selection`.
+  public private(set) var multiSelection: Set<UUID> = []
+  /// Every selected row: `multiSelection`, or the single `selection`.
+  public var selectedIDs: Set<UUID> {
+    multiSelection.isEmpty ? Set(selection.map { [$0] } ?? []) : multiSelection
+  }
   /// The account inspector's form; edits are kept until `save()` or `revert()`.
   public var draft: AccountDraft?
   /// The group inspector's form (a group selected or "New group").
@@ -192,6 +207,10 @@ public final class AccountsModel {
       if groupDraft?.id != selection { groupDraft = Self.groupDraft(group) }
     } else if let selection, let account = account(selection) {
       if draft?.id != selection || draft?.isNew == true { draft = makeDraft(account) }
+    } else if multiSelection.count > 1 {
+      // Several rows selected: keep those that still exist.
+      let alive = multiSelection.filter { account($0) != nil || group($0) != nil }
+      if alive.count > 1 { multiSelection = alive } else { select(alive.first) }
     } else if draft?.isNew != true && groupDraft?.isNew != true {
       select(firstAccountID)
     }
@@ -331,10 +350,20 @@ public final class AccountsModel {
 
   /// Picks an account or a group for the inspector, dropping unsaved edits.
   public func select(_ id: UUID?) {
+    multiSelection = []
     selection = id
     errorMessage = nil
     draft = id.flatMap(account).map { makeDraft($0) }
     groupDraft = id.flatMap(group).map(Self.groupDraft)
+  }
+
+  /// The list's selection (C27): one row selects it as before; several rows (Cmd / Shift click)
+  /// are kept as `multiSelection` with the inspector, drafts and `selection` cleared.
+  public func select(ids: Set<UUID>) {
+    let known = ids.filter { account($0) != nil || group($0) != nil }
+    if known.count <= 1 { return select(known.first) }
+    select(nil)
+    multiSelection = known
   }
 
   public func setShowArchived(_ show: Bool) {
@@ -771,6 +800,37 @@ public final class AccountsModel {
     return allowed
   }
 
+  /// A multi-selection drag (C27): what is really moved, in list order. A group carries its own
+  /// accounts, so selected accounts of a selected group are left out (nothing is moved twice or
+  /// taken out of its group); unknown ids are dropped.
+  public func draggedItems(_ ids: [UUID]) -> [UUID] {
+    let wanted = Set(ids)
+    let carried = Set(groups.map(\.id)).intersection(wanted)
+    return ordered.compactMap { item -> UUID? in
+      guard wanted.contains(item.id) else { return nil }
+      if case .account(let account) = item, let group = account.groupID, carried.contains(group) { return nil }
+      return item.id
+    }
+  }
+
+  /// Whether the whole selection may be dropped there (C27). All or nothing: one item that
+  /// can't go there (a group into a group, a row onto itself, a group onto an account…) refuses
+  /// the drop, which the outline shows as the no-drop cursor before release. Accounts already
+  /// in the target group are skipped, as long as one account really moves.
+  public func canDrop(_ moving: [UUID], on target: UUID?, position: AccountDropPosition) -> Bool {
+    let items = draggedItems(moving)
+    guard !items.isEmpty else { return false }
+    if items.count == 1 { return canDrop(items[0], on: target, position: position) }
+    if let pair = newGroupDrop(items, on: target, position: position) { return !pair.moving.isEmpty }
+    var moves = 0
+    for id in items {
+      if isNoopJoin(id, on: target, position: position) { continue }
+      guard canDrop(id, on: target, position: position) else { return false }
+      moves += 1
+    }
+    return moves > 0
+  }
+
   private struct DropCheck: Hashable {
     let moving: UUID
     let target: UUID?
@@ -807,6 +867,25 @@ public final class AccountsModel {
     return (moving, target)
   }
 
+  /// `.onto` an ungrouped account with several dragged accounts (C27): they join the target in
+  /// the new group. A group, or the target itself, among them refuses the drop.
+  private func newGroupDrop(_ ids: [UUID], on targetID: UUID?, position: AccountDropPosition)
+    -> (moving: [Account], target: Account)?
+  {
+    guard position == .onto, let targetID, let target = account(targetID), !isGrouped(target) else { return nil }
+    let moving = ids.compactMap { account($0) }
+    guard moving.count == ids.count, !ids.contains(targetID) else { return nil }
+    return (moving, target)
+  }
+
+  /// `.onto` a group (or an account in it) for an account that is already there.
+  private func isNoopJoin(_ id: UUID, on targetID: UUID?, position: AccountDropPosition) -> Bool {
+    guard position == .onto, let targetID, let moving = account(id), let groupID = moving.groupID,
+      isGrouped(moving)
+    else { return false }
+    return targetID == groupID || account(targetID)?.groupID == groupID
+  }
+
   /// The new group's suggested name: the target's first word ("PKO Personal" → "PKO").
   public static func suggestedGroupName(for account: Account) -> String {
     let name = account.name.trimmingCharacters(in: .whitespaces)
@@ -826,19 +905,39 @@ public final class AccountsModel {
   /// Balances and transactions never change. A group left empty by a move stays (a folder the
   /// user deletes, D48).
   public func drop(_ moving: UUID, on target: UUID?, position: AccountDropPosition) async {
-    if let pair = newGroupDrop(moving, on: target, position: position) {
+    await drop([moving], on: target, position: position)
+  }
+
+  /// Applies a multi-selection drop (C27) with the same rules for every dragged row, in list
+  /// order (after a row: they land in that order too). A refused drop (see `canDrop`) changes
+  /// nothing. Onto an ungrouped account: one prompt, one group holding the target and all of
+  /// them.
+  public func drop(_ moving: [UUID], on target: UUID?, position: AccountDropPosition) async {
+    guard canDrop(moving, on: target, position: position) else { return }
+    let items = draggedItems(moving)
+    if let pair = newGroupDrop(items, on: target, position: position) {
       groupPrompt = AccountGroupPrompt(
-        id: UUID(), moving: pair.moving.id, target: pair.target.id,
+        id: UUID(), moving: pair.moving[0].id, alsoMoving: pair.moving.dropFirst().map(\.id), target: pair.target.id,
         defaultName: Self.suggestedGroupName(for: pair.target))
       return
     }
-    guard let plan = plan(moving, on: target, position: position) else { return }
-    if plan.reorders { await setSort(.custom) }
+    // "After a row": last item first, so each one lands right below the row.
+    let sequence = position == .after ? Array(items.reversed()) : items
+    var changed = false
+    var sorted = false
     do {
-      for group in plan.groups { try await dependencies.accounts.saveGroup(group) }
-      for account in plan.accounts { try await dependencies.accounts.save(account) }
-      if !plan.accounts.isEmpty || !plan.groups.isEmpty { await onDataChange?() }
-      await reloadOrder()
+      for id in sequence where !isNoopJoin(id, on: target, position: position) {
+        guard let plan = plan(id, on: target, position: position) else { continue }
+        if plan.reorders, !sorted {
+          sorted = true
+          await setSort(.custom)
+        }
+        for group in plan.groups { try await dependencies.accounts.saveGroup(group) }
+        for account in plan.accounts { try await dependencies.accounts.save(account) }
+        if !plan.accounts.isEmpty || !plan.groups.isEmpty { changed = true }
+        await reloadOrder()
+      }
+      if changed { await onDataChange?() }
     } catch {
       errorMessage = ManageFailure.message(error, doing: "move the account")
       await load()
@@ -853,18 +952,21 @@ public final class AccountsModel {
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
     groupPrompt = nil
-    guard prompt.moving != prompt.target, var target = account(prompt.target), var moving = account(prompt.moving),
-      !isGrouped(target)
+    let movers = prompt.allMoving.compactMap { account($0) }
+    guard !prompt.allMoving.contains(prompt.target), movers.count == prompt.allMoving.count,
+      var target = account(prompt.target), !isGrouped(target)
     else { return }
     let group = AccountGroup(id: UUID(), name: trimmed, position: target.position)
     target.groupID = group.id
     target.position = 0
-    moving.groupID = group.id
-    moving.position = 1
     do {
       try await dependencies.accounts.saveGroup(group)
       try await dependencies.accounts.save(target)
-      try await dependencies.accounts.save(moving)
+      for (index, var moving) in movers.enumerated() {
+        moving.groupID = group.id
+        moving.position = index + 1
+        try await dependencies.accounts.save(moving)
+      }
       await onDataChange?()
       await load()
     } catch {

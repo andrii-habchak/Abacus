@@ -80,3 +80,21 @@ public struct OutlineDropResolver: Sendable {
     roots.contains { $0.children.contains(id) } ? Node(id: id) : nil
   }
 }
+
+/// Edge auto-scroll while dragging in an outline (C27): how far to scroll per tick for a pointer
+/// `y` points below the top of the visible list. Kept free of AppKit so it is unit-tested.
+public enum OutlineAutoScroll {
+  /// Points from an edge where scrolling starts.
+  public static let edgeZone: Double = 36
+  /// The fastest step per tick (points).
+  public static let maxStep: Double = 16
+
+  /// Negative = scroll up (pointer near or above the top edge), positive = down, 0 = the middle
+  /// (or a list too short to have an edge zone). Grows the closer to / the further beyond the edge.
+  public static func step(y: Double, height: Double) -> Double {
+    guard height > 2 * edgeZone else { return 0 }
+    if y < edgeZone { return -maxStep * min(1, (edgeZone - y) / edgeZone) }
+    if y > height - edgeZone { return maxStep * min(1, (y - (height - edgeZone)) / edgeZone) }
+    return 0
+  }
+}

@@ -62,7 +62,17 @@ public final class CategoriesModel {
   public private(set) var uncategorisedColor = Uncategorised.defaultColorHex
   /// Categories with a limit in the budget in effect this month.
   public private(set) var budgeted: Set<AbacusDomain.Category.ID> = []
-  public private(set) var selection: AbacusDomain.Category.ID?
+  /// The one selected row; nil while several rows are selected (`multiSelection`) or none is.
+  public private(set) var selection: AbacusDomain.Category.ID? {
+    didSet { if selection != nil { multiSelection = [] } }
+  }
+  /// Two or more selected rows (Cmd / Shift click, C27); empty otherwise. Only dragging uses it:
+  /// the inspector, "New transaction" and the sheets work on `selection`.
+  public private(set) var multiSelection: Set<AbacusDomain.Category.ID> = []
+  /// Every selected row: `multiSelection`, or the single `selection`.
+  public var selectedIDs: Set<AbacusDomain.Category.ID> {
+    multiSelection.isEmpty ? Set(selection.map { [$0] } ?? []) : multiSelection
+  }
   public var draft: CategoryDraft?
   public private(set) var dialog: ManageDialog?
   /// The category picked in the delete dialog.
@@ -128,6 +138,10 @@ public final class CategoriesModel {
       if draft?.isBuiltIn != true { select(Self.uncategorisedID) }
     } else if let selection, let category = category(selection), category.kind == kind {
       if draft?.id != selection { draft = Self.draft(category) }
+    } else if multiSelection.count > 1 {
+      // Several rows selected: keep those that still exist on this tab.
+      let alive = multiSelection.filter { id in category(id)?.kind == kind || id == Self.uncategorisedID }
+      if alive.count > 1 { multiSelection = alive } else { select(alive.first) }
     } else if draft?.isNew != true {
       select(rows.first?.id)
     }
@@ -201,7 +215,17 @@ public final class CategoriesModel {
     select(rows.first?.id)
   }
 
+  /// The list's selection (C27): one row selects it as before; several rows (Cmd / Shift click)
+  /// are kept as `multiSelection` with the inspector, draft and `selection` cleared.
+  public func select(ids: Set<AbacusDomain.Category.ID>) {
+    let known = ids.filter { id in id == Self.uncategorisedID || category(id)?.kind == kind }
+    if known.count <= 1 { return select(known.first) }
+    select(nil)
+    multiSelection = known
+  }
+
   public func select(_ id: AbacusDomain.Category.ID?) {
+    multiSelection = []
     selection = id
     errorMessage = nil
     if id == Self.uncategorisedID {
@@ -421,6 +445,32 @@ public final class CategoriesModel {
     return allowed
   }
 
+  /// A multi-selection drag (C27): what is really moved, in list order. A parent carries its own
+  /// subcategories, so selected subcategories of a selected parent are left out; unknown ids
+  /// (the built-in "Uncategorised" row, other tab) are dropped.
+  public func draggedItems(_ ids: [AbacusDomain.Category.ID]) -> [AbacusDomain.Category.ID] {
+    let wanted = Set(ids)
+    let current = ordered(kind)
+    let rowIDs = Set(current.map(\.id))
+    return current.compactMap { category -> AbacusDomain.Category.ID? in
+      guard wanted.contains(category.id) else { return nil }
+      if let parent = category.parentID, rowIDs.contains(parent), wanted.contains(parent) { return nil }
+      return category.id
+    }
+  }
+
+  /// Whether the whole selection may be dropped there (C27). All or nothing: one item that
+  /// can't go there (a parent with subcategories onto a row, a row onto itself, the built-in
+  /// entry…) refuses the drop, which the outline shows as the no-drop cursor before release.
+  public func canDrop(
+    _ moving: [AbacusDomain.Category.ID], on target: AbacusDomain.Category.ID?, position: CategoryDropPosition
+  ) -> Bool {
+    let items = draggedItems(moving)
+    // An id that is not a row of this tab (Uncategorised) makes the drop impossible.
+    guard !items.isEmpty, Set(moving).subtracting(Set(ordered(kind).map(\.id))).isEmpty else { return false }
+    return items.allSatisfy { canDrop($0, on: target, position: position) }
+  }
+
   private struct DropCheck: Hashable {
     let kind: CategoryKind
     let moving: AbacusDomain.Category.ID
@@ -453,12 +503,33 @@ public final class CategoriesModel {
   public func drop(
     _ moving: AbacusDomain.Category.ID, on target: AbacusDomain.Category.ID?, position: CategoryDropPosition
   ) async {
-    guard let plan = plan(moving, on: target, position: position) else { return }
-    if plan.reorders { await setSort(.custom) }
+    await drop([moving], on: target, position: position)
+  }
+
+  /// Applies a multi-selection drop (C27) with the same rules for every dragged row, in list
+  /// order (after a row: they land in that order too). A refused drop (see `canDrop`) changes
+  /// nothing.
+  public func drop(
+    _ moving: [AbacusDomain.Category.ID], on target: AbacusDomain.Category.ID?, position: CategoryDropPosition
+  ) async {
+    guard canDrop(moving, on: target, position: position) else { return }
+    let items = draggedItems(moving)
+    // "After a row": last item first, so each one lands right below the row.
+    let sequence = position == .after ? Array(items.reversed()) : items
+    var changed = false
+    var sorted = false
     do {
-      for category in plan.changed { try await dependencies.categories.save(category) }
-      if !plan.changed.isEmpty { await onDataChange?() }
-      await reloadOrder()
+      for id in sequence {
+        guard let plan = plan(id, on: target, position: position) else { continue }
+        if plan.reorders, !sorted {
+          sorted = true
+          await setSort(.custom)
+        }
+        for category in plan.changed { try await dependencies.categories.save(category) }
+        if !plan.changed.isEmpty { changed = true }
+        await reloadOrder()
+      }
+      if changed { await onDataChange?() }
     } catch {
       errorMessage = ManageFailure.message(error, doing: "move the category")
       await load()
