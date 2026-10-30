@@ -21,7 +21,8 @@ public struct RuleSubject: Hashable, Sendable {
   }
 }
 
-/// Applies rules (R-IMP-8, R-EDIT-3, D44): description *contains* / *exactly matches* (folded
+/// Applies rules (R-IMP-8, R-EDIT-3, D44, C15): description *contains* / *starts with* /
+/// *equals* (folded
 /// for case, diacritics and whitespace) and/or amount bigger / smaller than, optionally
 /// only on one account → assign a category or turn into a transfer. Rules are tried in the given
 /// order (`RuleRepository.rules()` returns them in evaluation order); the first one that matches
@@ -53,6 +54,7 @@ public struct RuleMatcher: Sendable {
       guard !text.isEmpty else { return false }
       switch rule.matchKind {
       case .contains: guard text.contains(pattern) else { return false }
+      case .startsWith: guard text.hasPrefix(pattern) else { return false }
       case .exactly: guard text == pattern else { return false }
       }
     }

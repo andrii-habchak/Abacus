@@ -72,6 +72,21 @@ struct RulesV6Tests {
     #expect(try await f.rules.rules().isEmpty)
   }
 
+  @Test("C15: a starts-with rule round-trips as 'startsWith' next to an equals rule stored as 'exactly'")
+  func startsWithRoundTrip() async throws {
+    let f = try F()
+    try f.seedBasics()
+    let starts = CategoryRule(pattern: "uber", matchKind: .startsWith, categoryID: F.groceries.id, position: 0)
+    let equals = CategoryRule(pattern: "shop", matchKind: .exactly, categoryID: F.groceries.id, position: 1)
+    try await f.rules.save(starts)
+    try await f.rules.save(equals)
+    #expect(try await f.rules.rules() == [starts, equals])
+    let stored = try await f.database.read { db in
+      try String.fetchAll(db, sql: #"SELECT "matchKind" FROM "categoryRules" ORDER BY "position""#)
+    }
+    #expect(stored == ["startsWith", "exactly"])
+  }
+
   @Test("R-MGMT-6: saving a rule with its changes writes both in one transaction; a missing transaction rolls back")
   func saveUpdating() async throws {
     let f = try F()

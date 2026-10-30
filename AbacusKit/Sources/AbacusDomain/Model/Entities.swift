@@ -488,9 +488,15 @@ public enum RuleOrigin: String, CaseIterable, Codable, Hashable, Sendable, Query
 }
 
 /// How a rule's text is compared with the description (R-IMP-8). Both sides are folded for
-/// case, diacritics and whitespace first.
+/// case, diacritics and whitespace first. The raw values are stored in `categoryRules.matchKind`:
+/// never rename them. `exactly` is "Description equals" (the whole description, C15).
 public enum RuleMatchKind: String, CaseIterable, Codable, Hashable, Sendable, QueryBindable {
-  case contains, exactly
+  /// The description contains the text anywhere.
+  case contains
+  /// The description begins with the text (C15).
+  case startsWith
+  /// The whole description equals the text ("Description equals").
+  case exactly
 }
 
 /// The optional amount condition: the transaction's absolute amount in its account's currency
