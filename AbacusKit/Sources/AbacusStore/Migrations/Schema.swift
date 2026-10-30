@@ -107,6 +107,13 @@ extension AbacusDatabase {
     migrator.registerMigration("v13: accounts drive debts") { db in
       _ = try DebtMigrationV13.run(db)
     }
+    // R-ACC-4 (C29): `txns.isBalanceCorrection` marks the correction booked when an account with a
+    // balance is archived; reports skip it. Append-only and CloudKit-safe: one nullable-free column
+    // with a default (`ON CONFLICT REPLACE DEFAULT 0` as in v5), no constraint, no index.
+    migrator.registerMigration("v14: txns.isBalanceCorrection") { db in
+      try db.execute(
+        sql: #"ALTER TABLE "txns" ADD COLUMN "isBalanceCorrection" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
+    }
     return migrator
   }
 

@@ -215,6 +215,10 @@ public struct Txn: Hashable, Identifiable, Sendable {
   /// Set on the leg of a debt record: the money the record moved on this account (R-DEBT-3).
   /// Deleting the record deletes the leg.
   public var debtRecordID: DebtRecord.ID?
+  /// R-ACC-4 (C29): the "Balance correction" booked when an account with a balance is archived to
+  /// zero it. It stays on the account (list, balance) but is **not** income or expense: reports,
+  /// budgets, donuts, "income vs expenses" and the list totals skip it, like a transfer.
+  public var isBalanceCorrection: Bool
 
   public init(
     id: UUID = UUID(), type: TxnType, occurredAt: Date, accountID: Account.ID,
@@ -223,7 +227,7 @@ public struct Txn: Hashable, Identifiable, Sendable {
     originalCurrencyCode: String? = nil, payee: String = "", note: String = "",
     eventID: Event.ID? = nil, source: TxnSource = .manual, importBatchID: ImportBatch.ID? = nil,
     isPendingAtBank: Bool = false, createdAt: Date = Date(), bookedDay: String? = nil,
-    debtRecordID: DebtRecord.ID? = nil
+    debtRecordID: DebtRecord.ID? = nil, isBalanceCorrection: Bool = false
   ) {
     self.id = id
     self.type = type
@@ -245,6 +249,7 @@ public struct Txn: Hashable, Identifiable, Sendable {
     self.createdAt = createdAt
     self.bookedDay = bookedDay
     self.debtRecordID = debtRecordID
+    self.isBalanceCorrection = isBalanceCorrection
   }
 
   /// Money comes into `accountID` from outside the app's accounts: a debt leg without a

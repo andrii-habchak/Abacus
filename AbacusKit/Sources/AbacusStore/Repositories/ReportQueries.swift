@@ -39,7 +39,7 @@ public struct SQLiteReportQueries: Sendable {
       SELECT "t"."categoryID", "a"."currency", "t"."occurredAt", "t"."type", "t"."isRefund", \#
       "t"."amountMinor"
       FROM "txns" AS "t" JOIN "accounts" AS "a" ON "a"."id" = "t"."accountID"
-      WHERE "t"."type" <> 'transfer' AND \#(condition)
+      WHERE "t"."type" <> 'transfer' AND NOT "t"."isBalanceCorrection" AND \#(condition)
       UNION ALL
       SELECT "r"."categoryID", "a"."currency", "t"."occurredAt",
         CASE WHEN "r"."kind" = 'income' AND "c"."kind" = 'expense' THEN 'expense' ELSE "r"."kind" END,
