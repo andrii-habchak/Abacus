@@ -182,9 +182,27 @@ public final class DebtsModel {
     /// "Due 1 Dec 2026".
     public let detail: String?
     public let isSettled: Bool
-    /// The open balances summed in the display currency ("≈ −₴3,400"), as on the dashboard
-    /// widget: only when a balance is in another currency (R-DEBT-15).
-    public var convertedText: String? = nil
+    /// The ONE main figure (R-DEBT-21): the person's balances summed in the display currency;
+    /// nil when a rate is missing ("No rate").
+    public var total: BalanceText? = nil
+    /// A balance was converted, so the figure is approximate ("≈").
+    public var isApproximate = false
+    /// Per-currency amounts, no lent/borrowed labels; only for a debt with several currencies.
+    public var secondaryText: String? = nil
+  }
+
+  /// Open balances summed in the display currency at the latest rate; nil when a rate is missing.
+  func rowTotal(_ balances: [Money]) -> Money? {
+    var minor: Int64 = 0
+    for money in balances where money.minorUnits != 0 {
+      if money.currency == displayCurrency {
+        minor += money.minorUnits
+        continue
+      }
+      guard let converted = converter.convertAtLatest(money, to: displayCurrency) else { return nil }
+      minor += converted.minorUnits
+    }
+    return Money(minorUnits: minor, currency: displayCurrency)
   }
 
   func balanceText(_ money: Money) -> BalanceText {
@@ -200,7 +218,6 @@ public final class DebtsModel {
   public var people: [PersonRow] {
     let balances = self.balances
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-    let totals = Dictionary(summary.people.map { ($0.personKey, $0) }, uniquingKeysWith: { first, _ in first })
     return book.debts.compactMap { debt -> PersonRow? in
       guard debt.isSettled == (filter == .settled) else { return nil }
       let name = debt.personName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,7 +228,8 @@ public final class DebtsModel {
         id: debt.personKey, debtID: debt.id, name: name,
         balances: (shown.isEmpty ? [Money.zero(displayCurrency)] : shown).map(balanceText),
         detail: due.map { "Due \(format.day($0))" }, isSettled: debt.isSettled,
-        convertedText: debt.isSettled ? nil : totals[debt.personKey].flatMap(convertedText))
+        total: rowTotal(shown).map(balanceText), isApproximate: shown.contains { $0.currency != displayCurrency },
+        secondaryText: DebtSign.caption(shown, magnitude: dashboardFormat.money))
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
@@ -613,6 +631,39 @@ public final class DebtsModel {
         isSelected: draft.accountIDs.contains(account.id),
         disabledReason: elsewhere.map { "In \($0.personName)" })
     }
+  }
+
+  /// One linked account in the dialog's "Linked accounts" section (R-DEBT-17, R-DEBT-21).
+  public struct LinkedAccountRow: Hashable, Sendable, Identifiable {
+    public let id: Account.ID
+    public let name: String
+    public let role: DebtAccountRole
+    /// "external" / "virtual".
+    public let roleTitle: String
+    public let currency: Currency
+    public let isArchived: Bool
+  }
+
+  /// The accounts linked in the open dialog (existing links and new picks), A-Z. An account already
+  /// linked keeps its role; a new pick is `external`. The opening balance is `debtDraft.openings[id]`.
+  public var linkedAccountRows: [LinkedAccountRow] {
+    guard let draft = debtDraft else { return [] }
+    let roles = Dictionary(
+      book.links(of: draft.id ?? UUID()).map { ($0.accountID, $0.role) }, uniquingKeysWith: { first, _ in first })
+    return accounts.filter { draft.accountIDs.contains($0.id) }
+      .sorted(by: AccountOrder.byName)
+      .map { account in
+        let role = roles[account.id] ?? .external
+        return LinkedAccountRow(
+          id: account.id, name: account.name, role: role, roleTitle: role.rawValue, currency: account.currency,
+          isArchived: account.isArchived)
+      }
+  }
+
+  /// The "Add accounts" picker: every non-archived account not yet linked here, matching `search`;
+  /// accounts of another debt are listed disabled ("In <debt>").
+  public func addableAccountChoices(search: String = "") -> [AccountChoice] {
+    accountChoices(search: search).filter { !$0.isSelected }
   }
 
   /// Picks or drops an account of the dialog; an account of another debt is refused.

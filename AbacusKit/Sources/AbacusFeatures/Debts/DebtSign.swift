@@ -59,6 +59,15 @@ public enum DebtSign {
     amount.minorUnits == 0 ? magnitude(amount) : "+" + magnitude(amount)
   }
 
+  /// The small secondary caption of a debt row (R-DEBT-21): the per-currency amounts in the display
+  /// sign, no "lent/borrowed" labels, joined by " · ". Only when the debt has more than one
+  /// non-zero currency; nil otherwise.
+  public static func caption(_ balances: [Money], magnitude: (Money) -> String) -> String? {
+    let open = balances.filter { $0.minorUnits != 0 }
+    guard open.count > 1 else { return nil }
+    return open.map { text(stored: $0, magnitude: magnitude) }.joined(separator: " · ")
+  }
+
   public static let lentTitle = "You lent"
   public static let borrowedTitle = "You borrowed"
 }
