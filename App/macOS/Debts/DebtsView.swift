@@ -172,18 +172,23 @@ struct DebtPersonRowView: View {
       DebtAvatar(name: person.name)
       VStack(alignment: .leading, spacing: 3) {
         Text(person.name).font(.body.weight(.medium)).lineLimit(1)
-        if let converted = person.convertedText {
-          Text(converted).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-            .help("All open balances in the display currency at today's rates")
-        }
         if let detail = person.detail {
           Text(detail).font(.caption).foregroundStyle(.secondary)
         }
       }
       Spacer(minLength: 8)
       VStack(alignment: .trailing, spacing: 2) {
-        ForEach(person.balances) { balance in
-          DebtBalanceLabel(balance: balance, compact: true)
+        if let total = person.total {
+          Text((person.isApproximate ? "≈ " : "") + total.amountText)
+            .font(.callout.weight(.semibold).monospacedDigit())
+            .foregroundStyle(DebtStyle.color(total))
+            .help(person.isApproximate ? "All open balances in the display currency at today's rates" : "")
+        } else {
+          Text("No rate").font(.callout).foregroundStyle(.secondary)
+            .help("A rate to the display currency is missing; refresh the rates")
+        }
+        if let secondary = person.secondaryText {
+          Text(secondary).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
         }
       }
     }
@@ -484,9 +489,11 @@ struct DebtFormSheet: View {
       let draft = presentBinding({ model.debtDraft }, { model.debtDraft = $0 }, fallback: shown)
       VStack(alignment: .leading, spacing: 0) {
         Text(draft.wrappedValue.id == nil ? "New debt" : "Edit debt").font(.headline).padding([.horizontal, .top], 20)
+        // One scroll area between the fixed title and the fixed footer; sections stack in it
+        // without height caps, so nothing is clipped or drawn over another row.
         ScrollView {
-          VStack(alignment: .leading, spacing: 12) {
-            Form {
+          VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
               TextField("Person", text: draft.personName)
               Toggle("Due date", isOn: draft.hasDueDay)
               if draft.wrappedValue.hasDueDay {
@@ -496,12 +503,10 @@ struct DebtFormSheet: View {
               Toggle("Count in net worth", isOn: draft.countsInNetWorth)
                 .help("What you lent counts as an asset, what you borrowed as a liability")
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            .frame(minHeight: 200)
+            .textFieldStyle(.roundedBorder)
             DebtAccountPicker(model: model, search: $accountSearch)
-              .padding(.horizontal, 20)
           }
+          .padding(20)
         }
         if let issue = model.debtDraftIssue ?? model.errorMessage {
           Text(issue).font(.caption).foregroundStyle(ManagePalette.negative).padding(.horizontal, 20).padding(.top, 8)
@@ -530,53 +535,98 @@ struct DebtFormSheet: View {
   }
 }
 
-/// The account part of the debt dialog (R-DEBT-17, R-DEBT-21): a searchable multi-select of the
-/// person's accounts (an account of another debt is disabled and names that debt), an opening
-/// balance per linked account (display sign: negative = they owe you), and "Create account" for a
-/// virtual account in a chosen currency.
+/// The account part of the debt dialog (R-DEBT-17, R-DEBT-21), three stacked sections inside the
+/// sheet's single scroll area: "Linked accounts" (name, role, currency, opening balance in the
+/// display sign, unlink), "Add accounts" (searchable; an account of another debt is disabled and
+/// names that debt) and "Create account" (a virtual account in a chosen currency) in its own section.
 struct DebtAccountPicker: View {
   @Bindable var model: DebtsModel
   @Binding var search: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("Accounts").font(.headline)
-      Text("Link the person's accounts (never your own). Their balances make up the debt; the opening balance is negative when they owe you.")
+    VStack(alignment: .leading, spacing: 16) {
+      linked
+      add
+      create
+    }
+  }
+
+  private var linked: some View {
+    let rows = model.linkedAccountRows
+    return VStack(alignment: .leading, spacing: 8) {
+      Text("Linked accounts").font(.headline)
+      Text("The person's accounts (never your own). The opening balance is negative when they owe you.")
         .font(.caption).foregroundStyle(.secondary)
-      PageSearchField(text: $search, prompt: "Search accounts")
-      let choices = model.accountChoices(search: search)
-      VStack(spacing: 0) {
-        if choices.isEmpty {
-          Text("No accounts match.").font(.callout).foregroundStyle(.secondary).padding(12)
+      card {
+        if rows.isEmpty {
+          Text("No accounts linked yet.").font(.callout).foregroundStyle(.secondary).padding(12)
         }
-        ForEach(choices) { choice in
+        ForEach(rows) { row in
           HStack(spacing: 8) {
-            Toggle(isOn: Binding(get: { choice.isSelected }, set: { _ in model.toggleAccount(choice.id) })) {
-              VStack(alignment: .leading, spacing: 0) {
-                Text(choice.name).lineLimit(1)
-                Text(choice.disabledReason ?? "\(choice.kindTitle) · \(choice.currency.rawValue)")
-                  .font(.caption).foregroundStyle(.secondary)
-              }
+            VStack(alignment: .leading, spacing: 0) {
+              Text(row.name).lineLimit(1)
+              Text("\(row.roleTitle) · \(row.currency.rawValue)\(row.isArchived ? " · archived" : "")")
+                .font(.caption).foregroundStyle(.secondary)
             }
-            .disabled(choice.isDisabled)
             Spacer(minLength: 8)
-            if choice.isSelected {
-              TextField("Opening", text: openingBinding(choice.id))
-                .multilineTextAlignment(.trailing)
-                .frame(width: 90)
-                .textFieldStyle(.roundedBorder)
-                .help("Opening balance of this account; negative = they owe you")
-            }
+            TextField("Opening", text: openingBinding(row.id))
+              .multilineTextAlignment(.trailing)
+              .frame(width: 90)
+              .textFieldStyle(.roundedBorder)
+              .help("Opening balance of this account; negative = they owe you")
+            Button("Unlink", systemImage: "link.badge.minus") { model.toggleAccount(row.id) }
+              .labelStyle(.iconOnly)
+              .buttonStyle(.borderless)
+              .help("Unlink this account from the debt; the account and its transactions stay")
           }
           .padding(.horizontal, 12)
           .padding(.vertical, 6)
-          if choice.id != choices.last?.id { Divider() }
+          if row.id != rows.last?.id { Divider() }
         }
       }
-      .background(ManagePalette.card, in: .rect(cornerRadius: 8))
-      .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(ManagePalette.border))
-      .frame(maxHeight: 220)
+    }
+  }
 
+  private var add: some View {
+    let choices = model.addableAccountChoices(search: search)
+    return VStack(alignment: .leading, spacing: 8) {
+      Text("Add accounts").font(.headline)
+      PageSearchField(text: $search, prompt: "Search accounts")
+      card {
+        if choices.isEmpty {
+          Text("No accounts match.").font(.callout).foregroundStyle(.secondary).padding(12)
+        }
+        LazyVStack(spacing: 0) {
+          ForEach(choices) { choice in
+            Button {
+              model.toggleAccount(choice.id)
+            } label: {
+              HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
+                  Text(choice.name).lineLimit(1)
+                  Text(choice.disabledReason ?? "\(choice.kindTitle) · \(choice.currency.rawValue)")
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                if !choice.isDisabled { Image(systemName: "plus.circle").foregroundStyle(.secondary) }
+              }
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(choice.isDisabled)
+            .opacity(choice.isDisabled ? 0.55 : 1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            if choice.id != choices.last?.id { Divider() }
+          }
+        }
+      }
+    }
+  }
+
+  private var create: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Create account").font(.headline)
       if let draft = model.debtDraft, !draft.newAccounts.isEmpty {
         VStack(spacing: 8) {
           ForEach(draft.newAccounts) { item in
@@ -590,6 +640,13 @@ struct DebtAccountPicker: View {
       Button("Create account", systemImage: "plus") { model.addNewAccount() }
         .help("A virtual account for this person, in a currency of your choice")
     }
+  }
+
+  private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    VStack(spacing: 0, content: content)
+      .frame(maxWidth: .infinity)
+      .background(ManagePalette.card, in: .rect(cornerRadius: 8))
+      .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(ManagePalette.border))
   }
 
   private func openingBinding(_ id: Account.ID) -> Binding<String> {
@@ -692,6 +749,15 @@ enum DebtStyle {
 
   static func color(_ balance: DebtsModel.BalanceText) -> Color {
     switch balance.tone {
+    case .settled: .secondary
+    case .lent: lent
+    case .borrowed: borrowed
+    }
+  }
+
+  /// Colour of a stored-sign amount (nil = no rate).
+  static func color(stored minor: Int64?) -> Color {
+    switch DebtSign.tone(stored: minor ?? 0) {
     case .settled: .secondary
     case .lent: lent
     case .borrowed: borrowed

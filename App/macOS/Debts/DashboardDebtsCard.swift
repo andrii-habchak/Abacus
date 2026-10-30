@@ -26,9 +26,15 @@ struct DashboardDebtsCard: View {
           .controlSize(.small)
       }
       if let debts = model.debts {
-        HStack(alignment: .top, spacing: 20) {
-          figure(DebtSign.lentTitle, debts.lentText, color: DebtStyle.lent)
-          figure(DebtSign.borrowedTitle, debts.borrowedText, color: DebtStyle.borrowed)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(debts.isApproximate ? "≈ total" : "Total").font(.caption).foregroundStyle(.secondary)
+          if let text = debts.totalText {
+            Text(text).font(.title3.weight(.semibold)).monospacedDigit()
+              .foregroundStyle(DebtStyle.color(stored: debts.total?.minorUnits))
+          } else {
+            Text("No rate").font(.title3).foregroundStyle(.secondary)
+              .help("A rate to the display currency is missing; refresh the rates")
+          }
         }
         if debts.isEmpty {
           Text("No open debts.").font(.callout).foregroundStyle(.secondary)
@@ -53,34 +59,24 @@ struct DashboardDebtsCard: View {
     .confirmDebtDelete($deleteTarget) { id in Task { await debts.deleteDebt(id) } }
   }
 
-  private func figure(_ title: String, _ value: String, color: Color) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(title).font(.caption).foregroundStyle(.secondary)
-      Text(value).font(.title3.weight(.semibold)).foregroundStyle(color).monospacedDigit()
-    }
-  }
-
-  /// One person, compact enough for a half-width card: the name (and the ≈ sum in the display
-  /// currency when there are several currencies) on the left, each currency's balance stacked
-  /// on the right.
+  /// One person, compact enough for a half-width card: the name on the left, ONE main figure (the
+  /// total in the display currency) on the right, and for several currencies a small caption with
+  /// the per-currency amounts (R-DEBT-21).
   private func row(_ person: DashboardDebts.Person) -> some View {
     HStack(alignment: .top, spacing: 10) {
       DebtAvatar(name: person.name)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(person.name).lineLimit(1).truncationMode(.tail)
-        if let converted = person.convertedText {
-          Text(converted).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-        }
-      }
-      .layoutPriority(1)
+      Text(person.name).lineLimit(1).truncationMode(.tail)
+        .layoutPriority(1)
       Spacer(minLength: 8)
-      VStack(alignment: .trailing, spacing: 4) {
-        ForEach(person.balances) { balance in
-          VStack(alignment: .trailing, spacing: 0) {
-            Text(balance.amountText).font(.callout.weight(.semibold)).monospacedDigit()
-              .foregroundStyle(balance.owesMe ? DebtStyle.lent : DebtStyle.borrowed)
-            Text(balance.directionText).font(.caption2).foregroundStyle(.secondary)
-          }
+      VStack(alignment: .trailing, spacing: 2) {
+        if let text = person.totalText {
+          Text((person.isApproximate ? "≈ " : "") + text).font(.callout.weight(.semibold)).monospacedDigit()
+            .foregroundStyle(DebtStyle.color(stored: person.total?.minorUnits))
+        } else {
+          Text("No rate").font(.callout).foregroundStyle(.secondary)
+        }
+        if let secondary = person.secondaryText {
+          Text(secondary).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
         }
       }
       .fixedSize()

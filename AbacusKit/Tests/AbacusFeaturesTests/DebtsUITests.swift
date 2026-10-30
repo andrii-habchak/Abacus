@@ -59,7 +59,7 @@ struct DebtsUITests {
     #expect(alex.balances[0].directionText == "you lent" && alex.balances[0].tone == .lent)
     #expect(alex.balances[1].money.minorUnits == -250_00 && alex.balances[1].amountText.hasPrefix("+"))
     #expect(alex.balances[1].directionText == "you borrowed")
-    #expect(alex.convertedText?.hasPrefix("≈ ") == true)
+    #expect(alex.isApproximate)
     #expect(model.lentTotalText.hasPrefix("−") && model.borrowedTotalText.hasPrefix("+"))
 
     try Self.select("Alex Example", in: model)
@@ -80,13 +80,79 @@ struct DebtsUITests {
     let (model, _) = try await Self.loadedModel()
     let format = DashboardFormat(locale: Locale(identifier: "en_US"))
     let widget = DashboardDebts.make(book: model.book, currency: .UAH, converter: Self.rates, format: format)
-    #expect(widget.lentText.hasPrefix("−") && widget.borrowedText.hasPrefix("+"))
+    #expect(widget.totalText != nil)
     let alex = try #require(widget.people.first { $0.name == "Alex Example" })
     #expect(alex.debtID == DebtSample.alex.id)
     #expect(alex.balances.map(\.directionText) == ["you lent", "you borrowed"])
     #expect(alex.balances[0].amountText.hasPrefix("−") && alex.balances[1].amountText.hasPrefix("+"))
     #expect(alex.balances[0].owesMe && !alex.balances[1].owesMe)
     #expect(!widget.people.contains { $0.name == "Kim Settled" })
+  }
+
+  // MARK: One total (C25)
+
+  @Test("R-DEBT-21: the widget header is ONE total in the display currency, the sum of the people, signed by D61")
+  func widgetOneTotal() async throws {
+    let (model, _) = try await Self.loadedModel()
+    let format = DashboardFormat(locale: Locale(identifier: "en_US"))
+    let widget = DashboardDebts.make(book: model.book, currency: .UAH, converter: Self.rates, format: format)
+    let sum = widget.people.compactMap { $0.total?.minorUnits }.reduce(0, +)
+    #expect(widget.total == Money(minorUnits: sum, currency: .UAH))
+    #expect(widget.total?.minorUnits == widget.owedToMe.minorUnits - widget.iOwe.minorUnits)
+    let expected = DebtSign.text(stored: Money(minorUnits: sum, currency: .UAH), magnitude: format.money)
+    #expect(widget.totalText == expected && widget.isApproximate)
+    #expect(widget.totalOwesMe == (sum > 0))
+    // No rate for a currency: the total falls back to nil ("No rate"), never a partial sum.
+    let none = DashboardDebts.make(book: model.book, currency: .UAH, converter: NoRates(), format: format)
+    #expect(none.total == nil && none.totalText == nil)
+  }
+
+  @Test("R-DEBT-21: a row shows ONE total in the display currency; per-currency amounts only as a label-free caption for several currencies")
+  func rowTotalAndCaption() async throws {
+    let (model, _) = try await Self.loadedModel(.UAH)
+    let format = DashboardFormat(locale: Locale(identifier: "en_US"))
+    let widget = DashboardDebts.make(book: model.book, currency: .UAH, converter: Self.rates, format: format)
+    let alex = try #require(model.people.first { $0.name == "Alex Example" })
+    let widgetAlex = try #require(widget.people.first { $0.name == "Alex Example" })
+    // Alex: +€310 and −zł250 → one total, the same on the list row and on the widget.
+    #expect(alex.total?.money == widgetAlex.total && alex.total?.money.currency == .UAH)
+    let secondary = try #require(alex.secondaryText)
+    #expect(secondary.contains("−") && secondary.contains("+") && secondary.contains(" · "))
+    #expect(!secondary.contains("lent") && !secondary.contains("borrowed"))
+    #expect(widgetAlex.secondaryText != nil && !(widgetAlex.secondaryText ?? "").contains("lent"))
+    // One currency: no caption, even when it is not the display currency.
+    let maria = try #require(model.people.first { $0.name == "Maria Sample" })
+    #expect(maria.secondaryText == nil)
+    model.displayCurrency = .EUR
+    let mariaEUR = try #require(model.people.first { $0.name == "Maria Sample" })
+    #expect(mariaEUR.secondaryText == nil && mariaEUR.total?.money.currency == .EUR && mariaEUR.isApproximate)
+    #expect(DebtSign.caption([Money(minorUnits: 5_00, currency: .EUR)], magnitude: { "\($0.minorUnits)" }) == nil)
+  }
+
+  @Test("R-DEBT-21: the Edit debt dialog lists the linked accounts and every free account; accounts of another debt stay disabled")
+  func dialogAccountLists() async throws {
+    let (model, _) = try await Self.loadedModel()
+    model.editDebt(DebtSample.maria.id)
+    let linked = model.linkedAccountRows
+    #expect(Set(linked.map(\.id)) == [DebtSample.mariaUAH.id, DebtSample.mariaBank.id])
+    #expect(linked.allSatisfy { $0.roleTitle == "external" || $0.roleTitle == "virtual" })
+    #expect(linked.first { $0.id == DebtSample.mariaUAH.id }?.currency == .UAH)
+    #expect(model.debtDraft?.openings[DebtSample.mariaUAH.id] != nil)
+
+    // The picker holds every non-archived account not yet linked: nothing is capped or dropped.
+    let addable = model.addableAccountChoices()
+    let expected = model.accounts.filter { !$0.isArchived && !linked.map(\.id).contains($0.id) }
+    #expect(Set(addable.map(\.id)) == Set(expected.map(\.id)))
+    #expect(!addable.contains { linked.map(\.id).contains($0.id) })
+    let elsewhere = addable.filter(\.isDisabled)
+    #expect(elsewhere.allSatisfy { $0.disabledReason?.hasPrefix("In ") == true })
+    #expect(elsewhere.first { $0.id == DebtSample.samPLN.id }?.disabledReason == "In Sam Placeholder")
+    #expect(model.addableAccountChoices(search: "zzz-nothing").isEmpty)
+
+    // Unlinking moves an account from "Linked" to "Add accounts"; the sheet's data stay in the draft.
+    model.toggleAccount(DebtSample.mariaBank.id)
+    #expect(!model.linkedAccountRows.contains { $0.id == DebtSample.mariaBank.id })
+    #expect(model.addableAccountChoices().contains { $0.id == DebtSample.mariaBank.id })
   }
 
   // MARK: Edit, rename, duplicates

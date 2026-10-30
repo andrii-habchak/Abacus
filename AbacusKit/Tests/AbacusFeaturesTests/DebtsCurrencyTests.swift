@@ -119,11 +119,11 @@ struct DebtsCurrencyTests {
     #expect(total.isApproximate && total.caption == "≈ total in UAH")
     let alex = try #require(model.people.first { $0.name == "Alex Example" })
     #expect(alex.balances.map(\.money) == [Money(minorUnits: 310_00, currency: .EUR), Money(minorUnits: -250_00, currency: .PLN)])
-    #expect(alex.convertedText?.hasPrefix("≈ ") == true)
+    #expect(alex.isApproximate && alex.total?.money.currency == .UAH)
 
     // Maria owes only hryvnias: nothing converted while UAH is shown.
     let maria = try #require(model.people.first { $0.name == "Maria Sample" })
-    #expect(maria.convertedText == nil)
+    #expect(!maria.isApproximate && maria.secondaryText == nil)
     try Self.select("Maria Sample", in: model)
     #expect(model.selectedTotal?.isApproximate == false)
     #expect(model.selectedTotal?.balance?.money.currency == .UAH)
@@ -141,7 +141,7 @@ struct DebtsCurrencyTests {
       // A person's ≈ figure is the widget's figure.
       for person in widget.people {
         let row = model.people.first { $0.id == person.id }
-        #expect(row?.convertedText == person.convertedText)
+        #expect(row?.total?.money == person.total)
       }
     }
   }
@@ -158,7 +158,7 @@ struct DebtsCurrencyTests {
     #expect(model.summary.owedToMe.currency == .EUR && model.summary.owedToMe != owedInUAH)
     #expect(model.selectedTotal?.balance?.money.currency == .EUR && model.selectedTotal?.balance?.money != mariaInUAH)
     #expect(model.selectedTotal?.isApproximate == true)
-    #expect(model.people.first { $0.name == "Maria Sample" }?.convertedText?.hasPrefix("≈ ") == true)
+    #expect(model.people.first { $0.name == "Maria Sample" }?.isApproximate == true)
     #expect(model.people.map(\.balances) == balancesBefore)
   }
 }
