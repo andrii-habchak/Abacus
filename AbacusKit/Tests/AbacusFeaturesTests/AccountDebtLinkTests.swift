@@ -163,13 +163,13 @@ struct AccountDebtLinkTests {
     #expect(try await link(of: other)?.role == .virtual)
   }
 
-  @Test("R-DEBT-17: changing the kind of a linked account updates its role")
-  func kindChangeUpdatesRole() async throws {
+  @Test("R-DEBT-17: changing the kind of a linked account keeps its role (C29)")
+  func kindChangeKeepsRole() async throws {
     var draft = open(DebtSample.mariaBank)
     draft.kind = .debt
-    #expect(model.debtRole(draft) == .virtual)
+    #expect(model.debtRole(draft) == .external)
     await model.save(draft)
-    #expect(try await link(of: DebtSample.mariaBank)?.role == .virtual)
+    #expect(try await link(of: DebtSample.mariaBank)?.role == .external)
   }
 
   @Test("R-DEBT-17: without a debt repository the section is not offered")
@@ -179,7 +179,7 @@ struct AccountDebtLinkTests {
     #expect(!plain.offersDebts)
   }
 
-  @Test("R-ACC-1: the kind picker offers Debt (person) only to a debt account; the kind is not locked by transactions")
+  @Test("R-ACC-1: the kind is not locked by transactions, only the currency is (C29: any account may become Debt (person), see AccountKindArchiveTests)")
   func kindPickerAndLock() {
     #expect(!ManageText.liabilityKinds(offeredFor: .bank).contains(.debt))
     #expect(ManageText.liabilityKinds(offeredFor: .debt).contains(.debt))

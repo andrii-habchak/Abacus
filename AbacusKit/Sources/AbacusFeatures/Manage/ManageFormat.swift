@@ -113,10 +113,11 @@ public enum ManageText {
   public static let assetKinds: [AccountKind] = AccountKind.allCases.filter { !$0.isLiability }
   public static let liabilityKinds: [AccountKind] = AccountKind.allCases.filter(\.isLiability)
 
-  /// The liability kinds the account form offers: debts with people live on the Debts tab
-  /// (R-DEBT-1), so "Debt (person)" is offered only to an account that already has that kind.
-  public static func liabilityKinds(offeredFor current: AccountKind?) -> [AccountKind] {
-    liabilityKinds.filter { $0 != .debt || current == .debt }
+  /// The liability kinds the account form offers. "Debt (person)" needs a debt to link to
+  /// (R-DEBT-17), so it is offered when the app has a debt repository (`debtsAvailable`, C29: any
+  /// account may change to it) or when the account already has that kind.
+  public static func liabilityKinds(offeredFor current: AccountKind?, debtsAvailable: Bool = false) -> [AccountKind] {
+    liabilityKinds.filter { $0 != .debt || current == .debt || debtsAvailable }
   }
 
   /// The symbol on an account's tile: "₴", "zł", "€", "$".

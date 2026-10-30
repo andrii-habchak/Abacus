@@ -52,6 +52,13 @@ public struct AccountsView: View {
     }
     .sheet(
       item: Binding(
+        get: { model.sheet == nil ? model.archiveSheet : nil },
+        set: { if $0 == nil, model.sheet == nil, model.archiveSheet != nil { model.cancelArchiveSheet() } })
+    ) { sheet in
+      AccountArchiveSheetView(model: model, sheet: sheet)
+    }
+    .sheet(
+      item: Binding(
         get: { model.groupPrompt }, set: { if $0 == nil, model.groupPrompt != nil { model.cancelGroupPrompt() } })
     ) { prompt in
       AccountGroupNameSheet(model: model, prompt: prompt)
@@ -133,25 +140,9 @@ struct AccountsList: View {
       PageSearchField(text: Binding(get: { model.searchText }, set: { model.searchText = $0 }), prompt: "Search accounts")
         .padding(.horizontal, ManageMetrics.horizontalPadding)
         .padding(.top, 12)
-      HStack(spacing: 8) {
-        Picker("Currency", selection: Binding(get: { model.currencyFilter }, set: { model.currencyFilter = $0 })) {
-          Text("All currencies").tag(Currency?.none)
-          ForEach(model.currencyOptions, id: \.self) { Text($0.rawValue).tag(Currency?.some($0)) }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .fixedSize()
-        .help("Show accounts in one currency")
-        Spacer(minLength: 4)
-        Picker("Sort", selection: Binding(get: { model.sort }, set: { sort in Task { await model.setSort(sort) } })) {
-          ForEach(AccountSort.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.menu)
-        .fixedSize()
-        .help("Order of the list")
-      }
-      .padding(.horizontal, ManageMetrics.horizontalPadding)
-      .padding(.top, 10)
+      AccountFilterBar(model: model)
+        .padding(.horizontal, ManageMetrics.horizontalPadding)
+        .padding(.top, 10)
       Toggle(
         "Show archived accounts",
         isOn: Binding(get: { model.showArchived }, set: { model.setShowArchived($0) })
@@ -301,6 +292,12 @@ struct AccountEditorSheet: View {
     ) { dialog in
       AccountsDialog(model: model, dialog: dialog)
     }
+    .sheet(
+      item: Binding(
+        get: { model.archiveSheet }, set: { if $0 == nil, model.archiveSheet != nil { model.cancelArchiveSheet() } })
+    ) { sheet in
+      AccountArchiveSheetView(model: model, sheet: sheet)
+    }
   }
 }
 
@@ -321,7 +318,7 @@ struct AccountFields: View {
             ForEach(ManageText.assetKinds, id: \.self) { Text(ManageText.kindTitle($0)).tag($0) }
           }
           Section("Liabilities") {
-            ForEach(ManageText.liabilityKinds(offeredFor: draft.kind), id: \.self) {
+            ForEach(model.liabilityKindOptions(for: draft), id: \.self) {
               Text(ManageText.kindTitle($0)).tag($0)
             }
           }
@@ -345,6 +342,12 @@ struct AccountFields: View {
     Text("The currency is fixed after the first transaction.")
       .font(.system(size: 11))
       .foregroundStyle(.secondary)
+    if let note = model.kindChangeNote(draft) {
+      Label(note, systemImage: "info.circle")
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
     HStack(alignment: .top, spacing: 12) {
       ManageField("Opening balance") {
         TextField("Opening balance", text: $draft.openingBalance)

@@ -204,8 +204,8 @@ struct OutlineListsTests {
     let model = await accounts()
     model.edit(deposit)
     await model.archiveOrUnarchive()
-    #expect(model.dialog != nil)
-    await model.confirmDialog()
+    #expect(model.dialog != nil || model.archiveSheet != nil)
+    if model.archiveSheet != nil { await model.confirmArchive() } else { await model.confirmDialog() }
     #expect(model.sheet == nil)
     #expect(model.account(deposit)?.isArchived == true)
   }
