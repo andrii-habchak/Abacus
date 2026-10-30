@@ -74,6 +74,10 @@ accounts, with as little manual entry as possible (bank and Saldo imports).
   How refunds are counted is a setting (`R-SET-3`): **off by default** → a refund is reported as
   income ("Refunds") and the category's spending is unchanged; on → it is subtracted from the
   category's spending and budget. Balances are the same either way.
+  A refund may be **linked** to the expense it returns (`refundOfID`, v1.11): a linked refund always
+  reduces that expense's category spending, on the refund's own day, whatever `R-SET-3` says; several
+  refunds per expense up to its amount, also across currencies (converted at the refund's date).
+  Import offers a refund link for incoming rows that match an expense.
 - `R-TX-5` Transfer: from-account, to-account, amount sent, amount received. Different
   currencies → both amounts entered, implied rate shown; same currency → one amount. No category;
   not counted as income or expense. Transfers to/from liability accounts are lending/borrowing
@@ -442,6 +446,7 @@ No open questions.
 | 1.0 | 2026-10-21 | Agreed baseline. |
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
 | 1.7 | 2026-10-27 | Debts (`R-DEBT`, owner interview, D51). |
+| 1.11 | 2026-10-30 | Refund links (`R-TX-4`), import bulk assignment and Category assignment tab, category re-assign and show-transactions, searchable category pickers, rule kind select and debt picker. |
 | 1.10 | 2026-10-30 | Owner testing of 1.4.0: one total on widget and rows (`R-DEBT-21a`); debt filter chip and accounts menu rules (`R-DEBT-22`). |
 | 1.9 | 2026-10-30 | Accounts drive debts: one debt per person without currency, linked external/virtual accounts, transfers instead of record legs, edit/rename, debt filter on Transactions, sign display, widget (`R-DEBT-16…22`, D59–D61). |
 | 1.8 | 2026-10-30 | Debts linked to bank transactions: one payment one transaction, import action, convert, rule action, matching, several accounts, currency switch (`R-DEBT-9…15`, D58). |

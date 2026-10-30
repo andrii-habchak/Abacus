@@ -169,6 +169,12 @@ Owner paths per lane (no edits outside them; contract changes through the orches
 - [x] **C27 List multi-select** (merged 2026-10-30) — Cmd/Shift selection, multi-row drag, scrolling while dragging.
 - [x] **C28 List performance and filters** (merged 2026-10-30) — paging, fixed rows, date range restore, cascading filters, one-row filter bar (R-LIST).
 - [x] **C29 Accounts** (merged 2026-10-30; migration v14) — kind change, kind filter, archive with balance (compensation / forgive), settle prompt.
+- [x] **C30 Refund links** (merged 2026-10-30; migration v15) — `txns.refundOfID`, netting in reports, list notes, picker.
+- [x] **C31 Import bulk assignment** (merged 2026-10-30) — Category assignment tab, bulk bar, rule suggestions, new-category refresh.
+- [x] **C32 Rules editor** (merged 2026-10-30) — Expense/Income select, debt picker, help text.
+- [x] **C33 Categories actions** (merged 2026-10-30) — Show all transactions, Re-assign, import filter chip.
+- [x] **C34 Searchable category picker** (merged 2026-10-30) — shared control and search everywhere.
+- [x] **C35 Import refund suggestion** (merged 2026-10-30) — "Looks like a refund of …" with Accept / Choose another / Not a refund.
 
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)
 - [x] **S1 Stability and performance** (merged 2026-10-27) — crashes (binding force-unwrap, Escape), hangs, reload storms, timing on owner-size data.

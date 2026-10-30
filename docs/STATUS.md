@@ -4,12 +4,14 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
-_Updated 2026-10-30 (orchestrator, latest)._ **1.4.2 is on `main`** (build 9, not tagged): C28 list performance (paging,
-fixed rows) and cascading one-row filters, C29 accounts (kind change, kind filter, archive with compensation
-or debt forgiveness, settle prompt; migration v14). Gate green (swift test with real samples, app build);
-list timings in `docs/status/C28.md`. Not fully checked visually (popovers, archive sheet, settle prompt).
-Back up `abacus.sqlite` first. Open: no badge for correction transactions in the list; the debt edit form can
-still save "settled" without the archive prompt.
+_Updated 2026-10-30 (orchestrator, latest)._ **1.5.0 is on `main`** (build 10, not tagged): C30 refund links
+(migration v15), C31 import bulk assignment and Category assignment tab, C32 rules editor (kind select, debt
+picker), C33 categories actions and import chip, C34 searchable category picker, C35 refund suggestion in
+import. Gate green (swift test with real samples, app build); the large-data timing test can flake in a full
+parallel run, rerun it alone. Not checked visually: all new sheets, popovers, bulk bar, import refund controls.
+Back up `abacus.sqlite` first. Open: no badge for correction transactions; debt edit form can still save
+"settled" without the archive prompt; headless `abacus-import` never links refunds; a rule "Transfer to debt"
+whose debt is gone is skipped (no auto-create).
 
 _Updated 2026-10-30 (orchestrator, earlier)._ **1.4.1 is on `main`** (build 8, not tagged): owner-test fixes C24–C27
 on top of 1.4.0 (debt filter freeze and chips, one total on widget and rows, Edit debt sheet, debt link on

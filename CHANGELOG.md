@@ -2,6 +2,36 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.5.0] — Unreleased
+
+Opening this version updates the database (migration v15: refund links); back up `abacus.sqlite` first.
+
+### Added
+
+- Refunds: a refund can be linked to the expense it returns (right-click "Link a refund…" /
+  "This is a refund of…", or the editor's "Refund of" field). A linked refund always reduces that
+  expense's category spending (whatever the refund setting says), in the month of the refund; partial
+  and several refunds are allowed up to the original amount, also across currencies. The list shows
+  "Refunded …" on the expense and "Refund of …" on the refund.
+- Import: an incoming row that looks like a refund of an existing expense (or of one in the same
+  file) is offered as one: Accept, Choose another…, Not a refund.
+- Import: a "Category assignment" tab with only the rows that need a category; Cmd/Shift selection and
+  a bulk bar (Category, Account, Debt, Skip, Include, Undo); a sheet that suggests one rule per
+  payee after a bulk category; "Drop a CSV export here" hint after a finished import.
+- Categories: right-click "Show all transactions" and "Re-assign…" (moves all transactions, optionally
+  re-points rules, optionally archives the source).
+- Every category picker has a search field (case and accent insensitive; a matching parent shows its
+  children).
+- Rules: an Expense / Income select above the category; help text for each action.
+
+### Changed
+
+- Rules: "Transfer to debt of <name>" is now "Transfer to debt" with a debt picker ("+ New debt"). A
+  rule whose debt is gone shows a warning and is skipped; it no longer creates the debt on import.
+- Import: new categories created during an import show up in the pickers at once ("+ New category…"
+  in the row picker).
+- Transactions: the import filter is a single chip with an × (no popover).
+
 ## [1.4.2] — Unreleased
 
 Opening this version updates the database (migration v14: a flag for balance corrections); back up
