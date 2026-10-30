@@ -144,6 +144,8 @@ Wave 2:
 - [x] **C14 Debts** (merged 2026-10-27; migration v10; widget scroll fix pending) — `R-DEBT` (TA v1.7, D51).
 - [x] **C15 Rule conditions** (merged 2026-10-30) — Description starts with / equals (R-IMP-8, D57).
 - [x] **C16 PKO hold sign** (merged 2026-10-30) — card holds import as expenses whatever their sign (R-IMP-PKO-2).
+- [x] **C17 Debt linking** (merged 2026-10-30; migration v12) — `R-DEBT-9…13` (D58).
+- [x] **C18 Debts view** (merged 2026-10-30) — `R-DEBT-14/15` (D58).
 - [x] **Release 1.2.0** — test build only; superseded by 1.2.1.
 
 ### Phase 3e — Stability and owner review of 1.2.0 (2026-10-27, D54–D56)

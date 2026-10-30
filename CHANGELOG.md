@@ -2,6 +2,29 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.3.0] — Unreleased
+
+Debts linked to bank transactions. Opening this version updates the database (a rule column for
+debt rules); back up `abacus.sqlite` first.
+
+### Added
+
+- Import: "Debt…" on a row turns it into a debt record (person, debt, kind suggested from the
+  direction); the imported row becomes the record's transaction.
+- Import: a bank row for a payment already entered as a debt record is recognised as Already
+  imported ("Linked to the debt record"), for money out and money in.
+- Transactions: "Convert to Debt Record…" turns an existing expense or income into a debt record
+  without a second transaction.
+- Rules: new action "Record as debt for <person>", applied on import and by "Update existing
+  transactions" (with Roll back).
+- Debts: an Accounts card per person (money out / in per account); person totals converted to the
+  display currency.
+
+### Fixed
+
+- A hand-entered "They repaid" or "I borrowed" record was not recognised by the import, so the
+  same money could be counted twice.
+
 ## [1.2.2] — 2026-10-30
 
 Rules and PKO import fixes. No database changes.

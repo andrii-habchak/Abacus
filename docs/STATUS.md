@@ -4,6 +4,10 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-10-30 (orchestrator, later)._ **1.3.0 is on `main`** (build 6, not tagged): debts linked to
+bank transactions (C17, migration v12) and the Debts view (C18). `dist/Abacus-1.3.0.dmg` is for owner
+testing; back up `abacus.sqlite` first. 735 tests green.
+
 _Updated 2026-10-30 (orchestrator)._ **1.2.2 is released** (build 5, tag `v1.2.2`, GitHub release with the DMG, 2026-10-30): C15 rule
 conditions (starts with / equals) and C16 PKO hold sign fix on top of 1.2.1.
 No database changes. Released so far: `v1.0.0`, `v1.2.1` (2026-10-27), `v1.2.2`.
@@ -83,7 +87,7 @@ and copies it).
 | C15 Rule conditions | background agent | `wp/C15-rule-match` | **merged** 2026-10-30 (Description starts with; "exactly" shown as Description equals; no migration; notes `docs/status/C15.md`) |
 | C16 PKO hold sign | background agent | `wp/C16-pending-sign` | **merged** 2026-10-30 (holds always expenses; settling repairs a wrong-sign hold; owner DB checked: nothing to repair; notes `docs/status/C16.md`) |
 | C18 Debts view | background agent | `wp/C18-debts-view` | **merged** 2026-10-30 (accounts card per person, display-currency totals; interpretations in `docs/status/C18.md`) |
-| C17 Debt linking | background agent | `wp/C17-debt-linking` | in progress (R-DEBT-9…13) |
+| C17 Debt linking | background agent | `wp/C17-debt-linking` | **merged** 2026-10-30 (import Debt… action, matching, convert, rule action; migration v12; interpretations in `docs/status/C17.md`) |
 | S2 Lists | background agent | `wp/S2-lists` | **merged** 2026-10-27 (NSOutlineView lists, sheet editors, split New account; real mouse drag not tested; notes `docs/status/S2.md`) |
 | S1 Stability | background agent | `wp/S1-stability` | **merged** 2026-10-27 (debts binding crash reproduced and fixed, safe bindings, Day/Month speed-up, soak + hang watch tools; timings in `docs/status/S1.md`) |
 | C14 Debts | background agent | `wp/C14-debts` | **merged** 2026-10-27 (debts separate from accounts, migration v10 converts debt accounts — real-data invariants hold; follow-up: dashboard opens scrolled when Debts is first; interpretations in `docs/status/C14.md`) |
