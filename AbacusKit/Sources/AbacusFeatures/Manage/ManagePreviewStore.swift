@@ -242,15 +242,16 @@ public final class ManagePreviewStore: Sendable {
     }
 
     public func reassign(
-      from id: AbacusDomain.Category.ID, to target: AbacusDomain.Category.ID, repointRules: Bool, archiveAfterwards: Bool
+      from id: AbacusDomain.Category.ID, to target: AbacusDomain.Category.ID?, repointRules: Bool, archiveAfterwards: Bool
     ) async throws -> CategoryReassignImpact {
       try store.state.withLock { state in
-        guard let source = state.categories.first(where: { $0.id == id }),
-          let targetCategory = state.categories.first(where: { $0.id == target })
-        else { throw RepositoryError.notFound }
-        guard targetCategory.kind == source.kind else { throw RepositoryError.kindMismatch }
+        guard let source = state.categories.first(where: { $0.id == id }) else { throw RepositoryError.notFound }
+        if let target {
+          guard let targetCategory = state.categories.first(where: { $0.id == target }) else { throw RepositoryError.notFound }
+          guard targetCategory.kind == source.kind else { throw RepositoryError.kindMismatch }
+        }
         let ids = Self.sources(id, state)
-        guard !ids.contains(target) else { throw RepositoryError.invalidReassignTarget }
+        if let target { guard !ids.contains(target) else { throw RepositoryError.invalidReassignTarget } }
         var moved = Self.impact(ids, state)
         for index in state.txns.indices {
           if let current = state.txns[index].txn.categoryID, ids.contains(current) { state.txns[index].txn.categoryID = target }
@@ -260,7 +261,7 @@ public final class ManagePreviewStore: Sendable {
             }
           }
         }
-        if repointRules {
+        if repointRules, let target {
           for index in state.rules.indices {
             if let current = state.rules[index].categoryID, ids.contains(current) { state.rules[index].categoryID = target }
           }

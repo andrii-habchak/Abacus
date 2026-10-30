@@ -155,6 +155,43 @@ struct CategoryActionsTests {
     #expect(sheet.summary.contains("nothing to move"))
   }
 
+  @Test("The picker starts with the built-in Uncategorised, then same-kind active targets without self or children")
+  func pickerItems() async throws {
+    let model = await model()
+    await model.requestReassign(food)
+    let sheet = try #require(model.reassignSheet)
+    let first = try #require(sheet.pickerItems.first)
+    #expect(first.value == CategoriesModel.uncategorisedID)
+    #expect(first.title == "Uncategorised (no category)")
+    let ids = Set(sheet.pickerItems.map(\.value))
+    #expect(!ids.contains(food) && !ids.contains(groceries) && !ids.contains(eatingOut))
+    #expect(ids.contains(transport) && !ids.contains(salary))
+    #expect(sheet.pickerItems.dropFirst().map(\.value) == sheet.targets.map(\.id))
+    // A parent that matches the search brings its children.
+    let hits = CategorySearch.hits(sheet.pickerItems, query: "transport", isSelected: { _ in false })
+    #expect(hits.contains { $0.item.value == taxi })
+  }
+
+  @Test("Moving to the built-in Uncategorised clears the category, keeps the rules and archives on request")
+  func toUncategorised() async throws {
+    let model = await model()
+    let all = try await store.txnRepository.transactions(matching: TxnQuery())
+    let moving = all.filter { $0.txn.categoryID == taxi }.count
+    await model.requestReassign(taxi)
+    var sheet = try #require(model.reassignSheet)
+    sheet.targetID = CategoriesModel.uncategorisedID
+    sheet.archiveAfterwards = true
+    #expect(sheet.targetIsUncategorised && !sheet.canRepointRules)
+    #expect(sheet.summary.hasPrefix(ManageText.transactions(moving) + " will move to Uncategorised"))
+    #expect(model.canConfirmReassign(sheet))
+    await model.confirmReassign(sheet)
+    #expect(model.reassignSheet == nil)
+    let after = try await store.txnRepository.transactions(matching: TxnQuery())
+    #expect(after.filter { $0.txn.categoryID == taxi }.isEmpty)
+    #expect(after.filter { $0.txn.categoryID == nil && $0.txn.type != .transfer }.count >= moving)
+    #expect(model.category(taxi)?.isArchived == true)
+  }
+
   @Test("The built-in Uncategorised offers no re-assign")
   func builtIn() async {
     let model = await model()

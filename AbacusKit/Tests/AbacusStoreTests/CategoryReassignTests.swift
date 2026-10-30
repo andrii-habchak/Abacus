@@ -146,4 +146,51 @@ struct CategoryReassignTests {
     #expect(try await f.rules.rules().first { $0.pattern == "lidl" }?.categoryID == F.groceries.id)
     #expect(try await f.categories.categories(kind: .expense, includeArchived: false).count == 5)
   }
+
+  // MARK: Built-in Uncategorised target (C39)
+
+  @Test("A nil target clears the category of the transactions and lines; rules and mappings stay")
+  func toUncategorised() async throws {
+    let f = try await seeded()
+    let moved = try await f.categories.reassign(from: F.food.id, to: nil, repointRules: true, archiveAfterwards: false)
+    #expect(moved.transactions == 2 && moved.attachedRecords == 1)
+    #expect(moved.rules == 0 && moved.importMappings == 0)
+    #expect(try await categoryOf(f, 100) == nil)
+    #expect(try await categoryOf(f, 101) == nil)
+    let lines = try #require(try await f.txns.transaction(F.id(101))).lines
+    #expect(lines.map(\.categoryID) == [nil])
+    // Rules and mappings keep pointing at the old category, whatever the option says.
+    #expect(try await f.rules.rules().first { $0.pattern == "lidl" }?.categoryID == F.groceries.id)
+    #expect(try await f.imports.mappings(source: .saldo).map(\.targetID) == [F.groceries.id])
+    // Other rows and the budget are untouched.
+    #expect(try await categoryOf(f, 102) == F.transport.id)
+    #expect(try await categoryOf(f, 104) == F.salary.id)
+    #expect(try await f.budgets.plan(for: Month(year: 2026, month: 3))?.allocations.count == 2)
+  }
+
+  @Test("A nil target keeps the kind: an income category only touches its own rows")
+  func uncategorisedKind() async throws {
+    let f = try await seeded()
+    try await f.categories.reassign(from: F.salary.id, to: nil, repointRules: false, archiveAfterwards: false)
+    #expect(try await categoryOf(f, 104) == nil)
+    #expect(try await categoryOf(f, 100) == F.groceries.id)
+    #expect(try await categoryOf(f, 102) == F.transport.id)
+  }
+
+  @Test("A nil target can archive the category afterwards")
+  func uncategorisedArchive() async throws {
+    let f = try await seeded()
+    try await f.categories.reassign(from: F.groceries.id, to: nil, repointRules: true, archiveAfterwards: true)
+    let active = try await f.categories.categories(kind: .expense, includeArchived: false).map(\.id)
+    #expect(!active.contains(F.groceries.id))
+    #expect(try await categoryOf(f, 100) == nil)
+  }
+
+  @Test("A nil target for a missing category is rejected")
+  func uncategorisedMissing() async throws {
+    let f = try await seeded()
+    await #expect(throws: RepositoryError.notFound) {
+      try await f.categories.reassign(from: F.id(999), to: nil, repointRules: true, archiveAfterwards: false)
+    }
+  }
 }

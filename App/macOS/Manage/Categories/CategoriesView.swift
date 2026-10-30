@@ -73,8 +73,8 @@ public struct CategoriesView: View {
 }
 
 /// "Re-assign…" (C33): moves every transaction of a category (and of its subcategories) to another
-/// category of the same kind. Plain pickers for now; the shared searchable picker (C34) replaces
-/// the target Picker later.
+/// category of the same kind, or to the built-in Uncategorised (no category), through the shared
+/// searchable `CategoryPicker` (C39).
 struct CategoryReassignSheetView: View {
   let model: CategoriesModel
   @State private var sheet: CategoryReassignSheet
@@ -88,27 +88,21 @@ struct CategoryReassignSheetView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Re-assign “\(sheet.sourceName)”").font(.system(size: 15, weight: .semibold))
-      if sheet.targets.isEmpty {
-        Text("There is no other active \(sheet.kind.rawValue) category to move them to.")
-          .foregroundStyle(.secondary)
-      } else {
-        ManageField("Move to") {
-          Picker("Move to", selection: $sheet.targetID) {
-            ForEach(sheet.targets) { target in
-              Text(target.isChild ? "    \(target.name)" : target.name).tag(Optional(target.id))
-            }
-          }
-          .labelsHidden()
-        }
+      ManageField("Move to") {
+        CategoryPicker(items: sheet.pickerItems, selection: $sheet.targetID, width: .infinity)
       }
       Text(sheet.summary).fixedSize(horizontal: false, vertical: true)
       ForEach(sheet.notes, id: \.self) { note in
         Text(note).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       }
-      Toggle(isOn: $sheet.repointRules) {
+      Toggle(isOn: Binding(get: { sheet.repointRules && sheet.canRepointRules }, set: { sheet.repointRules = $0 })) {
         Text(sheet.impact.rules + sheet.impact.importMappings > 0
           ? "Re-point rules that use this category (\(sheet.impact.rules + sheet.impact.importMappings))"
           : "Re-point rules that use this category")
+      }
+      .disabled(!sheet.canRepointRules)
+      if !sheet.canRepointRules {
+        Text(CategoryReassignSheet.rulesHint).font(.system(size: 12)).foregroundStyle(.secondary)
       }
       Toggle("Archive “\(sheet.sourceName)” afterwards", isOn: $sheet.archiveAfterwards)
       if let message = sheet.errorMessage {
