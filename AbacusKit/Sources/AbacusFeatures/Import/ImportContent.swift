@@ -115,6 +115,8 @@ public enum ImportMappingChoice: Hashable, Sendable {
 public struct ImportMappingOption: Identifiable, Hashable, Sendable {
   public var choice: ImportMappingChoice
   public var label: String
+  /// The searchable picker row of an existing account (C37); nil for "create" and for categories.
+  public var account: AccountPickerItem? = nil
   public var id: ImportMappingChoice { choice }
 }
 
@@ -184,6 +186,8 @@ public struct ImportReviewItem: Identifiable, Hashable, Sendable {
   public struct AccountOption: Identifiable, Hashable, Sendable {
     public var id: Account.ID
     public var label: String
+    /// The picker row (C37): "Name · CUR" under its group heading, for the searchable picker.
+    public var pickerItem: AccountPickerItem
   }
 
   public var id: String
@@ -542,7 +546,12 @@ extension ImportWizardModel {
           label: "Create “\(mapping.newName)” (\(mapping.newKind.importLabel)\(mapping.newIsArchived ? ", archived" : ""))")
       ]
       options += AccountOrder.alphabetical(preview.accountOptions(for: mapping.id), groups: accountGroups).map {
-        ImportMappingOption(choice: .existing($0.id), label: accountOptionLabel($0))
+        // Archived accounts stay offered here (shown with a suffix), unlike in the other pickers.
+        let section = $0.groupID.flatMap { id in accountGroups.first { $0.id == id }?.name }
+        var row = AccountPickerItem($0, section: section)
+        row.isArchived = false
+        if $0.isArchived { row.customTitle = "\(row.title) (archived)" }
+        return ImportMappingOption(choice: .existing($0.id), label: accountOptionLabel($0), account: row)
       }
       let selection: ImportMappingChoice = switch mapping.target {
       case .create: .create
@@ -753,7 +762,12 @@ extension ImportWizardModel {
     }
     let ownID: Account.ID? = if case .existing(let id) = row.account { id } else { nil }
     let transferAccounts = AccountOrder.alphabetical(accounts.filter { !$0.isArchived && $0.id != ownID }, groups: accountGroups)
-      .map { ImportReviewItem.AccountOption(id: $0.id, label: accountOptionLabel($0)) }
+      .map { account in
+        ImportReviewItem.AccountOption(
+          id: account.id, label: accountOptionLabel(account),
+          pickerItem: AccountPickerItem(
+            account, section: account.groupID.flatMap { id in accountGroups.first { $0.id == id }?.name }))
+      }
     return ImportReviewItem(
       id: row.id, title: title, date: format.day(row.day), detail: detail, options: options, selected: selected,
       suggested: suggested, pairCandidates: candidates, selectedPair: selectedPair, recordKind: recordKind,

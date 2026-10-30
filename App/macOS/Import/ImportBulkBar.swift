@@ -116,24 +116,13 @@ struct ImportBulkBar: View {
   }
 
   private func accountMenu(_ info: ImportBulkInfo) -> some View {
-    Menu("Account") {
-      ForEach(model.bulkAccountSections) { section in
-        if let title = section.title {
-          Section(title) { items(section) }
-        } else {
-          Section { items(section) }
-        }
-      }
-    }
-    .fixedSize()
+    AccountPicker(
+      sections: model.bulkAccountSections,
+      selection: Binding(get: { nil }, set: { if let id = $0 { model.bulkSetTransfer(to: id) } }),
+      fixedTitle: "Account"
+    )
     .disabled(info.accountRows == 0)
     .help(info.accountRows == 0 ? "None of the selected rows can be a transfer." : "Make the selected rows transfers to one of your accounts")
-  }
-
-  private func items(_ section: AccountPickerSection) -> some View {
-    ForEach(section.accounts) { account in
-      Button("\(account.name) · \(account.currency.rawValue)") { model.bulkSetTransfer(to: account.id) }
-    }
   }
 }
 

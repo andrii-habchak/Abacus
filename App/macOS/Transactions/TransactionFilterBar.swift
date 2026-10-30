@@ -16,6 +16,7 @@ struct TransactionFilterBar: View {
   @State private var open: Popover?
   @State private var debtSearch = ""
   @State private var categorySearch = ""
+  @State private var accountSearch = ""
 
   enum Popover: Hashable { case date, categories, accounts, debts, types, event }
 
@@ -266,10 +267,26 @@ struct TransactionFilterBar: View {
   /// Accounts A–Z under their group names (R-MGMT-8); only those with rows under the other
   /// filters, and, while a debt is selected, only that debt's accounts (C24).
   private var accountsPopover: some View {
-    let sections = model.accountSections
-    return ScrollView {
+    // Search (C37): name, currency code or group name; ticked accounts always stay.
+    let all = model.accountSections
+    let sections = AccountSearch.sections(all, query: accountSearch, isSelected: { model.filters.accountIDs.contains($0) })
+    return VStack(alignment: .leading, spacing: 4) {
+      TextField("Search accounts", text: $accountSearch)
+        .textFieldStyle(.roundedBorder)
+        .padding([.horizontal, .top], 10)
+      accountList(sections, isEmpty: all.isEmpty)
+    }
+    .frame(width: 270)
+  }
+
+  private func accountList(_ sections: [AccountPickerSection], isEmpty: Bool) -> some View {
+    ScrollView {
       VStack(alignment: .leading, spacing: 2) {
-        if sections.isEmpty { emptyNote("No accounts under the other filters.") }
+        if isEmpty {
+          emptyNote("No accounts under the other filters.")
+        } else if sections.isEmpty {
+          emptyNote("No account matches.")
+        }
         ForEach(sections) { section in
           if let title = section.title {
             Text(title)
@@ -288,7 +305,6 @@ struct TransactionFilterBar: View {
       .padding(10)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .frame(width: 270)
     .frame(maxHeight: 400)
   }
 
