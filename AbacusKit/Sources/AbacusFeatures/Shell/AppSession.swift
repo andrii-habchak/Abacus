@@ -333,6 +333,18 @@ public final class AppSession {
     app.showTransactions(.event(event))
   }
 
+  /// A debt's "Show transactions" (R-DEBT-22): switches to Transactions with the debt selected
+  /// and all its linked accounts as removable entries of the account filter. Returns at once;
+  /// the switch happens when the debt's accounts are read (await the task in tests). Does
+  /// nothing for an unknown debt.
+  @discardableResult
+  public func showTransactions(ofDebt id: Debt.ID) -> Task<Void, Never> {
+    Task { [weak self] in
+      guard let self, let filters = await self.transactions.filters(showingDebt: id) else { return }
+      self.app.showTransactions(filters)
+    }
+  }
+
   /// An import's "Show transactions" (done step, history): the list filtered to the
   /// transactions that import created (R-IMP-6).
   public func showTransactions(ofImport id: ImportBatch.ID) {

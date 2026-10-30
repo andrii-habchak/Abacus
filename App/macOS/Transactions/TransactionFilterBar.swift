@@ -9,7 +9,8 @@ struct TransactionFilterBar: View {
   @Bindable var model: TransactionsViewModel
   @State private var open: Popover?
 
-  enum Popover: Hashable { case date, categories, accounts, event }
+  enum Popover: Hashable { case date, categories, accounts, debts, event }
+  @State private var debtSearch = ""
 
   /// The chips wrap onto a second line when the window is too narrow; no label is squeezed
   /// or broken. "Clear filters" and the sort button stay at the trailing edge of the first line.
@@ -19,9 +20,11 @@ struct TransactionFilterBar: View {
         dateChip
         categoriesChip
         accountsChip
+        debtsChip
         typeToggles
         eventChip
         importChip
+        debtEntryChips
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       HStack(spacing: 8) {
@@ -72,6 +75,46 @@ struct TransactionFilterBar: View {
 
   private var accountsChip: some View {
     chip(.accounts, active: !model.filters.accountIDs.isEmpty, label: model.accountLabel)
+  }
+
+  @ViewBuilder
+  private var debtsChip: some View {
+    if model.offersDebtFilter {
+      chip(.debts, active: model.filters.isDebtFiltered, label: model.debtLabel)
+    }
+  }
+
+  /// R-DEBT-22: a removable chip per selected debt and per account entry a debt added.
+  @ViewBuilder
+  private var debtEntryChips: some View {
+    ForEach(model.selectedDebts) { debt in
+      removableChip(
+        icon: "person.2", title: debt.name, help: "Remove debt \(debt.name) and the accounts it added",
+        accessibility: "Remove debt filter \(debt.name)"
+      ) { model.toggleDebt(debt.id) }
+    }
+    ForEach(model.debtAccountChips) { account in
+      removableChip(
+        icon: "building.columns", title: account.name, help: "Remove \(account.name) from the accounts",
+        accessibility: "Remove account \(account.name)"
+      ) { model.removeAccountEntry(account.id) }
+    }
+  }
+
+  private func removableChip(
+    icon: String, title: String, help: String, accessibility: String, action: @escaping () -> Void
+  ) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: icon).font(.system(size: 12))
+      Text(title).lineLimit(1).truncationMode(.middle)
+      Button(action: action) { Image(systemName: "xmark.circle.fill").font(.system(size: 12)) }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(accessibility)
+    }
+    .modifier(TxnChipLook(isActive: true))
+    .frame(maxWidth: 240)
+    .accessibilityElement(children: .contain)
   }
 
   private var eventChip: some View {
@@ -140,6 +183,7 @@ struct TransactionFilterBar: View {
     case .date: datePopover
     case .categories: categoriesPopover
     case .accounts: accountsPopover
+    case .debts: debtsPopover
     case .event: eventPopover
     }
   }
@@ -262,6 +306,43 @@ struct TransactionFilterBar: View {
     .toggleStyle(.checkbox)
     .padding(.leading, indented ? 10 : 0)
     .padding(.vertical, 3)
+  }
+
+  /// Debts A–Z with a search field; ticking a debt adds its accounts to the account entries.
+  private var debtsPopover: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      TextField("Search debts", text: $debtSearch)
+        .textFieldStyle(.roundedBorder)
+      let options = model.debtOptions(matching: debtSearch)
+      if options.isEmpty {
+        Text(model.debtOptions.isEmpty ? "No debts yet." : "No debt matches.")
+          .foregroundStyle(.secondary)
+          .padding(.vertical, 4)
+      }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 2) {
+          ForEach(options) { debt in
+            Toggle(
+              isOn: Binding(get: { model.isDebtChecked(debt.id) }, set: { _ in model.toggleDebt(debt.id) })
+            ) {
+              HStack {
+                Text(debt.name)
+                Spacer()
+                Text(debt.accountIDs.count == 1 ? "1 account" : "\(debt.accountIDs.count) accounts")
+                  .font(.system(size: 11)).foregroundStyle(.secondary)
+              }
+            }
+            .toggleStyle(.checkbox)
+            .padding(.vertical, 3)
+          }
+        }
+      }
+      .frame(maxHeight: 280)
+    }
+    .font(.system(size: 13))
+    .padding(10)
+    .frame(width: 260)
+    .task { await model.loadDebtOptions() }
   }
 
   private var eventPopover: some View {
