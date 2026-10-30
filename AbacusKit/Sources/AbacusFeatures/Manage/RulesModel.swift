@@ -367,6 +367,21 @@ public final class RulesModel {
   /// The editor's category choices: non-archived categories A–Z.
   public var categoryOptions: [AbacusDomain.Category] { categoriesAZ() }
 
+  /// `categories` as picker rows; a child's button text is its "Parent › Child" path.
+  public func categoryPickerItems(
+    _ categories: [AbacusDomain.Category], kinds: Set<CategoryKind> = Set(CategoryKind.allCases)
+  ) -> [CategoryPickerItem<AbacusDomain.Category.ID>] {
+    CategoryPickerItem.items(from: categories, kinds: kinds).map { item in
+      var item = item
+      if item.isChild, let category = self.categories.first(where: { $0.id == item.value }),
+        let parent = category.parentID.flatMap({ pid in self.categories.first { $0.id == pid } })
+      {
+        item.buttonTitle = "\(parent.name) › \(category.name)"
+      }
+      return item
+    }
+  }
+
   /// The page's category filter: categories A–Z, archived ones too when a rule uses them.
   public var categoryFilterOptions: [AbacusDomain.Category] {
     categoriesAZ(including: Set(rules.compactMap(\.categoryID)))

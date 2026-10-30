@@ -140,14 +140,12 @@ struct ImportRowActions: View {
         .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(ImportPalette.duplicateBorder))
       }
       if case .picker(let selection, let options, let needsCategory) = row.category {
-        Picker("Category", selection: categoryBinding(selection)) {
-          ForEach(options) { option in
-            Text(option.isChild ? "   \(option.label)" : option.label).tag(option.choice)
-          }
-        }
-        .labelsHidden()
+        CategoryPicker(
+          items: options.filter { $0.choice != .none }.map(\.pickerItem),
+          selection: categoryBinding(selection),
+          noneTitle: options.first { $0.choice == .none }?.label
+        )
         .controlSize(.small)
-        .fixedSize()
         .overlay(
           RoundedRectangle(cornerRadius: 5)
             .strokeBorder(needsCategory ? ImportPalette.attentionBorder : .clear)
@@ -193,8 +191,10 @@ struct ImportRowActions: View {
     }
   }
 
-  private func categoryBinding(_ current: ImportCategoryChoice) -> Binding<ImportCategoryChoice> {
-    Binding(get: { current }, set: { model.setCategory($0, forRow: row.id) })
+  private func categoryBinding(_ current: ImportCategoryChoice) -> Binding<ImportCategoryChoice?> {
+    Binding(
+      get: { current == .none ? nil : current },
+      set: { model.setCategory($0 ?? .none, forRow: row.id) })
   }
 
   private func duplicateBinding(_ current: DuplicateAction) -> Binding<DuplicateAction> {

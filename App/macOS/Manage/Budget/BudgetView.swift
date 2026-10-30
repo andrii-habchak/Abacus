@@ -170,13 +170,12 @@ struct BudgetEditorContent: View {
       BudgetLimitsTable(model: model)
 
       HStack(spacing: 8) {
-        Picker("Category to add", selection: $model.categoryToAdd) {
-          ForEach(model.addOptions) { category in
-            Text(model.addOptionTitle(category)).tag(Optional(category.id))
-          }
-        }
-        .labelsHidden()
-        .fixedSize()
+        CategoryPicker(
+          items: model.addOptions.map {
+            CategoryPickerItem(value: $0.id, title: model.addOptionTitle($0))
+          },
+          selection: $model.categoryToAdd, placeholder: "Choose a category", width: 220
+        )
         .disabled(model.addOptions.isEmpty)
         Button("Add category limit") { model.addLimit() }
           .disabled(model.addOptions.isEmpty)

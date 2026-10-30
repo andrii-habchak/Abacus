@@ -224,17 +224,9 @@ struct EditorAccountSection: View {
       GridRow(alignment: .firstTextBaseline) {
         EditorLabel("Category")
         VStack(alignment: .leading, spacing: 4) {
-          Picker("Category", selection: $model.categoryID) {
-            if model.categoryID == nil {
-              Text("Choose a category").tag(AbacusDomain.Category.ID?.none)
-            }
-            ForEach(model.categoryOptions) { option in
-              Text(option.isChild ? "\u{2003}" + option.name : option.name)
-                .tag(Optional(option.id))
-            }
-          }
-          .labelsHidden()
-          .frame(maxWidth: .infinity, alignment: .leading)
+          CategoryPicker(
+            items: model.categoryOptions.map { $0.pickerItem() }, selection: $model.categoryID,
+            placeholder: "Choose a category", width: .infinity)
           if let suggestion = model.suggestionText {
             EditorHint(text: suggestion, color: EditorPalette.suggestion)
           }
