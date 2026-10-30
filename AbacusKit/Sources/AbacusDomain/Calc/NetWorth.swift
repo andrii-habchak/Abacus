@@ -12,19 +12,21 @@ public struct AccountValue: Hashable, Sendable, Identifiable {
   public var id: Account.ID { accountID }
 }
 
-/// One debt's line in net worth (R-DEBT-7): only debts with "Count in net worth".
+/// One debt's line in net worth (R-DEBT-7, R-DEBT-18): only debts with "Count in net worth", one
+/// line per currency the debt has a non-zero balance in (never netted across currencies).
 public struct DebtValue: Hashable, Sendable, Identifiable {
   public let debtID: Debt.ID
-  /// In the debt's currency; positive = owed to me (an asset), negative = I owe (a liability).
+  /// In the line's currency; positive = owed to me (an asset), negative = I owe (a liability).
   public let balance: Money
   /// In the net worth's currency; nil when no rate was known.
   public let converted: Money?
 
-  public var id: Debt.ID { debtID }
+  public var id: String { "\(debtID.uuidString)|\(balance.currency.rawValue)" }
 }
 
 /// Net worth = assets − liabilities of the non-archived accounts (R-HOME-1, R-ACC-4), plus the
-/// debts counted in net worth (R-DEBT-7). Assets and liabilities follow the account kind
+/// debts counted in net worth (R-DEBT-7). Accounts linked to a debt (R-DEBT-17) are counted only
+/// through the debt, and only when its flag is on, never in the account part (R-DEBT-18). Assets and liabilities follow the account kind
 /// (R-ACC-2), not the sign of the balance; a debt is an asset while owed to me and a liability
 /// while I owe.
 public struct NetWorth: Hashable, Sendable {
@@ -36,7 +38,7 @@ public struct NetWorth: Hashable, Sendable {
   public let assets: Money
   /// What is owed: minus the sum of the liability balances (positive while in debt).
   public let liabilities: Money
-  /// Non-archived accounts in input order.
+  /// Non-archived accounts that are not linked to a debt, in input order.
   public let accounts: [AccountValue]
   /// Debts counted in net worth, in input order (included in `assets` / `liabilities`).
   public var debts: [DebtValue] = []
@@ -84,7 +86,8 @@ extension Calc {
     converter: some CurrencyConverter, through day: Day? = nil, rateDate: RateDate = .latest,
     debts: DebtBook = .empty, calendar: Calendar = .current
   ) -> NetWorth {
-    let active = accounts.filter { !$0.isArchived }
+    let linked = debts.linkedAccountIDs
+    let active = accounts.filter { !$0.isArchived || linked.contains($0.id) }
     let timeline = LedgerTimeline(accounts: active, txns: txns, calendar: calendar)
     return netWorth(
       timeline: timeline, debts: debts, currency: currency, converter: converter, through: day, rateDate: rateDate)
@@ -97,7 +100,8 @@ extension Calc {
     converter: some CurrencyConverter, today: Day, monthEnds: Int = 11, debts: DebtBook = .empty,
     calendar: Calendar = .current
   ) -> NetWorthSeries {
-    let active = accounts.filter { !$0.isArchived }
+    let linked = debts.linkedAccountIDs
+    let active = accounts.filter { !$0.isArchived || linked.contains($0.id) }
     let timeline = LedgerTimeline(accounts: active, txns: txns, calendar: calendar)
     var points: [NetWorthPoint] = []
     let thisMonth = today.yearMonth
@@ -122,7 +126,8 @@ extension Calc {
     var assets: Int64 = 0
     var liabilities: Int64 = 0
     var values: [AccountValue] = []
-    for account in timeline.accounts {
+    let linked = book.linkedAccountIDs
+    for account in timeline.accounts where !linked.contains(account.id) {
       let balance = balances[account.id] ?? .zero(account.currency)
       let converted = convert(
         balance.minorUnits, from: account.currency, to: currency, at: rateDate, using: converter, gaps: &gaps)
@@ -133,20 +138,23 @@ extension Calc {
         accountID: account.id, isLiability: account.kind.isLiability, balance: balance,
         converted: converted.map { Money(minorUnits: $0, currency: currency) }))
     }
-    // R-DEBT-7: debts with "Count in net worth", by the sign of their balance.
+    // R-DEBT-7, R-DEBT-18: debts with "Count in net worth" add one term per currency (linked
+    // accounts + manual records), by the sign of the balance. Linked accounts count here only,
+    // never in the account part above.
     var debtValues: [DebtValue] = []
     let counted = book.debts.filter(\.countsInNetWorth)
     if !counted.isEmpty {
-      let debtBalances = debtBalances(DebtBook(debts: counted, entries: book.entries), through: day)
+      let perDebt = debtBalances(book, accountBalances: balances, through: day)
       for debt in counted {
-        let balance = debtBalances[debt.id] ?? .zero(debt.currency)
-        let converted = convert(
-          balance.minorUnits, from: debt.currency, to: currency, at: rateDate, using: converter, gaps: &gaps)
-        if let converted {
-          if converted >= 0 { assets += converted } else { liabilities -= converted }
+        for balance in perDebt[debt.id] ?? [] where balance.minorUnits != 0 {
+          let converted = convert(
+            balance.minorUnits, from: balance.currency, to: currency, at: rateDate, using: converter, gaps: &gaps)
+          if let converted {
+            if converted >= 0 { assets += converted } else { liabilities -= converted }
+          }
+          debtValues.append(DebtValue(
+            debtID: debt.id, balance: balance, converted: converted.map { Money(minorUnits: $0, currency: currency) }))
         }
-        debtValues.append(DebtValue(
-          debtID: debt.id, balance: balance, converted: converted.map { Money(minorUnits: $0, currency: currency) }))
       }
     }
     var result = NetWorth(

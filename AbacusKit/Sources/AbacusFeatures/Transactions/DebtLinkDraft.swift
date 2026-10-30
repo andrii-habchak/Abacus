@@ -97,27 +97,28 @@ public struct DebtLinkDraft: Equatable, Sendable {
 
   public var trimmedPerson: String { personName.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-  /// The person's debts, plus "New debt in <account currency>" when they have none in it.
+  /// The person's debt (R-DEBT-16: one per person), or "New debt" with a virtual account in the
+  /// account's currency when they have none. C22 reshapes this sheet around accounts (R-DEBT-19).
   public var debtChoices: [DebtChoice] {
-    let debts = book.debts(person: trimmedPerson)
-    var choices = debts.map { debt in
-      DebtChoice(option: .existing(debt.id), label: label(debt))
-    }
-    if !debts.contains(where: { $0.currency == accountCurrency }) {
-      choices.append(DebtChoice(option: .new(accountCurrency), label: "New debt in \(accountCurrency.rawValue)"))
+    var choices: [DebtChoice] = []
+    if let existing = book.debt(person: trimmedPerson) {
+      choices.append(DebtChoice(option: .existing(existing.id), label: label(existing)))
+    } else {
+      choices.append(DebtChoice(option: .new(accountCurrency), label: "New debt (\(accountCurrency.rawValue) account)"))
     }
     if case .new(let currency) = debt, currency != accountCurrency {
-      choices.append(DebtChoice(option: debt, label: "New debt in \(currency.rawValue)"))
+      choices.append(DebtChoice(option: debt, label: "New debt (\(currency.rawValue) account)"))
     }
     return choices
   }
 
   private func label(_ debt: Debt) -> String {
-    let balance = balance(debt.id, person: debt.personName, currency: debt.currency)
-    let amount = money.string(minor: abs(balance), code: debt.currency.rawValue)
-    let state: String =
-      if balance > 0 { "owes you \(amount)" } else if balance < 0 { "you owe \(amount)" } else { "settled up" }
-    return "\(debt.currency.rawValue) · \(state)" + (debt.isSettled ? " (settled)" : "")
+    let balances = book.balances(of: debt.id).filter { $0.minorUnits != 0 }
+    let parts = balances.map { balance -> String in
+      let amount = money.string(minor: abs(balance.minorUnits), code: balance.currency.rawValue)
+      return balance.minorUnits > 0 ? "owes you \(amount)" : "you owe \(amount)"
+    }
+    return (parts.isEmpty ? "settled up" : parts.joined(separator: ", ")) + (debt.isSettled ? " (settled)" : "")
   }
 
   public var kindOptions: [DebtRecordKind] { DebtRecordKind.linkable(inflow: inflow) }
@@ -133,7 +134,7 @@ public struct DebtLinkDraft: Equatable, Sendable {
 
   public var debtCurrency: Currency {
     switch debt {
-    case .existing(let id): book.debts.first { $0.id == id }?.currency ?? accountCurrency
+    case .existing: accountCurrency
     case .new(let currency): currency
     }
   }
@@ -170,8 +171,7 @@ public struct DebtLinkDraft: Equatable, Sendable {
     guard canSave else { return nil }
     let debtID: Debt.ID? = if case .existing(let id) = debt { id } else { nil }
     return DebtLink(
-      personName: trimmedPerson, debtID: debtID, currency: debtCurrency, kind: kind,
-      amountMinor: needsAmount ? amountMinor : nil, countsInReports: countsInReports && flagTitle != nil)
+      personName: trimmedPerson, debtID: debtID, currency: debtCurrency, amountMinor: needsAmount ? amountMinor : nil)
   }
 
   /// The debt's balance before this transaction (positive = they owe me).
@@ -181,14 +181,14 @@ public struct DebtLinkDraft: Equatable, Sendable {
   }
 
   private func balance(_ debtID: Debt.ID?, person: String, currency: Currency) -> Int64 {
-    (debtID.map { book.balance(of: $0) } ?? 0) + (pendingEffects[Self.key(person: person, currency: currency, debtID: debtID)] ?? 0)
+    (debtID.map { book.balance(of: $0, currency: currency) } ?? 0) + (pendingEffects[Self.key(person: person, currency: currency, debtID: debtID)] ?? 0)
   }
 
   // MARK: Defaults
 
   /// The person's debt in the account's currency (an unsettled one first), else a new one.
   var defaultDebt: DebtOption {
-    book.debt(person: trimmedPerson, currency: accountCurrency).map { .existing($0.id) } ?? .new(accountCurrency)
+    book.debt(person: trimmedPerson).map { .existing($0.id) } ?? .new(accountCurrency)
   }
 
   var suggestedKind: DebtRecordKind { .suggested(inflow: inflow, balance: balanceBefore) }

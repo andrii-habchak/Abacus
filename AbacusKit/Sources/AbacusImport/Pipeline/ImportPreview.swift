@@ -174,14 +174,14 @@ public struct ImportPreview: Sendable {
   /// The debt's balance before the row (positive = they owe me): the stored records plus this
   /// import's debt rows dated earlier. `debtID` nil = the person's debt in `currency` (none = 0).
   public func debtBalance(person: String, currency: Currency, debtID: Debt.ID?, beforeRow id: String) -> Int64 {
-    let target = debtID ?? context.debts.debt(person: person, currency: currency)?.id
+    let target = debtID ?? context.debts.debt(person: person)?.id
     let key = Self.debtKey(person: person, currency: currency, debtID: target)
-    var balance = target.map { context.debts.balance(of: $0) } ?? 0
+    var balance = target.map { context.debts.balance(of: $0, currency: currency) } ?? 0
     guard let position = index[id] else { return balance }
     let day = rows[position].day
     for (j, other) in rows.enumerated() where j != position {
       guard let debt = other.debt, let amount = debt.amountMinor,
-        Self.debtKey(person: debt.personName, currency: debt.currency, debtID: debt.debtID ?? context.debts.debt(person: debt.personName, currency: debt.currency)?.id) == key,
+        Self.debtKey(person: debt.personName, currency: debt.currency, debtID: debt.debtID ?? context.debts.debt(person: debt.personName)?.id) == key,
         (other.day, j) < (day, position)
       else { continue }
       balance += debt.kind.balanceSign * amount
@@ -193,7 +193,7 @@ public struct ImportPreview: Sendable {
   /// new one), the kind suggested from the money's direction and the debt's balance.
   public func suggestedDebtChoice(forRow id: String, person: String) -> ImportDebtChoice? {
     guard let row = row(id), let currency = accountCurrency(ofRow: id) else { return nil }
-    let debt = context.debts.debt(person: person, currency: currency)
+    let debt = context.debts.debt(person: person)
     let balance = debtBalance(person: person, currency: currency, debtID: debt?.id, beforeRow: id)
     return ImportDebtChoice(
       personName: person, debtID: debt?.id, currency: currency,
@@ -695,10 +695,10 @@ private struct Resolver {
         if transferTarget(rule, source: source, shape: shape, account: account) != nil { return nil }
       case .debt:
         guard let person = rule.debtPerson else { continue }
-        let debt = preview.context.debts.debt(person: person, currency: currency)
+        let debt = preview.context.debts.debt(person: person)
         // The kind is set from the running balance once every row is resolved.
         let inflow = (shape.type == .income) != shape.isRefund
-        let balance = debt.map { preview.context.debts.balance(of: $0.id) } ?? 0
+        let balance = debt.map { preview.context.debts.balance(of: $0.id, currency: currency) } ?? 0
         let choice = ImportDebtChoice(
           personName: person, debtID: debt?.id, currency: currency, kind: .suggested(inflow: inflow, balance: balance))
         return (choice, rule.id)
@@ -714,12 +714,12 @@ private struct Resolver {
     row: inout PreviewRow
   ) {
     let inflow = (shape.type == .income) != shape.isRefund
-    var currency = choice.currency
+    let currency = choice.currency
     var debtID = choice.debtID
     if let id = debtID {
-      if let debt = preview.context.debts.debts.first(where: { $0.id == id }) {
-        currency = debt.currency
-      } else {
+      // R-DEBT-16: a debt has no currency; `currency` is the one of the person's account the
+      // payment goes to (the choice's, by default the row account's).
+      if preview.context.debts.debt(id) == nil {
         debtID = nil
         issues.append("“\(source.payee)”: the chosen debt no longer exists")
       }
@@ -776,9 +776,9 @@ private struct Resolver {
     var running: [String: Int64] = [:]
     for i in order {
       guard var debt = rows[i].debt else { continue }
-      let id = debt.debtID ?? preview.context.debts.debt(person: debt.personName, currency: debt.currency)?.id
+      let id = debt.debtID ?? preview.context.debts.debt(person: debt.personName)?.id
       let key = ImportPreview.debtKey(person: debt.personName, currency: debt.currency, debtID: id)
-      let balance = running[key] ?? id.map { preview.context.debts.balance(of: $0) } ?? 0
+      let balance = running[key] ?? id.map { preview.context.debts.balance(of: $0, currency: debt.currency) } ?? 0
       if debt.ruleID != nil {
         debt.kind = .suggested(inflow: rows[i].isInflow, balance: balance)
         debt.countsInReports = false

@@ -84,7 +84,7 @@ extension AbacusDatabase {
       for statement in debtsV10 {
         try db.execute(sql: statement)
       }
-      _ = try DebtConversion.convertDebtAccounts(db)
+      _ = try DebtConversionV10.convertDebtAccounts(db)
     }
     // R-MGMT-9, D48: account groups as folders. Every distinct (trimmed) `groupName` becomes a
     // group; accounts point at it through `groupID` (ON DELETE SET NULL: deleting a group moves
@@ -99,6 +99,13 @@ extension AbacusDatabase {
       if try !db.columns(in: "categoryRules").contains(where: { $0.name == "debtPersonName" }) {
         try db.execute(sql: #"ALTER TABLE "categoryRules" ADD COLUMN "debtPersonName" TEXT"#)
       }
+    }
+    // R-DEBT-16…19 (TA v1.9, C19, D59): debts without currency, linked accounts (`debtAccounts`),
+    // manual records with their own currency, payments as transfers to a virtual account. Drops
+    // `debts.currency` (the only dropped column; CloudKit sync is not enabled yet, so no deployed
+    // schema depends on it). See DebtMigrationV13.
+    migrator.registerMigration("v13: accounts drive debts") { db in
+      _ = try DebtMigrationV13.run(db)
     }
     return migrator
   }

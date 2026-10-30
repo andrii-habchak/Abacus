@@ -60,7 +60,7 @@ struct LargeDataPerformanceTests {
         try AbacusDomain.Category.fetchCount(db), try Debt.fetchCount(db)
       )
     }
-    #expect(counts.0 == 50)
+    #expect(counts.0 == 50 + 15, "50 own accounts plus 15 virtual debt accounts")
     #expect(counts.1 == 8)
     #expect(counts.2 >= 5_000)
     #expect(counts.3 >= 40)

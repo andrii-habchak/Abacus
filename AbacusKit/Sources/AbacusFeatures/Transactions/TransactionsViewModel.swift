@@ -301,7 +301,7 @@ public final class TransactionsViewModel {
     debtDraft = nil
     debtDraftTxnID = nil
     do {
-      try await debts.convert(id, to: link)
+      try await debts.transferToDebt(id, to: link)
       errorMessage = nil
     } catch {
       errorMessage = "Couldn't convert the transaction to a debt record."

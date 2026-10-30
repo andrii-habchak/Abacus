@@ -144,35 +144,32 @@ public final class DebtsModel {
       money: money, amountText: format.money(money.minorUnits < 0 ? money.negated : money), directionText: direction)
   }
 
-  private var balances: [Debt.ID: Money] { Calc.debtBalances(book) }
+  private var balances: [Debt.ID: [Money]] { Calc.debtBalances(book, calendar: format.calendar) }
 
-  /// People of the filter (Active: a person with any open debt; Settled: all debts settled),
-  /// matching the search, by name.
+  /// People of the filter (Active: an open debt; Settled: a settled one), matching the search, by
+  /// name. One debt per person (R-DEBT-16); its balances are listed per currency (never netted).
   public var people: [PersonRow] {
     let balances = self.balances
-    let groups = Dictionary(grouping: book.debts, by: \.personKey)
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-    let order = Dictionary(uniqueKeysWithValues: Currency.displayOrder.enumerated().map { ($1, $0) })
     let totals = Dictionary(summary.people.map { ($0.personKey, $0) }, uniquingKeysWith: { first, _ in first })
-    return groups.compactMap { key, debts -> PersonRow? in
-      let settled = debts.allSatisfy(\.isSettled)
-      guard settled == (filter == .settled) else { return nil }
-      let name = debts[0].personName.trimmingCharacters(in: .whitespacesAndNewlines)
+    return book.debts.compactMap { debt -> PersonRow? in
+      guard debt.isSettled == (filter == .settled) else { return nil }
+      let name = debt.personName.trimmingCharacters(in: .whitespacesAndNewlines)
       if !query.isEmpty, name.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) == nil { return nil }
-      let shown = debts.filter { $0.isSettled == settled }
-        .sorted { (order[$0.currency] ?? 0) < (order[$1.currency] ?? 0) }
-      let due = shown.compactMap { $0.dueDay.flatMap(Day.init) }.min()
+      let shown = (balances[debt.id] ?? []).filter { $0.minorUnits != 0 }
+      let due = debt.dueDay.flatMap(Day.init)
       return PersonRow(
-        id: key, name: name, balances: shown.map { balanceText(balances[$0.id] ?? .zero($0.currency)) },
-        detail: due.map { "Due \(format.day($0))" }, isSettled: settled,
-        convertedText: settled ? nil : totals[key].flatMap(convertedText))
+        id: debt.personKey, name: name,
+        balances: (shown.isEmpty ? [Money.zero(displayCurrency)] : shown).map(balanceText),
+        detail: due.map { "Due \(format.day($0))" }, isSettled: debt.isSettled,
+        convertedText: debt.isSettled ? nil : totals[debt.personKey].flatMap(convertedText))
     }
     .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
   }
 
   /// Header totals in the display currency (latest rate): "Owed to you", "You owe".
   public var summary: DebtSummary {
-    Calc.debtSummary(book, currency: displayCurrency, converter: converter)
+    Calc.debtSummary(book, currency: displayCurrency, converter: converter, calendar: format.calendar)
   }
 
   /// "≈ +₴3,400" for a person whose open balances are not all in the display currency (the
@@ -197,8 +194,7 @@ public final class DebtsModel {
   /// (the widget's figure); zero when nothing is open. Per-currency balances stay as they are.
   public var selectedTotal: PersonTotal? {
     guard let selectedPerson else { return nil }
-    let debts = book.debts.filter { $0.personKey == selectedPerson }
-    guard !debts.isEmpty else { return nil }
+    guard book.debts.contains(where: { $0.personKey == selectedPerson }) else { return nil }
     let person = summary.people.first { $0.personKey == selectedPerson }
     let approximate = person?.balances.contains { $0.currency != displayCurrency } ?? false
     let caption = "Total in \(displayCurrency.rawValue)" + (approximate ? " at today's rates" : "")
@@ -206,34 +202,34 @@ public final class DebtsModel {
     return PersonTotal(balance: money.map(balanceText), caption: caption, isApproximate: approximate)
   }
 
-  /// One account the selected person's records used (R-DEBT-14), in the account's currency.
+  /// One linked account of the selected person (R-DEBT-17), in the account's currency.
   public struct AccountFlowRow: Hashable, Sendable, Identifiable {
     public let id: Account.ID
-    /// "Revolut EUR".
+    /// "Revolut Anna".
     public let name: String
     public let currency: Currency
     /// "−€380.00" (money out of the account), nil when none.
     public let outText: String?
     /// "+€120.00" (money into the account), nil when none.
     public let inText: String?
-    /// "3 records".
+    /// "3 transactions · virtual".
     public let recordsText: String
   }
 
-  /// Per account: what the selected person's records (every debt, every currency) moved out of
-  /// and into my accounts, accounts A–Z. Records without an account are not listed here.
+  /// Per linked account: what flowed out of and into it, accounts A–Z.
   public var selectedAccountFlows: [AccountFlowRow] {
     guard let selectedPerson else { return [] }
     let ids = Set(book.debts.filter { $0.personKey == selectedPerson }.map(\.id))
-    let accountsByID = Dictionary(accounts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let accountsByID = Dictionary(book.accounts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     return Calc.debtAccountFlows(book, debtIDs: ids).compactMap { flow -> (Account, AccountFlowRow)? in
       guard let account = accountsByID[flow.accountID] else { return nil }
       let currency = account.currency
+      let count = flow.transactions == 1 ? "1 transaction" : "\(flow.transactions) transactions"
       let row = AccountFlowRow(
         id: account.id, name: account.name, currency: currency,
         outText: flow.outMinor > 0 ? "−" + format.money(Money(minorUnits: flow.outMinor, currency: currency)) : nil,
         inText: flow.inMinor > 0 ? "+" + format.money(Money(minorUnits: flow.inMinor, currency: currency)) : nil,
-        recordsText: flow.records == 1 ? "1 record" : "\(flow.records) records")
+        recordsText: "\(count) · \(flow.role.rawValue)")
       return (account, row)
     }
     .sorted { AccountOrder.byName($0.0, $1.0) }
@@ -249,62 +245,62 @@ public final class DebtsModel {
     /// Signed by the effect on the balance: "+€300.00" (they owe more) / "−€120.00".
     public let amountText: String
     public let increasesBalance: Bool
-    /// "Revolut EUR · −€300.00" / "No account".
+    /// Always "Manual record" (payments are transactions on the linked accounts, R-DEBT-18).
     public let accountText: String
     public let note: String
     /// "Counted as expense"; nil when not counted.
     public let reportText: String?
   }
 
+  /// A debt's balance in one currency with its manual records of that currency.
   public struct DebtDetail: Hashable, Sendable, Identifiable {
     public let debt: Debt
+    public let currency: Currency
     public let balance: BalanceText
     public let dueText: String?
     /// "I lent €300.00 · They repaid €120.00".
     public let totalsText: String?
     public let records: [RecordRow]
-    /// A zero balance can be marked settled (R-DEBT-5).
+    /// A zero balance in every currency can be marked settled (R-DEBT-5).
     public let canSettle: Bool
-    public var id: Debt.ID { debt.id }
+    public var id: String { "\(debt.id.uuidString)|\(currency.rawValue)" }
   }
 
-  /// The selected person's debts: open ones first, then by currency.
+  /// The selected person's debt, one detail per currency it has a balance or a record in (open
+  /// debt first). An empty debt shows one zero detail in the display currency.
   public var selectedDetails: [DebtDetail] {
     guard let selectedPerson else { return [] }
     let balances = self.balances
-    let order = Dictionary(uniqueKeysWithValues: Currency.displayOrder.enumerated().map { ($1, $0) })
-    let accountsByID = Dictionary(accounts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     return book.debts.filter { $0.personKey == selectedPerson }
-      .sorted { ($0.isSettled ? 1 : 0, order[$0.currency] ?? 0) < ($1.isSettled ? 1 : 0, order[$1.currency] ?? 0) }
-      .map { debt in
-        let entries = book.entries(of: debt.id).sorted {
-          ($0.record.day, $0.record.createdAt) > ($1.record.day, $1.record.createdAt)
-        }
-        var totals: [DebtRecordKind: Int64] = [:]
-        for entry in entries { totals[entry.record.kind, default: 0] += entry.record.amountMinor }
-        let totalsText = DebtRecordKind.allCases.compactMap { kind in
-          totals[kind].map { "\(kind.title) \(format.money(Money(minorUnits: $0, currency: debt.currency)))" }
-        }.joined(separator: " · ")
-        let rows = entries.map { entry -> RecordRow in
-          let record = entry.record
-          let money = Money(minorUnits: record.amountMinor, currency: debt.currency)
-          var accountText = "No account"
-          if let leg = entry.leg, let account = accountsByID[leg.accountID] {
-            let legMoney = Money(minorUnits: leg.amountMinor, currency: account.currency)
-            let sign = record.kind.isInflow ? "+" : "−"
-            accountText = "\(account.name) · \(sign)\(format.money(legMoney))"
+      .sorted { ($0.isSettled ? 1 : 0) < ($1.isSettled ? 1 : 0) }
+      .flatMap { debt -> [DebtDetail] in
+        let perCurrency = balances[debt.id] ?? []
+        let canSettle = perCurrency.allSatisfy { $0.minorUnits == 0 }
+        let shown = perCurrency.isEmpty ? [Money.zero(displayCurrency)] : perCurrency
+        return shown.map { balance in
+          let currency = balance.currency
+          let records = book.records(of: debt.id).filter { $0.currency == currency }.sorted {
+            ($0.day, $0.createdAt) > ($1.day, $1.createdAt)
           }
-          let report = record.reportKind.map { "Counted as \($0 == .expense ? "expense" : "income")" }
-          let note = record.note.isEmpty ? (entry.leg?.payee ?? "") : record.note
-          return RecordRow(
-            id: record.id, dayText: Day(record.day).map(format.day) ?? record.day, kindTitle: record.kind.title,
-            amountText: (record.balanceEffect >= 0 ? "+" : "−") + format.money(money),
-            increasesBalance: record.balanceEffect >= 0, accountText: accountText, note: note, reportText: report)
+          var totals: [DebtRecordKind: Int64] = [:]
+          for record in records { totals[record.kind, default: 0] += record.amountMinor }
+          let totalsText = DebtRecordKind.allCases.compactMap { kind in
+            totals[kind].map { "\(kind.title) \(format.money(Money(minorUnits: $0, currency: currency)))" }
+          }.joined(separator: " · ")
+          let rows = records.map { record -> RecordRow in
+            let money = Money(minorUnits: record.amountMinor, currency: currency)
+            let report = record.reportKind.map { "Counted as \($0 == .expense ? "expense" : "income")" }
+            return RecordRow(
+              id: record.id, dayText: Day(record.day).map(format.day) ?? record.day, kindTitle: record.kind.title,
+              amountText: (record.balanceEffect >= 0 ? "+" : "−") + format.money(money),
+              increasesBalance: record.balanceEffect >= 0, accountText: "Manual record", note: record.note,
+              reportText: report)
+          }
+          return DebtDetail(
+            debt: debt, currency: currency, balance: balanceText(balance),
+            dueText: debt.dueDay.flatMap(Day.init).map { "Due \(format.day($0))" },
+            totalsText: totalsText.isEmpty ? nil : totalsText, records: rows, canSettle: canSettle)
         }
-        let balance = balances[debt.id] ?? .zero(debt.currency)
-        return DebtDetail(
-          debt: debt, balance: balanceText(balance), dueText: debt.dueDay.flatMap(Day.init).map { "Due \(format.day($0))" },
-          totalsText: totalsText.isEmpty ? nil : totalsText, records: rows, canSettle: balance.minorUnits == 0)
       }
   }
 
@@ -312,13 +308,13 @@ public final class DebtsModel {
     book.debts.first { $0.personKey == selectedPerson }?.personName
   }
 
-  /// Opens the debt of a record (a leg picked in the transaction list).
+  /// Opens the debt of a manual record.
   public func show(recordID: DebtRecord.ID) async {
-    if phase != .loaded || !book.entries.contains(where: { $0.record.id == recordID }) { await load() }
-    guard let entry = book.entries.first(where: { $0.record.id == recordID }),
-      let debt = book.debts.first(where: { $0.id == entry.record.debtID })
+    if phase != .loaded || !book.records.contains(where: { $0.id == recordID }) { await load() }
+    guard let record = book.records.first(where: { $0.id == recordID }),
+      let debt = book.debts.first(where: { $0.id == record.debtID })
     else { return }
-    filter = debt.isSettled && book.debts.filter({ $0.personKey == debt.personKey }).allSatisfy(\.isSettled) ? .settled : .active
+    filter = debt.isSettled ? .settled : .active
     search = ""
     selectedPerson = debt.personKey
   }
@@ -328,7 +324,6 @@ public final class DebtsModel {
   public struct DebtDraft: Equatable, Sendable {
     public var id: Debt.ID?
     public var personName: String
-    public var currency: Currency
     public var hasDueDay: Bool
     public var dueDate: Date
     public var note: String
@@ -337,36 +332,27 @@ public final class DebtsModel {
   }
 
   public func newDebt() {
-    let person = selectedPersonName ?? ""
-    let used = Set(book.debts.filter { $0.personKey == selectedPerson }.map(\.currency))
-    let currency = Currency.displayOrder.reversed().first { !used.contains($0) } ?? displayCurrency
     debtDraft = DebtDraft(
-      id: nil, personName: filter == .active ? person : "", currency: currency, hasDueDay: false,
-      dueDate: dependencies.today().date(calendar: format.calendar), note: "", countsInNetWorth: true, isSettled: false)
+      id: nil, personName: "", hasDueDay: false,
+      dueDate: dependencies.today().date(calendar: format.calendar), note: "", countsInNetWorth: false, isSettled: false)
   }
 
   public func editDebt(_ id: Debt.ID) {
     guard let debt = book.debts.first(where: { $0.id == id }) else { return }
     let due = debt.dueDay.flatMap(Day.init)
     debtDraft = DebtDraft(
-      id: debt.id, personName: debt.personName, currency: debt.currency, hasDueDay: due != nil,
+      id: debt.id, personName: debt.personName, hasDueDay: due != nil,
       dueDate: (due ?? dependencies.today()).date(calendar: format.calendar), note: debt.note,
       countsInNetWorth: debt.countsInNetWorth, isSettled: debt.isSettled)
-  }
-
-  /// The currency can't change once the debt has records (R-DEBT-1).
-  public var debtCurrencyLocked: Bool {
-    guard let id = debtDraft?.id else { return false }
-    return !book.entries(of: id).isEmpty
   }
 
   public var debtDraftIssue: String? {
     guard let draft = debtDraft else { return nil }
     let name = draft.personName.trimmingCharacters(in: .whitespacesAndNewlines)
     if name.isEmpty { return "Enter the person's name." }
-    let key = Debt(personName: name, currency: draft.currency).personKey
-    if book.debts.contains(where: { $0.id != draft.id && $0.personKey == key && $0.currency == draft.currency }) {
-      return "\(name) already has a \(draft.currency.rawValue) debt."
+    let key = Debt.personKey(name)
+    if book.debts.contains(where: { $0.id != draft.id && $0.personKey == key }) {
+      return "\(name) is already a debt."
     }
     return nil
   }
@@ -374,9 +360,8 @@ public final class DebtsModel {
   public func saveDebtDraft() async {
     guard let draft = debtDraft, debtDraftIssue == nil else { return }
     let existing = draft.id.flatMap { id in book.debts.first { $0.id == id } }
-    var debt = existing ?? Debt(personName: draft.personName, currency: draft.currency)
+    var debt = existing ?? Debt(personName: draft.personName)
     debt.personName = draft.personName.trimmingCharacters(in: .whitespacesAndNewlines)
-    debt.currency = draft.currency
     debt.dueDay = draft.hasDueDay ? Day(draft.dueDate, calendar: format.calendar).string : nil
     debt.note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
     debt.countsInNetWorth = draft.countsInNetWorth
@@ -396,10 +381,10 @@ public final class DebtsModel {
     }
   }
 
-  /// R-DEBT-5: settled (zero balance only) moves the debt to Settled; unsettle moves it back.
+  /// R-DEBT-5: settled (zero balances only) moves the debt to Settled; unsettle moves it back.
   public func setSettled(_ id: Debt.ID, _ settled: Bool) async {
     guard var debt = book.debts.first(where: { $0.id == id }) else { return }
-    if settled, (balances[id]?.minorUnits ?? 0) != 0 { return }
+    if settled, (balances[id] ?? []).contains(where: { $0.minorUnits != 0 }) { return }
     debt.isSettled = settled
     await perform { try await self.dependencies.debts.save(debt) }
     if people.isEmpty || !people.contains(where: { $0.id == debt.personKey }) {
@@ -408,17 +393,15 @@ public final class DebtsModel {
     }
   }
 
-  // MARK: Record form
+  // MARK: Record form (manual records: forgive, adjustments; C20 reshapes)
 
   public struct RecordDraft: Equatable, Sendable {
     public var recordID: DebtRecord.ID?
     public var debtID: Debt.ID
     public var kind: DebtRecordKind
+    public var currency: Currency
     public var date: Date
     public var amount: String
-    public var accountID: Account.ID?
-    /// In the account's currency when it differs from the debt's.
-    public var accountAmount: String
     public var note: String
     public var countsInReports: Bool
     /// The stored flag/category of an edited record (kept when the flag stays on).
@@ -426,30 +409,21 @@ public final class DebtsModel {
     var originalCategoryID: AbacusDomain.Category.ID?
   }
 
-  /// Accounts offered for a record: not archived (the leg's own account stays offered), under
-  /// their groups A–Z (R-MGMT-9).
-  public var accountSections: [AccountPickerSection] {
-    let current = recordDraft?.accountID
-    return AccountOrder.pickerSections(accounts.filter { !$0.isArchived || $0.id == current }, groups: accountGroups)
-  }
-
-  public func newRecord(debtID: Debt.ID, kind: DebtRecordKind = .lent) {
-    guard let debt = book.debts.first(where: { $0.id == debtID }) else { return }
-    let account = accounts.first { !$0.isArchived && $0.currency == debt.currency && !$0.kind.isLiability }
-      ?? accounts.first { !$0.isArchived }
+  public func newRecord(debtID: Debt.ID, kind: DebtRecordKind = .forgaveThem, currency: Currency? = nil) {
+    guard book.debts.contains(where: { $0.id == debtID }) else { return }
+    let used = (balances[debtID] ?? []).first?.currency
     recordDraft = RecordDraft(
-      recordID: nil, debtID: debtID, kind: kind, date: dependencies.today().date(calendar: format.calendar), amount: "",
-      accountID: kind.movesMoney ? account?.id : nil, accountAmount: "", note: "", countsInReports: kind.reportsByDefault)
+      recordID: nil, debtID: debtID, kind: kind, currency: currency ?? used ?? displayCurrency,
+      date: dependencies.today().date(calendar: format.calendar), amount: "", note: "",
+      countsInReports: kind.reportsByDefault)
   }
 
   public func editRecord(_ id: DebtRecord.ID) {
-    guard let entry = book.entries.first(where: { $0.record.id == id }) else { return }
-    let record = entry.record
+    guard let record = book.records.first(where: { $0.id == id }) else { return }
     recordDraft = RecordDraft(
-      recordID: record.id, debtID: record.debtID, kind: record.kind,
+      recordID: record.id, debtID: record.debtID, kind: record.kind, currency: record.currency,
       date: (Day(record.day) ?? dependencies.today()).date(calendar: format.calendar),
-      amount: format.amountInput(record.amountMinor), accountID: entry.leg?.accountID,
-      accountAmount: entry.leg.map { format.amountInput($0.amountMinor) } ?? "", note: record.note,
+      amount: format.amountInput(record.amountMinor), note: record.note,
       countsInReports: record.reportKind != nil, originalReportKind: record.reportKind,
       originalCategoryID: record.categoryID)
   }
@@ -459,10 +433,6 @@ public final class DebtsModel {
     guard var draft = recordDraft else { return }
     draft.kind = kind
     if draft.recordID == nil { draft.countsInReports = kind.reportsByDefault }
-    if !kind.movesMoney { draft.accountID = nil }
-    if kind.movesMoney, draft.accountID == nil, let debt = debt(of: draft) {
-      draft.accountID = accounts.first { !$0.isArchived && $0.currency == debt.currency }?.id
-    }
     recordDraft = draft
   }
 
@@ -475,39 +445,9 @@ public final class DebtsModel {
     return draft.kind.offeredReportKind ?? (draft.recordID != nil ? draft.originalReportKind : nil)
   }
 
-  public var recordAccount: Account? {
-    recordDraft?.accountID.flatMap { id in accounts.first { $0.id == id } }
-  }
-
-  public var recordDebtCurrency: Currency? { recordDraft.flatMap(debt(of:))?.currency }
-
-  /// The account's currency differs from the debt's: the account amount is entered too.
-  public var recordNeedsAccountAmount: Bool {
-    guard let account = recordAccount, let currency = recordDebtCurrency, recordDraft?.kind.movesMoney == true else {
-      return false
-    }
-    return account.currency != currency
-  }
-
-  /// The account amount at the day's rate, for the field's placeholder / pre-fill.
-  public var suggestedAccountAmount: String? {
-    guard recordNeedsAccountAmount, let draft = recordDraft, let account = recordAccount,
-      let currency = recordDebtCurrency, let minor = format.parseAmount(draft.amount), minor > 0
-    else { return nil }
-    let day = Day(draft.date, calendar: format.calendar)
-    return converter.convert(Money(minorUnits: minor, currency: currency), to: account.currency, on: day)
-      .map { format.amountInput($0.minorUnits) }
-  }
-
   public var recordDraftIssue: String? {
     guard let draft = recordDraft else { return nil }
     guard let amount = format.parseAmount(draft.amount), amount > 0 else { return "Enter an amount above zero." }
-    if recordNeedsAccountAmount {
-      let text = draft.accountAmount.isEmpty ? (suggestedAccountAmount ?? "") : draft.accountAmount
-      guard let minor = format.parseAmount(text), minor > 0 else {
-        return "Enter the amount in \(recordAccount?.currency.rawValue ?? "the account's currency")."
-      }
-    }
     return nil
   }
 
@@ -516,25 +456,17 @@ public final class DebtsModel {
       let amount = format.parseAmount(draft.amount)
     else { return }
     let reportKind = draft.countsInReports ? recordReportKind : nil
-    let existing = draft.recordID.flatMap { id in book.entries.first { $0.record.id == id }?.record }
-    var record = existing ?? DebtRecord(debtID: debt.id, kind: draft.kind, day: "", amountMinor: amount)
+    let existing = draft.recordID.flatMap { id in book.records.first { $0.id == id } }
+    var record = existing ?? DebtRecord(debtID: debt.id, kind: draft.kind, day: "", amountMinor: amount, currency: draft.currency)
     record.kind = draft.kind
+    record.currency = draft.currency
     record.day = Day(draft.date, calendar: format.calendar).string
     record.amountMinor = amount
     record.note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
     record.reportKind = reportKind
     record.categoryID = reportKind != nil && reportKind == draft.originalReportKind ? draft.originalCategoryID : nil
-    var leg: DebtLegInput?
-    if draft.kind.movesMoney, let account = recordAccount {
-      var legAmount = amount
-      if account.currency != debt.currency {
-        let text = draft.accountAmount.isEmpty ? (suggestedAccountAmount ?? "") : draft.accountAmount
-        legAmount = format.parseAmount(text) ?? 0
-      }
-      leg = DebtLegInput(accountID: account.id, amountMinor: legAmount)
-    }
     await perform {
-      try await self.dependencies.debts.save(record, leg: leg)
+      try await self.dependencies.debts.save(record)
       self.recordDraft = nil
     }
   }
@@ -561,9 +493,9 @@ public final class DebtsModel {
       await load()
       isSaving = false
       await onDataChange?()
-    } catch DebtRepositoryError.currencyLocked {
+    } catch DebtRepositoryError.personExists {
       isSaving = false
-      errorMessage = "The currency can't change: the debt has records."
+      errorMessage = "That person already has a debt."
     } catch {
       isSaving = false
       errorMessage = "Couldn't save: \(error.localizedDescription)"

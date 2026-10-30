@@ -274,7 +274,7 @@ struct DebtCard: View {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 4) {
           HStack(spacing: 6) {
-            Text(detail.debt.currency.rawValue)
+            Text(detail.currency.rawValue)
               .font(.caption.weight(.semibold))
               .padding(.horizontal, 6)
               .padding(.vertical, 2)
@@ -386,10 +386,6 @@ struct DebtFormSheet: View {
         Text(draft.wrappedValue.id == nil ? "New debt" : "Edit debt").font(.headline).padding([.horizontal, .top], 20)
         Form {
           TextField("Person", text: draft.personName)
-          Picker("Currency", selection: draft.currency) {
-            ForEach(Currency.displayOrder, id: \.self) { Text($0.rawValue).tag($0) }
-          }
-          .disabled(model.debtCurrencyLocked)
           Toggle("Due date", isOn: draft.hasDueDay)
           if draft.wrappedValue.hasDueDay {
             DatePicker("Due", selection: draft.dueDate, displayedComponents: .date)
@@ -406,10 +402,10 @@ struct DebtFormSheet: View {
           if let id = draft.wrappedValue.id {
             Button("Delete…", role: .destructive) { confirmDelete = true }
               .foregroundStyle(ManagePalette.destructive)
-              .confirmationDialog("Delete this debt and all its records?", isPresented: $confirmDelete) {
+              .confirmationDialog("Delete this debt and its manual records?", isPresented: $confirmDelete) {
                 Button("Delete debt", role: .destructive) { Task { await model.deleteDebt(id) } }
               } message: {
-                Text("Their transactions on your accounts are deleted too.")
+                Text("Its accounts and their transactions stay.")
               }
           }
           Spacer()
@@ -434,7 +430,6 @@ struct DebtRecordFormSheet: View {
     // See `DebtFormSheet`: the record draft becomes nil on Save, Delete and Escape (S1, D54).
     if let shown = model.recordDraft {
       let draft = presentBinding({ model.recordDraft }, { model.recordDraft = $0 }, fallback: shown)
-      let currency = model.recordDebtCurrency?.rawValue ?? ""
       VStack(alignment: .leading, spacing: 0) {
         Text(draft.wrappedValue.recordID == nil ? "New record" : "Edit record").font(.headline)
           .padding([.horizontal, .top], 20)
@@ -444,27 +439,10 @@ struct DebtRecordFormSheet: View {
           }
           DatePicker("Day", selection: draft.date, displayedComponents: .date)
           LabeledContent("Amount") {
-            HStack {
-              TextField("Amount", text: draft.amount).labelsHidden().multilineTextAlignment(.trailing)
-              Text(currency).foregroundStyle(.secondary)
-            }
+            TextField("Amount", text: draft.amount).labelsHidden().multilineTextAlignment(.trailing)
           }
-          if draft.wrappedValue.kind.movesMoney {
-            Picker("Account", selection: draft.accountID) {
-              Text("No account").tag(Account.ID?.none)
-              AccountPickerItems(sections: model.accountSections) { account in
-                Text("\(account.name) (\(account.currency.rawValue))").tag(Account.ID?.some(account.id))
-              }
-            }
-            if model.recordNeedsAccountAmount, let account = model.recordAccount {
-              LabeledContent("Amount on account") {
-                HStack {
-                  TextField(model.suggestedAccountAmount ?? "Amount", text: draft.accountAmount)
-                    .labelsHidden().multilineTextAlignment(.trailing)
-                  Text(account.currency.rawValue).foregroundStyle(.secondary)
-                }
-              }
-            }
+          Picker("Currency", selection: draft.currency) {
+            ForEach(Currency.displayOrder, id: \.self) { Text($0.rawValue).tag($0) }
           }
           if let kind = model.recordReportKind {
             Toggle(kind == .expense ? "Count as expense" : "Count as income", isOn: draft.countsInReports)
@@ -482,8 +460,6 @@ struct DebtRecordFormSheet: View {
               .foregroundStyle(ManagePalette.destructive)
               .confirmationDialog("Delete this record?", isPresented: $confirmDelete) {
                 Button("Delete record", role: .destructive) { Task { await model.deleteRecord(id) } }
-              } message: {
-                Text("Its transaction on your account is deleted too.")
               }
           }
           Spacer()
@@ -533,8 +509,8 @@ enum DebtStyle {
         model.selectedPerson = person.id
       }
       switch defaults.string(forKey: "AbacusDebtsForm") {
-      case "record": if let debt = model.selectedDetails.first { model.newRecord(debtID: debt.id) }
-      case "debt": if let debt = model.selectedDetails.first { model.editDebt(debt.id) }
+      case "record": if let detail = model.selectedDetails.first { model.newRecord(debtID: detail.debt.id) }
+      case "debt": if let detail = model.selectedDetails.first { model.editDebt(detail.debt.id) }
       default: break
       }
     }

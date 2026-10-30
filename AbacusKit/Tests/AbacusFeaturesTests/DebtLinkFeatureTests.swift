@@ -7,35 +7,43 @@ import Foundation
 import SQLiteData
 import Testing
 
-/// C17 screens: the shared debt sheet, the import wizard's "Debt…", "Convert to debt record…" in
-/// the transaction list and the rule editor's debt action (R-DEBT-10…12). Synthetic data only.
+/// C17 screens on the C19 core: the shared debt sheet, the import wizard's "Debt…", "Convert to
+/// debt record…" in the transaction list and the rule editor's debt action (R-DEBT-10…12,
+/// R-DEBT-19): a payment ends as a transfer to the person's virtual account. Synthetic data only.
 @MainActor
-@Suite("Debt linking screens (C17)")
+@Suite("Debt linking screens (C17, C19)")
 struct DebtLinkFeatureTests {
   static let calendar = ImportHarness.calendar
   static let account = Account(
     id: PreviewData.id(9101), name: "Bank PLN", currency: .PLN, kind: .bank, openingBalanceMinor: 1_000_00,
     openingDate: Date(timeIntervalSince1970: 1_767_225_600), iban: "PL 99 9999 9999 9999 9999 9999 9999")
 
-  static func book(_ records: [(String, Currency, DebtRecordKind, Int64)]) -> DebtBook {
-    var debts: [Debt] = []
-    var entries: [DebtRecordEntry] = []
-    for (person, currency, kind, amount) in records {
-      let debt = debts.first { $0.personName == person && $0.currency == currency } ?? {
-        let debt = Debt(personName: person, currency: currency)
-        debts.append(debt)
-        return debt
-      }()
-      entries.append(DebtRecordEntry(record: DebtRecord(debtID: debt.id, kind: kind, day: "2026-01-01", amountMinor: amount)))
+  /// One debt per person; each (person, currency, balance) is a virtual account of that person
+  /// opened with the balance (positive = they owe me).
+  static func book(_ balances: [(String, Currency, Int64)]) -> DebtBook {
+    var book = DebtBook()
+    for (person, currency, balance) in balances {
+      let debt: Debt
+      if let known = book.debt(person: person) {
+        debt = known
+      } else {
+        debt = Debt(personName: person)
+        book.debts.append(debt)
+      }
+      let account = Account(
+        name: "\(person) (\(currency.rawValue))", currency: currency, kind: .debt, openingBalanceMinor: balance,
+        openingDate: Date(timeIntervalSince1970: 1_700_000_000))
+      book.accounts.append(account)
+      book.links.append(DebtAccountLink(accountID: account.id, debtID: debt.id, role: .virtual))
     }
-    return DebtBook(debts: debts, entries: entries)
+    return book
   }
 
   // MARK: Shared sheet
 
-  @Test("R-DEBT-10/11: the sheet suggests the person's debt in the account's currency and the kind from the balance")
+  @Test("R-DEBT-10/11, R-DEBT-16: the sheet suggests the person's debt (one per person) and the kind from the balance in the account's currency")
   func draftDefaults() {
-    let book = Self.book([("Ann", .PLN, .lent, 100_00), ("Bob", .EUR, .borrowed, 20_00)])
+    let book = Self.book([("Ann", .PLN, 100_00), ("Bob", .EUR, -20_00)])
     var draft = DebtLinkDraft(
       title: "t", subtitle: "s", inflow: true, accountCurrency: .PLN, accountAmountMinor: 40_00, book: book,
       convertedAmounts: [.EUR: 9_30], format: ManageFormat(locale: Locale(identifier: "en_US")))
@@ -47,26 +55,29 @@ struct DebtLinkFeatureTests {
     #expect(draft.kindOptions == [.theyRepaid, .borrowed])
     #expect(draft.flagTitle == "Count as income")
     #expect(!draft.needsAmount)
-    #expect(draft.link == DebtLink(personName: "ann", debtID: book.debts[0].id, currency: .PLN, kind: .theyRepaid))
+    #expect(draft.link == DebtLink(personName: "ann", debtID: book.debts[0].id, currency: .PLN))
 
-    // Bob owes nothing in PLN: a new PLN debt, money in = I borrowed; his EUR debt pre-fills the
-    // amount at the day's rate.
+    // Bob owes nothing in PLN: his debt is offered, money in = I borrowed.
     draft.personName = "Bob"
-    #expect(draft.debt == .new(.PLN))
+    #expect(draft.debt == .existing(book.debts[1].id))
     #expect(draft.kind == .borrowed)
-    #expect(draft.debtChoices.map(\.label) == ["EUR · you owe €20.00", "New debt in PLN"])
-    draft.debt = .existing(book.debts[1].id)
+    #expect(draft.debtChoices.count == 1 && draft.debtChoices[0].label.hasPrefix("you owe"))
+    // A new person gets a new debt with a virtual account in the row's currency; another currency
+    // pre-fills the amount at the day's rate.
+    draft.personName = "Cleo"
+    #expect(draft.debt == .new(.PLN))
+    #expect(draft.debtChoices.map(\.label) == ["New debt (PLN account)"])
+    draft.debt = .new(.EUR)
     #expect(draft.needsAmount)
     #expect(draft.amountText == "9.30")
-    #expect(draft.kind == .borrowed)
-    #expect(draft.link?.amountMinor == 9_30)
+    #expect(draft.link?.amountMinor == 9_30 && draft.link?.currency == .EUR)
     draft.amountText = ""
     #expect(draft.validation == "Enter the amount in EUR.")
   }
 
   @Test("R-DEBT-10: money out while I owe them suggests I repaid; pending rows of the same import count")
   func draftPendingEffects() {
-    let book = Self.book([("Ann", .PLN, .borrowed, 50_00)])
+    let book = Self.book([("Ann", .PLN, -50_00)])
     var draft = DebtLinkDraft(title: "t", subtitle: "s", inflow: false, accountCurrency: .PLN, accountAmountMinor: 50_00, book: book)
     draft.personName = "Ann"
     #expect(draft.kind == .iRepaid)
@@ -114,11 +125,14 @@ struct DebtLinkFeatureTests {
     await model.commit()
     #expect(model.step == .done)
     #expect(model.doneLines.contains("2 recorded as debt records"))
-    let legs = try await harness.txns().filter { $0.txn.debtRecordID != nil }
-    #expect(legs.count == 2)
     let book = try await SQLiteDebtRepository(database: harness.database, calendar: Self.calendar).book()
-    #expect(book.debts.count == 1)
-    #expect(book.balance(of: book.debts[0].id) == 1_500_00 + 5_00)
+    #expect(book.debts.count == 1 && book.links.count == 1 && book.records.isEmpty)
+    let debtAccount = try #require(book.links.first?.accountID)
+    let transfers = try await harness.txns().filter {
+      $0.txn.type == .transfer && ($0.txn.toAccountID == debtAccount || $0.txn.accountID == debtAccount)
+    }
+    #expect(transfers.count == 2)
+    #expect(book.balance(of: book.debts[0].id, currency: .PLN, calendar: Self.calendar) == 1_500_00 + 5_00)
   }
 
   @Test("R-DEBT-10: Not a debt puts the row back to a category pick")
@@ -140,7 +154,7 @@ struct DebtLinkFeatureTests {
 
   // MARK: Transaction list
 
-  @Test("R-DEBT-11: Convert to debt record in the list keeps the transaction and makes it the leg")
+  @Test("R-DEBT-11, R-DEBT-19: Convert to debt record in the list keeps the transaction and makes it a transfer to the person's account")
   func listConvert() async throws {
     let database = try AbacusDatabase.open(at: nil)
     try await SQLiteAccountRepository(database: database, calendar: Self.calendar).save(Self.account)
@@ -167,13 +181,13 @@ struct DebtLinkFeatureTests {
     await model.saveConvertToDebt(draft)
     #expect(changed == 1)
     #expect(model.debtDraft == nil)
-    let leg = try #require(try await txns.transaction(txn.id)?.txn)
-    #expect(leg.debtRecordID != nil)
-    #expect(leg.payee == "Dinner for Ann")
+    let moved = try #require(try await txns.transaction(txn.id)?.txn)
+    #expect(moved.type == .transfer && moved.accountID == Self.account.id && moved.toAccountID != nil)
+    #expect(moved.payee == "Dinner for Ann" && moved.note == "split later")
     #expect(!model.canConvertToDebt(txn.id))
     let book = try await SQLiteDebtRepository(database: database, calendar: Self.calendar).book()
-    #expect(book.entries.first?.record.kind == .paidOnTheirBehalf)
-    #expect(book.entries.first?.record.note == "split later")
+    #expect(book.debts.map(\.personName) == ["Ann"] && book.records.isEmpty)
+    #expect(book.balance(of: book.debts[0].id, currency: .PLN, calendar: Self.calendar) == 60_00)
     #expect(try await txns.transactions(matching: TxnQuery()).count == 1)
   }
 

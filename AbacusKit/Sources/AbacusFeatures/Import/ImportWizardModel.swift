@@ -360,7 +360,7 @@ public final class ImportWizardModel {
     if let position = preview.rows.firstIndex(where: { $0.id == id }) {
       for (j, other) in preview.rows.enumerated() where j != position {
         guard let debt = other.debt, let amount = debt.amountMinor, (other.day, j) < (row.day, position) else { continue }
-        let debtID = debt.debtID ?? book.debt(person: debt.personName, currency: debt.currency)?.id
+        let debtID = debt.debtID ?? book.debt(person: debt.personName)?.id
         pending[DebtLinkDraft.key(person: debt.personName, currency: debt.currency, debtID: debtID), default: 0] +=
           debt.kind.balanceSign * amount
       }
@@ -391,8 +391,8 @@ public final class ImportWizardModel {
     debtDraft = nil
     debtDraftRowID = nil
     let choice = ImportDebtChoice(
-      personName: link.personName, debtID: link.debtID, currency: link.currency, kind: link.kind ?? draft.kind,
-      countsInReports: link.countsInReports, amountMinor: link.amountMinor)
+      personName: link.personName, debtID: link.debtID, currency: link.currency ?? draft.debtCurrency, kind: draft.kind,
+      countsInReports: draft.countsInReports && draft.flagTitle != nil, amountMinor: link.amountMinor)
     let isReview = preview?.row(id)?.review != nil
     update { preview in
       if isReview {

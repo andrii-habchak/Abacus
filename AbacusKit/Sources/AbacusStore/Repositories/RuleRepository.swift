@@ -54,9 +54,9 @@ public struct SQLiteRuleRepository: RuleRepository {
     }
   }
 
-  /// R-DEBT-12: each transaction becomes a debt record for the rule's person (the person's debt
-  /// in the account's currency, kind from the direction and the balance), oldest first; the
-  /// application records the leg as the rule left it, so roll back can undo it.
+  /// R-DEBT-12, R-DEBT-19: each transaction becomes a transfer to the rule's person (the person's
+  /// debt and virtual account in the account's currency), oldest first; the application records
+  /// the transaction as the rule left it, so roll back can undo it.
   private static func applyDebtRule(
     _ rule: CategoryRule, records: [RuleApplication], calendar: Calendar, _ db: Database
   ) throws {
@@ -68,9 +68,7 @@ public struct SQLiteRuleRepository: RuleRepository {
     }
     items.sort { ($0.1.occurredAt, $0.1.id.uuidString) < ($1.1.occurredAt, $1.1.id.uuidString) }
     for (record, current) in items {
-      guard let account = try Account.find(current.accountID).fetchOne(db) else { throw RepositoryError.notFound }
-      try DebtLinking.convert(
-        current.id, to: DebtLink(personName: person, currency: account.currency), calendar: calendar, db)
+      try DebtLinking.transfer(current.id, to: DebtLink(personName: person), db)
       guard let leg = try Txn.find(current.id).fetchOne(db) else { throw RepositoryError.notFound }
       var applied = record
       applied.before = RuleTxnState(current)
@@ -97,12 +95,9 @@ public struct SQLiteRuleRepository: RuleRepository {
           result.skipped += 1
           continue
         }
-        if current.debtRecordID != nil {
-          // A debt rule's leg: back to the transaction it was, its record deleted.
-          try DebtLinking.unlink(restored, db)
-        } else {
-          try Txn.upsert { Txn.Draft(restored) }.execute(db)
-        }
+        // A debt rule's transfer goes back to the transaction it was (R-DEBT-19); a debt or
+        // virtual account the rule created stays, empty.
+        try Txn.upsert { Txn.Draft(restored) }.execute(db)
         result.restored += 1
       }
       try RuleApplication.where { $0.ruleID.eq(ruleID) }.delete().execute(db)

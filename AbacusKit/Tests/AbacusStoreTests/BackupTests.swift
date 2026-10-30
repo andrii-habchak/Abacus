@@ -44,13 +44,13 @@ struct BackupTests {
     try await f.rates.save([FXRate(day: "2026-03-02", base: .EUR, quote: .PLN, rateE8: 425_000_000, provider: "NBU")])
     try await f.rates.save(FXOverride(base: .EUR, quote: .PLN, rateE8: 430_000_000, fromDay: "2026-03-01"))
     try await f.settings.set(.displayCurrency, "PLN")
-    // Debts (v10): a debt with a record whose leg is on the bank account.
+    // Debts (v13): a debt with a linked virtual account, a payment to it and a manual record.
     let debts = SQLiteDebtRepository(database: f.database, calendar: F.calendar)
-    let debt = Debt(personName: "Person A", currency: .PLN)
+    let debt = Debt(personName: "Person A")
     try await debts.save(debt)
-    try await debts.save(
-      DebtRecord(debtID: debt.id, kind: .lent, day: "2026-03-03", amountMinor: 20_00),
-      leg: DebtLegInput(accountID: F.bank.id, amountMinor: 20_00))
+    try await debts.save(DebtRecord(debtID: debt.id, kind: .forgaveThem, day: "2026-03-03", amountMinor: 20_00, currency: .PLN))
+    try await f.insert(F.expense(101, "2026-03-03", 20_00, F.groceries))
+    try await debts.transferToDebt(F.id(101), to: DebtLink(personName: "Person A", debtID: debt.id))
     try await f.accounts.saveGroup(AccountGroup(name: "Bank group"))
   }
 
