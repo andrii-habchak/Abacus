@@ -5,17 +5,19 @@ import Foundation
 /// R-IMP-8). Pure: callers decide whether to save.
 public enum RuleEffect {
   /// The transaction as `rule` would leave it, or nil when the rule does not match it or leaves
-  /// it unchanged. Debt legs are never touched (they follow their record); a debt rule gives the
-  /// leg shape (C17). Transfers are never touched (neither by a category rule nor by a transfer
-  /// rule: halves of a paired transfer stay as they are). A transfer rule is skipped when the
+  /// it unchanged. A debt rule gives the transfer to the person's virtual account (R-DEBT-12,
+  /// R-DEBT-19; the store makes it with `transferToDebt`), never for a transaction on an account
+  /// that belongs to a debt. Transfers are never touched (neither by a category rule nor by a
+  /// transfer rule: halves of a paired transfer stay as they are). A transfer rule is skipped when the
   /// amount in the other account's currency is unknown (different currency and no original
   /// amount in it), and for money coming in when the transaction has attached records (they
   /// would move to the other account).
   public static func apply(
-    _ rule: CategoryRule, to item: TxnWithLines, accounts: [Account], categories: [AbacusDomain.Category]
+    _ rule: CategoryRule, to item: TxnWithLines, accounts: [Account], categories: [AbacusDomain.Category],
+    debts: DebtBook = .empty
   ) -> Txn? {
     var txn = item.txn
-    guard txn.type != .transfer, txn.debtRecordID == nil else { return nil }
+    guard txn.type != .transfer else { return nil }
     let kind: CategoryKind = txn.type == .income ? .income : .expense
     let subject = RuleSubject(description: txn.payee, accountID: txn.accountID, amountMinor: txn.amountMinor, kind: kind)
     // The rule is applied on its own, whatever its position (the user asked for it).
@@ -30,15 +32,29 @@ public enum RuleEffect {
       return txn
 
     case .debt:
-      // R-DEBT-12: the transaction becomes a debt record's leg (unflagged: a one-sided
-      // transfer, `isRefund` = money in); the store creates the record when it is saved.
-      guard rule.debtPerson != nil else { return nil }
+      // R-DEBT-12/19: the transaction becomes a transfer between its account and the person's
+      // virtual account in its currency. When the person has no such account yet it is made on
+      // apply: the shape then has no destination (money in marked by `isRefund`).
+      guard let person = rule.debtPerson, !debts.linkedAccountIDs.contains(txn.accountID) else { return nil }
       let inflow = (txn.type == .income) != txn.isRefund
+      let own = accounts.first { $0.id == txn.accountID }
+      let debt = debts.debt(person: person)
+      let virtual = debt.flatMap { debt -> Account? in
+        let roles = Set(debts.links(of: debt.id).filter { $0.role == .virtual }.map(\.accountID))
+        return debts.accounts(of: debt.id).first { roles.contains($0.id) && $0.currency == own?.currency }
+      }
+      let mine = txn.accountID
       txn.type = .transfer
       txn.categoryID = nil
-      txn.toAccountID = nil
       txn.toAmountMinor = nil
-      txn.isRefund = inflow
+      if let virtual {
+        txn.isRefund = false
+        txn.accountID = inflow ? virtual.id : mine
+        txn.toAccountID = inflow ? mine : virtual.id
+      } else {
+        txn.toAccountID = nil
+        txn.isRefund = inflow
+      }
       return txn
 
     case .transfer:
@@ -76,8 +92,9 @@ public enum RuleEffect {
 
   /// Every transaction `rule` would change, as changed.
   public static func changes(
-    _ rule: CategoryRule, in items: [TxnWithLines], accounts: [Account], categories: [AbacusDomain.Category]
+    _ rule: CategoryRule, in items: [TxnWithLines], accounts: [Account], categories: [AbacusDomain.Category],
+    debts: DebtBook = .empty
   ) -> [Txn] {
-    items.compactMap { apply(rule, to: $0, accounts: accounts, categories: categories) }
+    items.compactMap { apply(rule, to: $0, accounts: accounts, categories: categories, debts: debts) }
   }
 }

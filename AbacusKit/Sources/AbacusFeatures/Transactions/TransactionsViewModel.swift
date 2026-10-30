@@ -38,10 +38,12 @@ public final class TransactionsViewModel {
   @ObservationIgnored private let today: @Sendable () -> Day
   @ObservationIgnored private let calendar: Calendar
   @ObservationIgnored private var generation = 0
-  /// "Convert to debt record…" (R-DEBT-11); nil = not offered.
+  /// "Transfer to debt account…" (R-DEBT-11, R-DEBT-19); nil = not offered.
   @ObservationIgnored private let debts: (any DebtRepository)?
+  /// Accounts linked to a debt (external or virtual), read on `load()` and after a change here.
+  @ObservationIgnored private var debtAccountIDs: Set<Account.ID> = []
 
-  /// The "Convert to debt record" sheet; nil when closed.
+  /// The "Transfer to debt account" sheet; nil when closed.
   public var debtDraft: DebtLinkDraft?
   /// The transaction the sheet converts.
   public private(set) var debtDraftTxnID: Txn.ID?
@@ -116,7 +118,13 @@ public final class TransactionsViewModel {
     hasUncategorised =
       (try? await transactions.transactions(matching: TxnQuery(includeUncategorised: true)).isEmpty == false)
       ?? false
+    await loadDebtAccounts()
     await reload()
+  }
+
+  private func loadDebtAccounts() async {
+    guard let debts else { return }
+    debtAccountIDs = (try? await debts.book().linkedAccountIDs) ?? []
   }
 
   /// Fetches the rows for the current filters. Results of an older call that finishes later
@@ -246,15 +254,38 @@ public final class TransactionsViewModel {
 
   public func clearFilters() { filters.clear() }
 
-  // MARK: Convert to debt record (R-DEBT-11, docs/status/C17.md)
+  // MARK: Transfer to a debt account (R-DEBT-11, R-DEBT-19, docs/status/C22.md)
 
-  /// An expense or income that is not a debt record's leg yet.
+  /// An expense or income on an account that is not a debt's own.
   public func canConvertToDebt(_ id: Txn.ID) -> Bool {
     guard debts != nil, let txn = rows.first(where: { $0.txn.id == id })?.txn else { return false }
-    return txn.debtRecordID == nil && txn.type != .transfer
+    return txn.type != .transfer && !debtAccountIDs.contains(txn.accountID)
   }
 
-  /// Opens the sheet for the transaction: person, debt, kind suggested from the direction.
+  /// A transfer between my account and a linked account of a debt: "Undo transfer to debt".
+  public func canUnlinkTransfer(_ id: Txn.ID) -> Bool {
+    guard debts != nil, let txn = rows.first(where: { $0.txn.id == id })?.txn, txn.type == .transfer,
+      let to = txn.toAccountID
+    else { return false }
+    return debtAccountIDs.contains(txn.accountID) != debtAccountIDs.contains(to)
+  }
+
+  /// The transfer becomes an expense or income on my account again (no category).
+  public func unlinkTransfer(_ id: Txn.ID) async {
+    guard canUnlinkTransfer(id), let debts else { return }
+    do {
+      try await debts.unlinkTransfer(id)
+      errorMessage = nil
+    } catch {
+      errorMessage = "Couldn't undo the transfer to the debt."
+    }
+    await loadDebtAccounts()
+    await reload()
+    await onDataChange?()
+  }
+
+  /// Opens the sheet for the transaction: person, the person's account, the amount across
+  /// currencies.
   public func beginConvertToDebt(_ id: Txn.ID) async {
     guard canConvertToDebt(id), let debts, let txn = rows.first(where: { $0.txn.id == id })?.txn,
       let account = reference.accountsByID[txn.accountID]
@@ -283,7 +314,7 @@ public final class TransactionsViewModel {
     let amount = money.string(minor: inflow ? txn.amountMinor : -txn.amountMinor, code: account.currency.rawValue, sign: .always)
     debtDraftTxnID = id
     debtDraft = DebtLinkDraft(
-      title: txn.payee.isEmpty ? "Convert to debt record" : "Convert “\(txn.payee)” to a debt record",
+      title: txn.payee.isEmpty ? "Transfer to debt account" : "Transfer “\(txn.payee)” to a debt account",
       subtitle: "\(amount) on \(account.name) · \(day.date(calendar: calendar).formatted(style))",
       inflow: inflow, accountCurrency: account.currency, accountAmountMinor: txn.amountMinor, book: book,
       convertedAmounts: converted)
@@ -294,8 +325,8 @@ public final class TransactionsViewModel {
     debtDraftTxnID = nil
   }
 
-  /// Saves the sheet: the transaction becomes the record's leg in place (no second
-  /// transaction). Takes the draft the sheet showed (SwiftUI may clear the binding first).
+  /// Saves the sheet: the transaction becomes a transfer to the person's account in place (no
+  /// second transaction). Takes the draft the sheet showed (SwiftUI may clear the binding first).
   public func saveConvertToDebt(_ draft: DebtLinkDraft? = nil) async {
     guard let draft = draft ?? debtDraft, let id = debtDraftTxnID, let link = draft.link, let debts else { return }
     debtDraft = nil
@@ -304,8 +335,9 @@ public final class TransactionsViewModel {
       try await debts.transferToDebt(id, to: link)
       errorMessage = nil
     } catch {
-      errorMessage = "Couldn't convert the transaction to a debt record."
+      errorMessage = "Couldn't make the transaction a transfer to the debt account."
     }
+    await loadDebtAccounts()
     await reload()
     await onDataChange?()
   }

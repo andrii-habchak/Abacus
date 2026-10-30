@@ -440,7 +440,7 @@ struct ImportWizardTests {
     let out = try #require(model.reviewItems.first { $0.title.hasSuffix("To the USD card") })
     #expect(out.title.hasPrefix("Outgoing transfer half without a match"))
     #expect(out.detail.contains("Saldo hints the other side is “Bank USD card”"))
-    #expect(out.options.map(\.label) == ["Pair with", "Record as expense", "Debt record…", "Skip"])
+    #expect(out.options.map(\.label) == ["Pair with", "Record as expense", "Debt…", "Skip"])
     // Different transit currencies: offered, not suggested (D26).
     #expect(out.suggested == .record(.expense))
     #expect(out.pairCandidates.count == 1)
@@ -486,7 +486,7 @@ struct ImportWizardTests {
     let model = h.model
     let fee = try #require(model.reviewItems.first)
     #expect(fee.title == "Unknown operation type")
-    #expect(fee.options.map(\.label) == ["Expense", "Transfer to my account", "Debt record…", "Skip"])
+    #expect(fee.options.map(\.label) == ["Expense", "Transfer to my account", "Debt…", "Skip"])
     #expect(!fee.transferAccounts.contains { $0.id == PreviewData.pkoPersonal.id })
     #expect(!fee.transferAccounts.contains { $0.id == PreviewData.oldCard.id })
     model.selectReviewOption(.transfer, forRow: fee.id)

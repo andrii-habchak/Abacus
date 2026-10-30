@@ -512,8 +512,8 @@ public enum RuleAction: String, CaseIterable, Codable, Hashable, Sendable, Query
   /// Turn the transaction into a transfer between its own account and `transferAccountID`:
   /// money out → to that account, money in → from it (D44).
   case transfer
-  /// Record the transaction as a debt record for `debtPersonName` (R-DEBT-12, C17): the
-  /// person's debt in the account's currency, kind from the money's direction.
+  /// Make the transaction a transfer to the debt of `debtPersonName` (R-DEBT-12, R-DEBT-19): money
+  /// between its account and the person's virtual account in the account's currency.
   case debt
 }
 
@@ -543,7 +543,7 @@ public struct CategoryRule: Hashable, Identifiable, Sendable {
   public var action: RuleAction
   /// Set when `action == .transfer`.
   public var transferAccountID: Account.ID?
-  /// Set when `action == .debt`: the person the debt record is for (schema v12).
+  /// Set when `action == .debt`: the person whose debt the transfer goes to (schema v12).
   public var debtPersonName: String?
 
   public init(

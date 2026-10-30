@@ -44,7 +44,7 @@ struct TransactionsView: View {
     ) {
       if let draft = model.debtDraft {
         DebtLinkSheet(
-          initial: draft, saveTitle: "Convert", onCancel: { model.cancelConvertToDebt() },
+          initial: draft, saveTitle: "Transfer", onCancel: { model.cancelConvertToDebt() },
           onSave: { saved in Task { await model.saveConvertToDebt(saved) } })
       }
     }
@@ -104,10 +104,16 @@ struct TransactionsView: View {
       .listStyle(.plain)
       .scrollContentBackground(.hidden)
       .contextMenu(forSelectionType: Txn.ID.self) { ids in
-        // R-DEBT-11: an expense or income becomes a debt record's money in place.
+        // R-DEBT-11/19: an expense or income becomes a transfer to a person's debt account in
+        // place; such a transfer can be turned back.
         if ids.count == 1, let id = ids.first, model.canConvertToDebt(id) {
-          Button("Convert to Debt Record…") {
+          Button("Transfer to Debt Account…") {
             Task { await model.beginConvertToDebt(id) }
+          }
+        }
+        if ids.count == 1, let id = ids.first, model.canUnlinkTransfer(id) {
+          Button("Undo Transfer to Debt") {
+            Task { await model.unlinkTransfer(id) }
           }
         }
       } primaryAction: { ids in

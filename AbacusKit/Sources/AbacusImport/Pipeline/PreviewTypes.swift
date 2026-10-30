@@ -70,59 +70,59 @@ public enum ReviewChoice: Hashable, Sendable {
   /// Record as expense or income in a category (nil = uncategorised). Money keeps its
   /// direction: income recorded for money out is an income reversal, and so on.
   case record(CategoryKind, categoryID: AbacusDomain.Category.ID?)
-  /// Record as a debt record; the row's transaction becomes its leg (R-DEBT-10).
+  /// Transfer to a person's debt account (R-DEBT-10, R-DEBT-19).
   case debt(ImportDebtChoice)
   case skip
 }
 
-/// A row recorded as a debt record (R-DEBT-10, docs/status/C17.md): the person, the debt (an
-/// existing one, or the person's debt in `currency` created on commit), the kind and the
-/// expense/income flag. The row's transaction becomes the record's leg.
+/// A row sent to a person's debt account (R-DEBT-10, R-DEBT-19): the person, the debt (an
+/// existing one, else the person's debt is created on commit), the person's account the money goes
+/// to or comes from (a linked account of that debt, else the debt's virtual account in `currency`,
+/// created when missing). The row's transaction becomes a transfer between the row's account and
+/// that account.
 public struct ImportDebtChoice: Hashable, Sendable {
   public var personName: String
-  /// nil = the person's debt in `currency`, created on commit when there is none.
+  /// nil = the person's debt, created on commit when there is none.
   public var debtID: Debt.ID?
-  /// The debt's currency.
+  /// A linked account of the debt (external or virtual); nil = the debt's virtual account in
+  /// `currency`.
+  public var accountID: Account.ID?
+  /// The currency of the person's account (the row account's by default).
   public var currency: Currency
-  public var kind: DebtRecordKind
-  /// "Count as expense" / "Count as income" where the kind offers it (R-DEBT-4).
-  public var countsInReports: Bool
-  /// In the debt's currency when it differs from the account's; nil = converted at the day's
-  /// rate (or the row's original amount in that currency).
+  /// In the person's account currency when it differs from the row account's; nil = converted at
+  /// the day's rate (or the row's original amount in that currency).
   public var amountMinor: Int64?
 
   public init(
-    personName: String, debtID: Debt.ID? = nil, currency: Currency, kind: DebtRecordKind,
-    countsInReports: Bool = false, amountMinor: Int64? = nil
+    personName: String, debtID: Debt.ID? = nil, accountID: Account.ID? = nil, currency: Currency,
+    amountMinor: Int64? = nil
   ) {
     self.personName = personName
     self.debtID = debtID
+    self.accountID = accountID
     self.currency = currency
-    self.kind = kind
-    self.countsInReports = countsInReports
     self.amountMinor = amountMinor
   }
 }
 
-/// The debt record a row becomes, as the preview shows it (R-DEBT-10/12).
+/// The transfer to a debt account a row becomes, as the preview shows it (R-DEBT-10/12/19).
 public struct PreviewDebt: Hashable, Sendable {
   public var personName: String
   public var debtID: Debt.ID?
+  public var accountID: Account.ID?
+  /// The currency of the person's account.
   public var currency: Currency
-  public var kind: DebtRecordKind
-  public var countsInReports: Bool
-  /// In the debt's currency; nil when unknown (another currency without a rate).
+  /// In the person's account currency; nil when unknown (another currency without a rate).
   public var amountMinor: Int64?
-  /// The rule that recorded it ("Record as debt for …"); nil = chosen in the preview.
+  /// The rule that made it ("Transfer to debt of …"); nil = chosen in the preview.
   public var ruleID: CategoryRule.ID?
-  /// The commit creates the debt (the person has none in this currency yet).
+  /// The commit creates the debt (the person has none yet).
   public var createsDebt: Bool { debtID == nil }
 
   /// The choice that reproduces it (the sheet starts from it).
   public var choice: ImportDebtChoice {
     ImportDebtChoice(
-      personName: personName, debtID: debtID, currency: currency, kind: kind, countsInReports: countsInReports,
-      amountMinor: amountMinor)
+      personName: personName, debtID: debtID, accountID: accountID, currency: currency, amountMinor: amountMinor)
   }
 }
 

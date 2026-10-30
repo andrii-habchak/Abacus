@@ -49,7 +49,9 @@ public struct SQLiteImportStore: ImportStore {
         .where {
           $0.occurredAt >= start && $0.occurredAt < end
             && (($0.accountID.eq(accountID) && $0.amountMinor.eq(amountMinor))
-              || ($0.toAccountID.eq(accountID) && $0.toAmountMinor.eq(amountMinor)))
+              || ($0.toAccountID.eq(accountID) && $0.toAmountMinor.eq(amountMinor))
+              // A transfer in one currency has no separate receiving amount.
+              || ($0.toAccountID.eq(accountID) && $0.toAmountMinor.is(nil) && $0.amountMinor.eq(amountMinor)))
         }
         .order { ($0.occurredAt, $0.id) }
         .fetchAll(db)

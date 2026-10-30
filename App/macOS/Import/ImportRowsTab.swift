@@ -154,7 +154,7 @@ struct ImportRowActions: View {
         )
       }
       if let debt = row.debt, row.status != .needsReview {
-        // R-DEBT-10/12: the debt record this row becomes.
+        // R-DEBT-10/12/19: the transfer to a debt account this row becomes.
         Text(debt)
           .font(.system(size: 12))
           .lineLimit(1)
@@ -170,7 +170,7 @@ struct ImportRowActions: View {
           }
           .buttonStyle(.link)
           .font(.system(size: 11))
-          .help("Record this payment as a debt record (lent, repaid, borrowed)")
+          .help("Make this payment a transfer to a person's debt account")
           if row.debt != nil {
             Button("Not a debt") { model.removeDebt(forRow: row.id) }
               .buttonStyle(.link)
