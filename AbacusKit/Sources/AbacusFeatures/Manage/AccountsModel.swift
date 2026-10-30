@@ -51,6 +51,16 @@ public struct AccountDraft: Equatable, Sendable {
   public var iban: String
   /// `#RRGGBB` (R-MGMT-7).
   public var colorHex: String? = nil
+  /// R-DEBT-17: the debt this account belongs to (at most one).
+  public var debt: AccountDebtChoice = .none
+}
+
+/// The "Debt" section of the account editor (R-DEBT-17): no debt, an existing one, or a new one
+/// created by name when the account is saved.
+public enum AccountDebtChoice: Equatable, Sendable {
+  case none
+  case existing(Debt.ID)
+  case new(name: String)
 }
 
 /// The inspector form of an account group (R-MGMT-9): name and an optional colour.
@@ -101,6 +111,9 @@ public final class AccountsModel {
   public private(set) var balances: [Account.ID: Money] = [:]
   /// Transactions touching the account (either side of a transfer).
   public private(set) var txnCounts: [Account.ID: Int] = [:]
+  /// R-DEBT-17: the debts (for the editor's "Debt" section) and which one each account is in.
+  public private(set) var debts: [Debt] = []
+  public private(set) var debtLinks: [Account.ID: DebtAccountLink] = [:]
   /// R-ACC-4: archived accounts are listed only on request.
   public var showArchived = false
   /// The page search: account and group names (R-MGMT-11).
@@ -166,6 +179,10 @@ public final class AccountsModel {
         dropChecks = [:]
       }
       converter = await dependencies.converter()
+      if let repository = dependencies.debts, let book = try? await repository.book() {
+        debts = book.debts
+        debtLinks = Dictionary(book.links.map { ($0.accountID, $0) }, uniquingKeysWith: { first, _ in first })
+      }
       phase = .loaded
     } catch {
       phase = .failed("Couldn't load accounts: \(error.localizedDescription)")
@@ -174,7 +191,7 @@ public final class AccountsModel {
     if let selection, let group = group(selection) {
       if groupDraft?.id != selection { groupDraft = Self.groupDraft(group) }
     } else if let selection, let account = account(selection) {
-      if draft?.id != selection || draft?.isNew == true { draft = Self.draft(account, format: format) }
+      if draft?.id != selection || draft?.isNew == true { draft = makeDraft(account) }
     } else if draft?.isNew != true && groupDraft?.isNew != true {
       select(firstAccountID)
     }
@@ -316,7 +333,7 @@ public final class AccountsModel {
   public func select(_ id: UUID?) {
     selection = id
     errorMessage = nil
-    draft = id.flatMap(account).map { Self.draft($0, format: format) }
+    draft = id.flatMap(account).map { makeDraft($0) }
     groupDraft = id.flatMap(group).map(Self.groupDraft)
   }
 
@@ -341,11 +358,110 @@ public final class AccountsModel {
 
   // MARK: Account inspector
 
-  static func draft(_ account: Account, format: ManageFormat) -> AccountDraft {
+  func makeDraft(_ account: Account) -> AccountDraft {
     AccountDraft(
       id: account.id, isNew: false, name: account.name, kind: account.kind, currency: account.currency,
       openingBalance: format.amountInput(account.openingBalanceMinor), openingDate: account.openingDate,
-      groupID: account.groupID, iban: account.iban ?? "", colorHex: account.colorHex)
+      groupID: account.groupID, iban: account.iban ?? "", colorHex: account.colorHex,
+      debt: debtLinks[account.id].map { .existing($0.debtID) } ?? .none)
+  }
+
+  // MARK: Debt link (R-DEBT-17)
+
+  /// The "Debt" section is offered when the app wires a debt repository.
+  public var offersDebts: Bool { dependencies.debts != nil }
+
+  public func debt(_ id: Debt.ID) -> Debt? { debts.first { $0.id == id } }
+
+  /// The debt the account is in now (as stored), for "Currently in <debt>".
+  public func linkedDebt(of accountID: Account.ID) -> Debt? {
+    debtLinks[accountID].flatMap { debt($0.debtID) }
+  }
+
+  /// Debts for the editor's search, by person name (every debt for blank text), name order.
+  public func debtOptions(matching text: String) -> [Debt] {
+    let key = Debt.personKey(text)
+    return debts.filter { key.isEmpty || $0.personKey.contains(key) }
+      .sorted { $0.personName.localizedCaseInsensitiveCompare($1.personName) == .orderedAscending }
+  }
+
+  /// R-DEBT-17: an account of kind "Debt (person)" is the person's virtual account; any other
+  /// kind (a bank account such as "Revolut Anna") is their external account and keeps its kind.
+  public func debtRole(_ draft: AccountDraft) -> DebtAccountRole { draft.kind == .debt ? .virtual : .external }
+
+  /// What the section says under the picker: where the account is now and what Save will do.
+  public func debtNotice(_ draft: AccountDraft) -> String? {
+    let current = debtLinks[draft.id].flatMap { draft.isNew ? nil : debt($0.debtID) }
+    switch (current, draft.debt) {
+    case (let current?, .none):
+      return "Currently in \(current.personName). Saving removes it from that debt; its transactions stay."
+    case (let current?, .existing(let id)) where id != current.id:
+      let target = debt(id)?.personName ?? "the other debt"
+      return "Currently in \(current.personName). Saving moves it to \(target); an account is in one debt only."
+    case (let current?, .new(let name)):
+      return "Currently in \(current.personName). Saving moves it to the new debt \(name.trimmingCharacters(in: .whitespaces))."
+    case (let current?, _):
+      return "Currently in \(current.personName)."
+    case (nil, .new):
+      return "A new debt is created for this person when you save."
+    default:
+      return nil
+    }
+  }
+
+  /// A short line about the role the link will have.
+  public func debtRoleHint(_ draft: AccountDraft) -> String? {
+    guard draft.debt != .none else { return nil }
+    switch debtRole(draft) {
+    case .virtual: return "A \"Debt (person)\" account is the person's virtual account: no statement."
+    case .external:
+      return "The person's own account (external): its transactions drive the debt; the account keeps its kind."
+    }
+  }
+
+  func debtValidation(_ draft: AccountDraft) -> String? {
+    switch draft.debt {
+    case .none: return nil
+    case .existing(let id): return debt(id) == nil ? "That debt no longer exists." : nil
+    case .new(let name):
+      let trimmed = name.trimmingCharacters(in: .whitespaces)
+      if trimmed.isEmpty { return "Enter a name for the new debt." }
+      if let other = debts.first(where: { $0.personKey == Debt.personKey(trimmed) }) {
+        return "A debt for \(other.personName) already exists: pick it from the list."
+      }
+      return nil
+    }
+  }
+
+  private func debtChanged(_ draft: AccountDraft) -> Bool {
+    let stored: AccountDebtChoice = draft.isNew ? .none : (debtLinks[draft.id].map { .existing($0.debtID) } ?? .none)
+    return draft.debt != stored
+  }
+
+  /// Makes the stored link match the choice; the move is unlink then link, with the old link
+  /// put back when the new one fails.
+  private func applyDebt(_ choice: AccountDebtChoice, role: DebtAccountRole, to accountID: Account.ID) async throws {
+    guard let repository = dependencies.debts else { return }
+    let old = debtLinks[accountID]
+    switch choice {
+    case .none:
+      if old != nil { try await repository.unlink(accountID) }
+    case .existing(let id):
+      if let old, old.debtID != id { try await repository.unlink(accountID) }
+      do { try await repository.link(accountID, to: id, role: role) } catch {
+        if let old, old.debtID != id { try? await repository.link(accountID, to: old.debtID, role: old.role) }
+        throw error
+      }
+    case .new(let name):
+      let debt = Debt(personName: name.trimmingCharacters(in: .whitespaces))
+      try await repository.save(debt)
+      if let old { try await repository.unlink(accountID) }
+      do { try await repository.link(accountID, to: debt.id, role: role) } catch {
+        if let old { try? await repository.link(accountID, to: old.debtID, role: old.role) }
+        try? await repository.delete(debt.id)
+        throw error
+      }
+    }
   }
 
   /// "New account": an empty form in the display currency, opening today; inside the selected
@@ -478,7 +594,7 @@ public final class AccountsModel {
   public func validationMessage(_ draft: AccountDraft) -> String? {
     if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name." }
     if format.parseAmount(draft.openingBalance) == nil { return "The opening balance is not a number." }
-    return nil
+    return debtValidation(draft)
   }
 
   public func validationMessage(_ draft: AccountGroupDraft) -> String? {
@@ -493,7 +609,7 @@ public final class AccountsModel {
   public func isDirty(_ draft: AccountDraft) -> Bool {
     if draft.isNew { return true }
     guard let account = account(draft.id) else { return false }
-    return built(from: draft, base: account) != account
+    return built(from: draft, base: account) != account || debtChanged(draft)
   }
 
   public func isDirty(_ draft: AccountGroupDraft) -> Bool {
@@ -547,11 +663,12 @@ public final class AccountsModel {
     if let base, base.groupID != account.groupID { account.position = nextPosition }
     do {
       try await dependencies.accounts.save(account)
+      try await applyDebt(draft.debt, role: debtRole(draft), to: account.id)
       await onDataChange?()
       selection = account.id
       self.draft = nil
       await load()
-      self.draft = self.account(account.id).map { Self.draft($0, format: format) }
+      self.draft = self.account(account.id).map { makeDraft($0) }
       return true
     } catch {
       errorMessage = ManageFailure.message(error, doing: "save the account")
