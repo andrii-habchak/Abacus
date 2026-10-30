@@ -31,8 +31,8 @@ struct DebtsModelTests {
     #expect(names.contains(PreviewData.loanFromFriend.name))
     let alex = try #require(model.people.first { $0.name == "Alex Example" })
     #expect(alex.balances.map(\.money.currency) == [.EUR, .PLN])
-    #expect(alex.balances.first?.directionText == "owes you")
-    #expect(alex.balances.last?.directionText == "you owe")
+    #expect(alex.balances.first?.directionText == "you lent")
+    #expect(alex.balances.last?.directionText == "you borrowed")
     model.search = "mar"
     #expect(model.people.map(\.name) == ["Maria Sample"])
     model.search = ""
