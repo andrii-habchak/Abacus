@@ -163,9 +163,9 @@ struct AccountsList: View {
       .padding(.bottom, 4)
       OutlineList(
         nodes: nodes,
-        selection: model.selection,
+        selection: model.selectedIDs,
         rowHeight: 44,
-        onSelect: { model.select($0) },
+        onSelect: { model.select(ids: $0) },
         onActivate: { model.edit($0) },
         canDrop: { model.canDrop($0.moving, on: $0.target, position: $0.position) },
         onDrop: { drop in Task { await model.drop(drop.moving, on: drop.target, position: drop.position) } }

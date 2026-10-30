@@ -42,9 +42,10 @@ private struct OutlineKey: Hashable {
   let children: [OutlineKey]
 }
 
-/// A drop the list proposes: `target` nil = below the last row (top level, last).
+/// A drop the list proposes: `target` nil = below the last row (top level, last). `moving` is
+/// the dragged selection in list order (one row for a plain drag, C27).
 struct OutlineDrop: Equatable {
-  let moving: UUID
+  let moving: [UUID]
   let target: UUID?
   let position: CategoryDropPosition
 }
@@ -74,10 +75,12 @@ enum OutlineTree {
 /// the drag session has ended.
 struct OutlineList: NSViewRepresentable {
   let nodes: [OutlineNode]
-  let selection: UUID?
+  /// The selected rows (C27): several after Cmd / Shift click.
+  let selection: Set<UUID>
   var rowHeight: CGFloat = 30
-  let onSelect: (UUID?) -> Void
-  /// Double-click, Return or "Edit…" in the context menu.
+  let onSelect: (Set<UUID>) -> Void
+  /// Double-click on a row, or "Edit…" in its context menu (the clicked row only), or Return with
+  /// exactly one row selected. With several rows selected Return does nothing.
   let onActivate: (UUID) -> Void
   let canDrop: (OutlineDrop) -> Bool
   let onDrop: (OutlineDrop) -> Void
@@ -97,7 +100,11 @@ struct OutlineList: NSViewRepresentable {
     outline.indentationPerLevel = 18
     outline.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
     outline.backgroundColor = .clear
-    outline.allowsMultipleSelection = false
+    // Finder-style (C27): plain click = one row, Cmd+click toggles the clicked row, Shift+click
+    // selects from the anchor row to the clicked one in visible order (rows inside collapsed
+    // groups are not visible, so they are not included; a selected group is dragged with its
+    // children anyway). All native NSTableView behaviour.
+    outline.allowsMultipleSelection = true
     outline.allowsEmptySelection = true
     outline.draggingDestinationFeedbackStyle = .regular
     outline.setDraggingSourceOperationMask(.move, forLocal: true)
@@ -109,7 +116,11 @@ struct OutlineList: NSViewRepresentable {
     outline.delegate = coordinator
     outline.target = coordinator
     outline.doubleAction = #selector(OutlineCoordinator.doubleClicked(_:))
-    outline.onReturn = { [weak coordinator] outline in coordinator?.activate(row: outline.selectedRow, in: outline) }
+    outline.onReturn = { [weak coordinator] outline in
+      // One selected row only: with several, "edit" would be ambiguous.
+      guard outline.selectedRowIndexes.count == 1 else { return }
+      coordinator?.activate(row: outline.selectedRow, in: outline)
+    }
     outline.menuForRow = { [weak coordinator] outline, row in coordinator?.menu(forRow: row, in: outline) }
 
     let scroll = NSScrollView()
@@ -133,6 +144,7 @@ struct OutlineList: NSViewRepresentable {
   }
 
   static func dismantleNSView(_ scroll: NSScrollView, coordinator: OutlineCoordinator) {
+    coordinator.stopDragScrolling()
     guard let outline = scroll.documentView as? KeyOutlineView else { return }
     outline.dataSource = nil
     outline.delegate = nil
@@ -170,8 +182,9 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
   private var collapsed: Set<UUID> = []
   private var reloading = false
   private var applyingSelection = false
-  /// The row being dragged from this list.
-  private var dragged: UUID?
+  /// The rows being dragged from this list, in list order.
+  private var dragged: [UUID] = []
+  private let scroller = DragScroller()
   /// The current tree, for mapping drop proposals (`OutlineDropResolver`).
   private var resolver = OutlineDropResolver(roots: [])
 
@@ -202,15 +215,22 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     applyingSelection = false
   }
 
-  func applySelection(_ id: UUID?, in outline: NSOutlineView) {
-    let row = id.flatMap { byID[$0] }.map { outline.row(forItem: $0) } ?? -1
-    guard row != outline.selectedRow else { return }
+  func applySelection(_ ids: Set<UUID>, in outline: NSOutlineView) {
+    var rows = IndexSet()
+    for id in ids {
+      if let item = byID[id] {
+        let row = outline.row(forItem: item)
+        if row >= 0 { rows.insert(row) }
+      }
+    }
+    guard rows != outline.selectedRowIndexes else { return }
     applyingSelection = true
-    if row >= 0 {
-      outline.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-      outline.scrollRowToVisible(row)
-    } else {
+    if rows.isEmpty {
       outline.deselectAll(nil)
+    } else {
+      outline.selectRowIndexes(rows, byExtendingSelection: false)
+      // A single selection made elsewhere (new row, search) is scrolled into view.
+      if rows.count == 1, let row = rows.first { outline.scrollRowToVisible(row) }
     }
     applyingSelection = false
   }
@@ -247,8 +267,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
 
   func outlineViewSelectionDidChange(_ notification: Notification) {
     guard !applyingSelection, !reloading, let outline = notification.object as? NSOutlineView else { return }
-    let id = item(outline.item(atRow: outline.selectedRow))?.id
-    parent?.onSelect(id)
+    let ids = outline.selectedRowIndexes.compactMap { item(outline.item(atRow: $0))?.id }
+    parent?.onSelect(Set(ids))
   }
 
   func outlineViewItemDidCollapse(_ notification: Notification) {
@@ -300,22 +320,30 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
     _ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
     forItems draggedItems: [Any]
   ) {
-    dragged = draggedItems.first.flatMap { item($0)?.id }
+    // Every selected row travels with the drag; list order, whatever the order AppKit lists them in.
+    let ids = Set(draggedItems.compactMap { item($0)?.id })
+    dragged = (0..<outlineView.numberOfRows).compactMap { row in
+      item(outlineView.item(atRow: row)).flatMap { ids.contains($0.id) ? $0.id : nil }
+    }
+    scroller.start(outline: outlineView)
   }
 
   func outlineView(
     _ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint,
     operation: NSDragOperation
   ) {
-    dragged = nil
+    dragged = []
+    scroller.stop()
   }
+
+  func stopDragScrolling() { scroller.stop() }
 
   // MARK: Drop target
 
   /// Applies a resolved proposal: asks the model, and moves the outline's feedback to where the
   /// drop really goes (`container` = the parent item of the gap).
   private func accept(
-    _ resolved: OutlineDropResolver.Resolved?, moving: UUID, container: OutlineItem?, proposedIndex: Int,
+    _ resolved: OutlineDropResolver.Resolved?, moving: [UUID], container: OutlineItem?, proposedIndex: Int,
     in outline: NSOutlineView
   ) -> OutlineDrop? {
     guard let parent, let resolved else { return nil }
@@ -331,7 +359,8 @@ final class OutlineCoordinator: NSObject, NSOutlineViewDataSource, NSOutlineView
   private func allowedDrop(_ outline: NSOutlineView, _ info: any NSDraggingInfo, item proposed: Any?, index: Int)
     -> OutlineDrop?
   {
-    guard let moving = dragged, (info.draggingSource as? NSOutlineView) === outline else { return nil }
+    guard !dragged.isEmpty, (info.draggingSource as? NSOutlineView) === outline else { return nil }
+    let moving = dragged
     let item = self.item(proposed)
     let onto = index == NSOutlineViewDropOnItemIndex
     let resolved = resolver.resolve(parent: item?.id, index: onto ? nil : index)
@@ -376,7 +405,7 @@ final class KeyOutlineView: NSOutlineView {
 
   override func keyDown(with event: NSEvent) {
     if event.keyCode == 36 || event.keyCode == 76, selectedRow >= 0, let onReturn {
-      onReturn(self)
+      onReturn(self)  // ignores several selected rows
       return
     }
     super.keyDown(with: event)
@@ -429,5 +458,85 @@ final class OutlineRowView: NSTableRowView {
     let rect = bounds.insetBy(dx: 2, dy: 1)
     NSColor.controlAccentColor.withAlphaComponent(0.18).setFill()
     NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
+  }
+}
+
+
+/// Scrolling while a drag is in flight (C27). During a drag session AppKit runs its own tracking
+/// loop, so the mouse wheel / trackpad no longer reach the scroll view, and holding the pointer
+/// near the edge only scrolls if the outline's own autoscroll fires. Two helpers, both limited to
+/// the drag's lifetime: a local scroll-wheel monitor that scrolls the list under the pointer, and
+/// a timer that scrolls when the pointer sits near the top / bottom edge. When the outline
+/// scrolls by itself (its own autoscroll works) the edge timer steps aside so speeds don't add up.
+@MainActor
+final class DragScroller {
+  private weak var outline: NSOutlineView?
+  private var timer: Timer?
+  private var monitor: Any?
+  /// Where the clip view was after our last step; a different origin means someone else scrolled.
+  private var expected: CGFloat?
+  private var othersScroll = false
+
+  func start(outline: NSOutlineView) {
+    stop()
+    self.outline = outline
+    expected = nil
+    othersScroll = false
+    let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.tick() }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    self.timer = timer
+    monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+      let consumed = MainActor.assumeIsolated { self?.wheel(event) ?? false }
+      return consumed ? nil : event
+    }
+  }
+
+  func stop() {
+    timer?.invalidate()
+    timer = nil
+    if let monitor { NSEvent.removeMonitor(monitor) }
+    monitor = nil
+    outline = nil
+  }
+
+  private func scrollBy(_ delta: CGFloat, in clip: NSClipView, scroll: NSScrollView, document: NSView) {
+    let insets = clip.contentInsets
+    let low = -insets.top
+    let high = max(low, document.frame.height - clip.bounds.height + insets.bottom)
+    let y = min(max(clip.bounds.origin.y + delta, low), high)
+    guard y != clip.bounds.origin.y else { return }
+    clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y))
+    scroll.reflectScrolledClipView(clip)
+  }
+
+  private func tick() {
+    guard let outline, let scroll = outline.enclosingScrollView, let window = outline.window else { return }
+    let clip = scroll.contentView
+    let origin = clip.bounds.origin.y
+    if let expected, abs(expected - origin) > 0.5 { othersScroll = true }
+    expected = origin
+    guard !othersScroll else { return }
+    let point = clip.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+    let bounds = clip.bounds
+    guard point.x >= bounds.minX, point.x <= bounds.maxX else { return }
+    // Position inside the visible area, 0 = its top edge (clip space is flipped for an outline).
+    let y = clip.isFlipped ? point.y - bounds.minY : bounds.maxY - point.y
+    let step = OutlineAutoScroll.step(y: y, height: bounds.height)
+    guard step != 0 else { return }
+    scrollBy(clip.isFlipped ? step : -step, in: clip, scroll: scroll, document: outline)
+    expected = clip.bounds.origin.y
+  }
+
+  private func wheel(_ event: NSEvent) -> Bool {
+    guard let outline, let scroll = outline.enclosingScrollView, event.window === outline.window,
+      scroll.convert(scroll.bounds, to: nil).contains(event.locationInWindow)
+    else { return false }
+    let clip = scroll.contentView
+    let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.scrollingDeltaY * 10
+    scrollBy(clip.isFlipped ? -delta : delta, in: clip, scroll: scroll, document: outline)
+    expected = clip.bounds.origin.y
+    return true
   }
 }
