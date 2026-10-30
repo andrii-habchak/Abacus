@@ -18,6 +18,13 @@ public enum ImportSelectionMode: Sendable {
   case range
 }
 
+/// One sub-filter button of the Needs review tab.
+public struct ImportReviewFilterItem: Identifiable, Hashable, Sendable {
+  public var filter: ImportWizardModel.ReviewFilter
+  public var label: String
+  public var id: ImportWizardModel.ReviewFilter { filter }
+}
+
 /// What the bulk bar can do with the current selection.
 public struct ImportBulkInfo: Equatable, Sendable {
   public var selected = 0
@@ -83,19 +90,43 @@ public struct NewCategoryDraft: Equatable, Sendable {
 // MARK: - Selection
 
 extension ImportWizardModel {
-  /// Rows of the current tab in display order: what a Shift click ranges over.
-  var selectableIDs: [String] {
+  /// Rows of the current tab in display order: what a Shift click ranges over. Needs review
+  /// lists the decision cards first, then the rows that need a category (C36).
+  public var selectableIDs: [String] {
     switch tab {
     case .transactions: visibleRows.map(\.id)
-    case .categoryAssignment: categoryAssignmentRows.map(\.id)
-    case .review: reviewItems.map(\.id)
+    case .review: visibleReviewItems.map(\.id) + visibleCategoryRows.map(\.id)
     case .mapping, .events: []
     }
   }
 
-  /// The "Category assignment" tab: rows that still need a category.
-  public var categoryAssignmentRows: [ImportRowItem] {
-    rowItems.filter(\.needsCategory)
+  /// C36: Needs review, "Categories": rows that still need a category. A row that waits for a
+  /// decision is listed as a card instead (it is counted once).
+  public var categoryRows: [ImportRowItem] {
+    let decided = Set(reviewItems.map(\.id))
+    return rowItems.filter { $0.needsCategory && !decided.contains($0.id) }
+  }
+
+  /// The cards the Needs review tab shows under the current sub-filter.
+  public var visibleReviewItems: [ImportReviewItem] {
+    reviewFilter == .categories ? [] : reviewItems
+  }
+
+  /// The category rows the Needs review tab shows under the current sub-filter.
+  public var visibleCategoryRows: [ImportRowItem] {
+    reviewFilter == .decisions ? [] : categoryRows
+  }
+
+  /// Decisions + categories, each row once: the Needs review tab and card count.
+  public var needsReviewTotal: Int { reviewItems.count + categoryRows.count }
+
+  /// The sub-filter buttons of the Needs review tab with their counts.
+  public var reviewFilters: [ImportReviewFilterItem] {
+    [
+      ImportReviewFilterItem(filter: .all, label: "All (\(needsReviewTotal.formatted()))"),
+      ImportReviewFilterItem(filter: .decisions, label: "Decisions (\(reviewItems.count.formatted()))"),
+      ImportReviewFilterItem(filter: .categories, label: "Categories (\(categoryRows.count.formatted()))"),
+    ]
   }
 
   public func select(_ id: String, mode: ImportSelectionMode) {
@@ -187,6 +218,17 @@ extension ImportWizardModel {
   /// Categories of `kind` the bulk Category menu lists (A–Z, subcategories under their parent).
   public func bulkCategoryOptions(_ kind: CategoryKind) -> [ImportCategoryOption] {
     categoryOptions(kind).filter { $0.choice != .none }
+  }
+
+  /// The rows of the bulk bar's searchable category picker: active categories of `kind` in the
+  /// pickers' order (C34 `CategoryPickerItem.items(from:kinds:)`).
+  public func bulkCategoryPickerItems(_ kind: CategoryKind) -> [CategoryPickerItem<AbacusDomain.Category.ID>] {
+    let byID = Dictionary(categories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    let ordered = bulkCategoryOptions(kind).compactMap { option -> AbacusDomain.Category? in
+      if case .existing(let id) = option.choice { return byID[id] }
+      return nil
+    }
+    return CategoryPickerItem.items(from: ordered, kinds: [kind])
   }
 
   /// Own accounts a bulk "Account" can send the rows to, in the pickers' grouping.

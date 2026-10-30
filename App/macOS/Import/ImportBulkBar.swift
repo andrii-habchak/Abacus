@@ -9,7 +9,8 @@ import SwiftUI
 /// Click on a row or card: plain = this one, Cmd = toggle, Shift = range (Accounts/Categories manner).
 @MainActor
 func importSelect(_ model: ImportWizardModel, _ id: String) {
-  let flags = NSEvent.modifierFlags
+  // The modifiers of the click being handled, else the keyboard state right now.
+  let flags = (NSApp.currentEvent?.modifierFlags ?? []).union(NSEvent.modifierFlags)
   if flags.contains(.shift) {
     model.select(id, mode: .range)
   } else if flags.contains(.command) {
@@ -20,7 +21,7 @@ func importSelect(_ model: ImportWizardModel, _ id: String) {
 }
 
 /// Acts on the selected rows: Category, Account, Debt, Skip. Shown above the rows of
-/// Transactions, Category assignment and Needs review.
+/// Transactions and Needs review.
 struct ImportBulkBar: View {
   let model: ImportWizardModel
 
@@ -97,20 +98,25 @@ struct ImportBulkBar: View {
     } else {
       let mixed = info.isMixedKinds
       ForEach(info.categoryKinds, id: \.self) { kind in
-        Menu(mixed ? (kind == .expense ? "Expense category" : "Income category") : "Category") {
-          ForEach(model.bulkCategoryOptions(kind)) { option in
-            if case .existing(let id) = option.choice {
-              Button(option.isChild ? "   \(option.label)" : option.label) { model.bulkSetCategory(id, kind: kind) }
-            }
-          }
-          Divider()
-          Button("+ New category…") { model.beginNewCategoryForSelection(kind: kind) }
+        HStack(spacing: 4) {
+          // C36: the shared searchable picker; a pick applies at once to the rows of this kind.
+          CategoryPicker(
+            items: model.bulkCategoryPickerItems(kind),
+            selection: Binding<AbacusDomain.Category.ID?>(
+              get: { nil },
+              set: { if let id = $0 { model.bulkSetCategory(id, kind: kind) } }),
+            placeholder: mixed ? (kind == .expense ? "Expense category" : "Income category") : "Category"
+          )
+          .help(
+            mixed
+              ? "The selection mixes expenses and income: each picker sets only the \(kind == .expense ? "expense" : "income") rows."
+              : "Set the category of the selected rows")
+          Button("+ New…") { model.beginNewCategoryForSelection(kind: kind) }
+            .buttonStyle(.link)
+            .font(.system(size: 11))
+            .help("Create a \(kind == .expense ? "expense" : "income") category and set it on the selected rows")
         }
         .fixedSize()
-        .help(
-          mixed
-            ? "The selection mixes expenses and income: each menu sets only the \(kind == .expense ? "expense" : "income") rows."
-            : "Set the category of the selected rows")
       }
     }
   }

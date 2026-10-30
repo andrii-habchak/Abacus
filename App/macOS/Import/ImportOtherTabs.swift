@@ -156,43 +156,108 @@ struct ImportEventsTab: View {
 // MARK: - Needs review (R-IMP-5)
 
 struct ImportNeedsReviewTab: View {
-  let model: ImportWizardModel
+  @Bindable var model: ImportWizardModel
 
   var body: some View {
     VStack(spacing: 0) {
       ImportBulkBar(model: model)
-      cards
+      filterBar
+      ImportRule(color: ImportPalette.softRule)
+      GeometryReader { proxy in
+        list(columns: ImportColumns(width: proxy.size.width))
+      }
     }
   }
 
-  private var cards: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 10) {
-        HStack(alignment: .top, spacing: 12) {
-          Text(model.reviewIntro)
-            .font(.system(size: 13))
-            .foregroundStyle(ImportPalette.label)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-          if model.unresolvedReviewCount > 0 {
-            Button("Use suggestions (\(model.unresolvedReviewCount.formatted()))") { model.acceptSuggestions() }
-          }
-        }
-        if model.reviewItems.isEmpty {
-          Text("Nothing needs a decision in this file.")
-            .font(.system(size: 13))
-            .foregroundStyle(.secondary)
-        }
-        LazyVStack(spacing: 10) {
-          ForEach(model.reviewItems) { item in
-            ImportReviewCard(model: model, item: item, isSelected: model.selection.contains(item.id))
-          }
+  /// C36: All / Decisions / Categories. A change clears the selection (the model does).
+  private var filterBar: some View {
+    HStack(spacing: 10) {
+      Picker("Show", selection: $model.reviewFilter) {
+        ForEach(model.reviewFilters) { item in
+          Text(item.label).tag(item.filter)
         }
       }
-      .frame(maxWidth: 900, alignment: .leading)
-      .padding(.horizontal, ImportMetrics.horizontalPadding)
-      .padding(.vertical, 16)
+      .pickerStyle(.segmented)
+      .labelsHidden()
+      .fixedSize()
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, ImportMetrics.horizontalPadding)
+    .padding(.vertical, 8)
+    .background(ImportPalette.bar)
+  }
+
+  private func list(columns: ImportColumns) -> some View {
+    let cards = model.visibleReviewItems
+    let rows = model.visibleCategoryRows
+    return ScrollView {
+      VStack(alignment: .leading, spacing: 0) {
+        if model.reviewFilter != .categories {
+          decisions(cards)
+            .frame(maxWidth: 900, alignment: .leading)
+            .padding(.horizontal, ImportMetrics.horizontalPadding)
+            .padding(.vertical, 16)
+        }
+        if model.reviewFilter != .decisions {
+          if model.reviewFilter == .all, !rows.isEmpty {
+            Text("Rows that need a category")
+              .font(.system(size: 13, weight: .semibold))
+              .padding(.horizontal, ImportMetrics.horizontalPadding)
+              .padding(.top, cards.isEmpty ? 16 : 4)
+              .padding(.bottom, 6)
+          }
+          if !rows.isEmpty {
+            ImportRowsHeader(columns: columns)
+            ImportRule(color: ImportPalette.softRule)
+          }
+          LazyVStack(spacing: 0) {
+            ForEach(rows) { row in
+              ImportRowView(model: model, row: row, columns: columns, isSelected: model.selection.contains(row.id))
+              ImportRule(color: ImportPalette.softRule)
+            }
+          }
+          if model.reviewFilter == .categories {
+            Text(rows.isEmpty ? "Every row has a category." : "\(rows.count.formatted()) rows need a category.")
+              .font(.system(size: 12))
+              .foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(.horizontal, ImportMetrics.horizontalPadding)
+              .padding(.vertical, 10)
+          }
+        }
+        if model.reviewFilter == .all, cards.isEmpty, rows.isEmpty {
+          Text("Nothing needs review in this file.")
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, ImportMetrics.horizontalPadding)
+        }
+      }
       .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+
+  private func decisions(_ cards: [ImportReviewItem]) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .top, spacing: 12) {
+        Text(model.reviewIntro)
+          .font(.system(size: 13))
+          .foregroundStyle(ImportPalette.label)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        if model.unresolvedReviewCount > 0 {
+          Button("Use suggestions (\(model.unresolvedReviewCount.formatted()))") { model.acceptSuggestions() }
+        }
+      }
+      if cards.isEmpty {
+        Text("Nothing needs a decision in this file.")
+          .font(.system(size: 13))
+          .foregroundStyle(.secondary)
+      }
+      LazyVStack(spacing: 10) {
+        ForEach(cards) { item in
+          ImportReviewCard(model: model, item: item, isSelected: model.selection.contains(item.id))
+        }
+      }
     }
   }
 }
@@ -208,9 +273,6 @@ struct ImportReviewCard: View {
         Text(item.title).fontWeight(.semibold).frame(maxWidth: .infinity, alignment: .leading)
         Text(item.date).font(.system(size: 12)).foregroundStyle(.secondary)
       }
-      .contentShape(Rectangle())
-      // Click selects the card for the bulk bar; Cmd toggles, Shift ranges.
-      .onTapGesture { importSelect(model, item.id) }
       Text(item.detail)
         .foregroundStyle(ImportPalette.label)
         .fixedSize(horizontal: false, vertical: true)
@@ -238,10 +300,21 @@ struct ImportReviewCard: View {
     }
     .font(.system(size: 13))
     .padding(12)
-    .background(RoundedRectangle(cornerRadius: 10).fill(ImportPalette.reviewFill))
+    // C36: the whole card is the click target for the bulk bar (plain click selects, Cmd toggles,
+    // Shift ranges). The handler sits on the card's background, behind the radios, pickers and
+    // buttons, so those keep their own clicks while a click on the title, the description or the
+    // empty space selects.
+    .background {
+      RoundedRectangle(cornerRadius: 10)
+        .fill(isSelected ? ImportPalette.accentFill : ImportPalette.reviewFill)
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .onTapGesture { importSelect(model, item.id) }
+    }
     .overlay(
       RoundedRectangle(cornerRadius: 10)
-        .strokeBorder(isSelected ? ImportPalette.accent : ImportPalette.reviewBorder, lineWidth: isSelected ? 2 : 1))
+        .strokeBorder(isSelected ? ImportPalette.accent : ImportPalette.reviewBorder, lineWidth: isSelected ? 2 : 1)
+        .allowsHitTesting(false))
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 
   @ViewBuilder

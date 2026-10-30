@@ -27,8 +27,16 @@ public final class ImportWizardModel {
 
   public enum Tab: Hashable, Sendable {
     case transactions, mapping, events, review
-    /// C31: only the rows that still need a category, with bulk assignment.
-    case categoryAssignment
+  }
+
+  /// C36: the sub-filters of the Needs review tab.
+  public enum ReviewFilter: Hashable, Sendable {
+    /// Decisions and categories together (the default).
+    case all
+    /// Rows the importer could not place (the review cards).
+    case decisions
+    /// Rows that still need a category.
+    case categories
   }
 
   /// What the model is busy with; the views disable their controls meanwhile.
@@ -58,6 +66,10 @@ public final class ImportWizardModel {
   public private(set) var categories: [AbacusDomain.Category] = []
   public var tab: Tab = .transactions {
     didSet { if tab != oldValue { clearSelection() } }
+  }
+  /// C36: what the Needs review tab lists; changing it clears the selection.
+  public var reviewFilter: ReviewFilter = .all {
+    didSet { if reviewFilter != oldValue { clearSelection() } }
   }
   /// The pressed summary card; nil = all rows.
   public private(set) var filter: RowStatus? {
@@ -233,6 +245,7 @@ public final class ImportWizardModel {
 
   private func resetReviewState() {
     tab = .transactions
+    reviewFilter = .all
     filter = nil
     clearSelection()
     ruleSheet = nil

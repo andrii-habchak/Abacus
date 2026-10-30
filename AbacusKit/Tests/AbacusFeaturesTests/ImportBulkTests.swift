@@ -33,21 +33,29 @@ struct ImportBulkTests {
 
   // MARK: Tab and counts
 
-  @Test("C31: the Category assignment tab lists only the rows that need a category, with their count")
+  @Test("C36: Needs review counts decisions and rows that need a category, each row once; the sub-filters split them")
   func tabAndCount() async throws {
     let h = try await harness()
     let model = h.model
     let needing = model.rowItems.filter(\.needsCategory)
     #expect(needing.count > 1)
-    #expect(model.categoryAssignmentRows.map(\.id) == needing.map(\.id))
-    let tab = try #require(model.tabs.first { $0.tab == .categoryAssignment })
-    #expect(tab.label == "Category assignment (\(needing.count))")
-    #expect(try #require(model.preview?.uncategorisedCount) == needing.count)
+    #expect(model.categoryRows.map(\.id) == needing.map(\.id))
+    let decisions = model.reviewItems.count
+    #expect(decisions == 2)
+    #expect(Set(model.reviewItems.map(\.id)).isDisjoint(with: model.categoryRows.map(\.id)))
+    let total = decisions + needing.count
+    #expect(model.needsReviewTotal == total)
+    #expect(model.tabs.first { $0.tab == .review }?.label == "Needs review (\(total))")
+    #expect(model.tabs.contains { $0.label.hasPrefix("Category assignment") } == false)
+    #expect(model.cards.first { $0.status == .needsReview }?.count == "\(total)")
+    #expect(model.reviewFilters.map(\.label) == ["All (\(total))", "Decisions (\(decisions))", "Categories (\(needing.count))"])
+    #expect(model.reviewFilter == .all)
 
     let first = try #require(needing.first)
     model.setCategory(.existing(Self.groceries.id), forRow: first.id)
-    #expect(model.categoryAssignmentRows.count == needing.count - 1)
-    #expect(model.tabs.first { $0.tab == .categoryAssignment }?.label == "Category assignment (\(needing.count - 1))")
+    #expect(model.categoryRows.count == needing.count - 1)
+    #expect(model.tabs.first { $0.tab == .review }?.label == "Needs review (\(total - 1))")
+    #expect(model.cards.first { $0.status == .needsReview }?.count == "\(total - 1)")
   }
 
   // MARK: Selection
@@ -56,8 +64,9 @@ struct ImportBulkTests {
   func selectionSemantics() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
-    let ids = model.categoryAssignmentRows.map(\.id)
+    model.tab = .review
+    model.reviewFilter = .categories
+    let ids = model.categoryRows.map(\.id)
     try #require(ids.count >= 4)
 
     model.select(ids[1], mode: .replace)
@@ -84,8 +93,9 @@ struct ImportBulkTests {
   func selectionPruned() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
-    let ids = model.categoryAssignmentRows.map(\.id)
+    model.tab = .review
+    model.reviewFilter = .categories
+    let ids = model.categoryRows.map(\.id)
     model.select(ids[0], mode: .replace)
     model.select(ids[1], mode: .toggle)
     model.setCategory(.existing(Self.groceries.id), forRow: ids[0])
@@ -98,16 +108,17 @@ struct ImportBulkTests {
   func bulkCategory() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
+    model.tab = .review
+    model.reviewFilter = .categories
     model.selectAll()
     let info = model.bulk
-    #expect(info.selected == model.categoryAssignmentRows.count)
+    #expect(info.selected == model.categoryRows.count)
     #expect(info.expenseRows + info.incomeRows == info.selected)
     let expenses = info.expenseRows
     try #require(expenses > 1)
 
     model.bulkSetCategory(Self.groceries.id, kind: .expense)
-    #expect(model.categoryAssignmentRows.count == info.incomeRows)
+    #expect(model.categoryRows.count == info.incomeRows)
     #expect(model.bulkMessage == "Category set on \(expenses) rows.")
     let picked = model.rowItems.filter { item in
       if case .picker(.existing(Self.groceries.id), _, _) = item.category { return true }
@@ -119,14 +130,15 @@ struct ImportBulkTests {
     // One step back.
     #expect(model.canUndoBulk)
     model.undoBulk()
-    #expect(model.categoryAssignmentRows.count == info.selected)
+    #expect(model.categoryRows.count == info.selected)
   }
 
   @Test("C31: after a bulk Category one rule per distinct pattern is suggested; confirming applies ticks and edited text")
   func ruleSuggestions() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
+    model.tab = .review
+    model.reviewFilter = .categories
     model.selectAll()
     model.bulkSetCategory(Self.groceries.id, kind: .expense)
     let sheet = try #require(model.ruleSheet)
@@ -163,7 +175,8 @@ struct ImportBulkTests {
     await h.model.open(data: try ImportHarness.fixture("pko", "all-types"), fileName: "pko.csv")
     if h.model.needsTargetAccount { await h.model.chooseTargetAccount(Self.account.id) }
     let model = h.model
-    model.tab = .categoryAssignment
+    model.tab = .review
+    model.reviewFilter = .categories
     model.selectAll()
     model.bulkSetCategory(Self.groceries.id, kind: .expense)
     let patterns = model.ruleSheet?.suggestions.map(\.pattern) ?? []
@@ -176,8 +189,9 @@ struct ImportBulkTests {
   func bulkAccount() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
-    let ids = Array(model.categoryAssignmentRows.map(\.id).prefix(2))
+    model.tab = .review
+    model.reviewFilter = .categories
+    let ids = Array(model.categoryRows.map(\.id).prefix(2))
     model.select(ids[0], mode: .replace)
     model.select(ids[1], mode: .toggle)
     #expect(model.bulk.accountRows == 2)
@@ -186,7 +200,7 @@ struct ImportBulkTests {
     #expect(rows.count == 2)
     #expect(rows.allSatisfy { $0.type == .transfer && $0.counterAccount == .existing(Self.savings.id) })
     #expect(model.rowItems.filter { ids.contains($0.id) }.allSatisfy { $0.statusLabel == "New transfer" })
-    #expect(model.categoryAssignmentRows.count == (model.preview?.uncategorisedCount ?? -1))
+    #expect(model.categoryRows.count == (model.preview?.uncategorisedCount ?? -1))
     #expect(model.bulkMessage?.contains("transfer") == true)
 
     // The own account itself is refused.
@@ -199,8 +213,9 @@ struct ImportBulkTests {
   func bulkDebt() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
-    let ids = Array(model.categoryAssignmentRows.map(\.id).prefix(2))
+    model.tab = .review
+    model.reviewFilter = .categories
+    let ids = Array(model.categoryRows.map(\.id).prefix(2))
     model.select(ids[0], mode: .replace)
     model.select(ids[1], mode: .toggle)
     #expect(model.bulk.debtRows == 2)
@@ -222,8 +237,9 @@ struct ImportBulkTests {
   func bulkSkipAndInclude() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
-    let ids = Array(model.categoryAssignmentRows.map(\.id).prefix(2))
+    model.tab = .review
+    model.reviewFilter = .categories
+    let ids = Array(model.categoryRows.map(\.id).prefix(2))
     let imports = try #require(model.preview).transactionsToCreate
     model.select(ids[0], mode: .replace)
     model.select(ids[1], mode: .toggle)
@@ -231,7 +247,7 @@ struct ImportBulkTests {
     model.bulkSkip()
     #expect(model.rowItems.filter { ids.contains($0.id) }.allSatisfy { $0.status == .skipped && $0.excludedByUser })
     #expect(try #require(model.preview).transactionsToCreate == imports - 2)
-    #expect(model.categoryAssignmentRows.map(\.id).filter(ids.contains).isEmpty)
+    #expect(model.categoryRows.map(\.id).filter(ids.contains).isEmpty)
 
     // They are gone from the assignment list, so look at all rows and include them again.
     model.tab = .transactions
@@ -245,6 +261,7 @@ struct ImportBulkTests {
     // Review rows: Skip sets the review choice.
     let review = try #require(model.reviewItems.first)
     model.tab = .review
+    model.reviewFilter = .decisions
     model.select(review.id, mode: .replace)
     model.bulkSkip()
     #expect(model.reviewItems.first { $0.id == review.id }?.selected == .skip)
@@ -340,7 +357,8 @@ struct ImportBulkTests {
   func newCategoryForSelection() async throws {
     let h = try await harness()
     let model = h.model
-    model.tab = .categoryAssignment
+    model.tab = .review
+    model.reviewFilter = .categories
     model.selectAll()
     let expenses = model.bulk.expenseRows
     model.beginNewCategoryForSelection(kind: .expense)

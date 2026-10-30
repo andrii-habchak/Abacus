@@ -328,7 +328,9 @@ extension ImportWizardModel {
       case .alreadyImported, .possibleDuplicate, .settlesPending: preview.source == .pko || counts[status] > 0
       case .skipped: counts[status] > 0
       }
-      if shown { cards.append(ImportCard(status: status, label: label, count: counts[status].formatted(), hint: hint)) }
+      // C36: the Needs review card counts decisions and rows that need a category, each once.
+      let count = status == .needsReview ? needsReviewTotal : counts[status]
+      if shown { cards.append(ImportCard(status: status, label: label, count: count.formatted(), hint: hint)) }
     }
     return cards
   }
@@ -340,9 +342,7 @@ extension ImportWizardModel {
       ImportTabItem(tab: .mapping, label: "Accounts & categories"),
     ]
     if preview.source == .saldo { tabs.append(ImportTabItem(tab: .events, label: "Events from tags")) }
-    tabs.append(
-      ImportTabItem(tab: .categoryAssignment, label: "Category assignment (\(preview.uncategorisedCount.formatted()))"))
-    tabs.append(ImportTabItem(tab: .review, label: "Needs review (\(preview.counts.needsReview.formatted()))"))
+    tabs.append(ImportTabItem(tab: .review, label: "Needs review (\(needsReviewTotal.formatted()))"))
     return tabs
   }
 
@@ -469,7 +469,12 @@ extension ImportWizardModel {
       parts.append(row.source.note.replacingOccurrences(of: "\n", with: " "))
     }
     if let warning = row.warnings.first {
-      parts.append("Warning: " + warning)
+      // C36: an unknown operation type a rule mapped is no longer waiting for review.
+      if row.review == nil, warning.hasPrefix("Unknown PKO transaction type") {
+        parts.append("Unknown operation type, recorded by its sign")
+      } else {
+        parts.append("Warning: " + warning)
+      }
     }
     return parts.joined(separator: " · ")
   }
