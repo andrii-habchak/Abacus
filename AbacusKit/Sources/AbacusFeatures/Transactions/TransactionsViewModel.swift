@@ -68,14 +68,24 @@ public final class TransactionsViewModel {
   /// Debts the debt filter offers (R-DEBT-22), A–Z; loaded by `loadDebtOptions()`.
   public private(set) var debtOptions: [DebtFilterOption] = []
 
+  /// Refund links of the loaded rows (C30): per expense its refunds, per refund its original.
+  /// Read with each page in two aggregate queries.
+  public private(set) var refundLinks = RefundLinkSummary()
+  /// "Link a refund…", "This is a refund of…", "Unlink refund"; nil = not offered.
+  @ObservationIgnored let refunds: (any RefundRepository)?
+  /// The search sheet of a refund link; nil when closed.
+  public var refundPicker: RefundPickerModel?
+
   public init(
     transactions: any TxnRepository, accounts: any AccountRepository,
     categories: any CategoryRepository, events: any EventRepository,
     converter: any CurrencyConverter, displayCurrency: Currency = .UAH,
     refundsReduceSpending: Bool = false, filters: TransactionFilters = .default,
     calendar: Calendar = .current, today: @escaping @Sendable () -> Day = { Day(Date()) },
-    settings: (any SettingsRepository)? = nil, debts: (any DebtRepository)? = nil, pageSize: Int = 500
+    settings: (any SettingsRepository)? = nil, debts: (any DebtRepository)? = nil,
+    refunds: (any RefundRepository)? = nil, pageSize: Int = 500
   ) {
+    self.refunds = refunds
     self.pageSize = max(1, pageSize)
     self.settings = settings
     self.debts = debts
@@ -154,7 +164,7 @@ public final class TransactionsViewModel {
     generation += 1
     let current = generation
     guard let query = query else {
-      apply(page: [], summary: TxnListSummary(), generation: current, query: nil)
+      apply(page: [], summary: TxnListSummary(), generation: current, query: nil, links: RefundLinkSummary())
       await loadFacets()
       return
     }
@@ -164,7 +174,8 @@ public final class TransactionsViewModel {
       async let page = transactions.page(matching: query, offset: 0, limit: limit)
       async let aggregate = transactions.summary(matching: query)
       let (fetched, sum) = try await (page, aggregate)
-      apply(page: fetched, summary: sum, generation: current, query: query, limit: limit)
+      let links = await links(for: fetched)
+      apply(page: fetched, summary: sum, generation: current, query: query, links: links, limit: limit)
     } catch {
       guard current == generation else { return }
       isLoading = false
@@ -179,12 +190,19 @@ public final class TransactionsViewModel {
   /// every date hung the app, docs/status/C24.md). Loading the next page keeps it.
   public private(set) var loadedQuery: TxnQuery?
 
+  /// Refund links of a page (two aggregate reads); empty without a refund repository.
+  private func links(for page: [TxnWithLines]) async -> RefundLinkSummary {
+    guard let refunds, !page.isEmpty else { return RefundLinkSummary() }
+    return (try? await refunds.refundLinks(for: page.map(\.txn.id))) ?? RefundLinkSummary()
+  }
+
   private func apply(
     page fetched: [TxnWithLines], summary sum: TxnListSummary, generation current: Int, query: TxnQuery?,
-    limit: Int? = nil
+    links: RefundLinkSummary, limit: Int? = nil
   ) {
     guard current == generation else { return }
     loadedQuery = query
+    refundLinks = links
     rows = fetched
     summary = sum
     exhausted = limit.map { fetched.count < $0 } ?? true
@@ -204,12 +222,14 @@ public final class TransactionsViewModel {
     let current = generation
     let offset = rows.count
     let fetched = try? await transactions.page(matching: query, offset: offset, limit: pageSize)
+    let pageLinks = await links(for: fetched ?? [])
     isLoadingMore = false
     guard current == generation, let fetched, rows.count == offset else { return }
     if fetched.count < pageSize { exhausted = true }
     guard !fetched.isEmpty else { return }
     rows += fetched
-    builder.append(fetched, to: &content)
+    refundLinks.merge(pageLinks)
+    builder.append(fetched, refundLinks: pageLinks, to: &content)
     updateLoadMoreTrigger()
   }
 
@@ -239,7 +259,7 @@ public final class TransactionsViewModel {
       includeUncategorised: filters.includeUncategorised,
       refundsReduceSpending: refundsReduceSpending, calendar: calendar)
     builder = newBuilder
-    content = newBuilder.content(rows: rows)
+    content = newBuilder.content(rows: rows, refundLinks: refundLinks)
     updateLoadMoreTrigger()
   }
 
@@ -588,6 +608,106 @@ public final class TransactionsViewModel {
     await reload()
     await onDataChange?()
   }
+
+  // MARK: Refund links (R-TX-4, C30)
+
+  private func row(_ id: Txn.ID) -> Txn? { rows.first { $0.txn.id == id }?.txn }
+
+  private func isPlainTransaction(_ txn: Txn) -> Bool {
+    !txn.isBalanceCorrection && txn.debtRecordID == nil && !txn.isPendingAtBank
+  }
+
+  /// An expense that is not a refund: "Link a refund…".
+  public func canLinkRefund(_ id: Txn.ID) -> Bool {
+    guard refunds != nil, let txn = row(id) else { return false }
+    return isPlainTransaction(txn) && txn.type == .expense && !txn.isRefund
+  }
+
+  /// An income, or an expense refund that is not linked yet: "This is a refund of…".
+  public func canChooseOriginal(_ id: Txn.ID) -> Bool {
+    guard refunds != nil, let txn = row(id) else { return false }
+    guard isPlainTransaction(txn) else { return false }
+    return (txn.type == .income && !txn.isRefund) || (txn.type == .expense && txn.isRefund && txn.refundOfID == nil)
+  }
+
+  /// A refund linked to its original: "Unlink refund".
+  public func canUnlinkRefund(_ id: Txn.ID) -> Bool {
+    guard refunds != nil, let txn = row(id) else { return false }
+    return txn.isLinkedRefund
+  }
+
+  private func accountNames() -> [Account.ID: String] {
+    Dictionary(reference.accounts.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+  }
+
+  private func shortSubtitle(_ txn: Txn) -> String {
+    let code = reference.accountsByID[txn.accountID]?.currency.rawValue ?? "UAH"
+    let amount = TransactionMoneyFormat().string(minor: txn.amountMinor, code: code)
+    let style = Date.FormatStyle(date: .abbreviated, time: .omitted).locale(Locale(identifier: "en_US"))
+    let day = Day(txn.occurredAt, calendar: calendar).date(calendar: calendar).formatted(style)
+    return "\(amount) · \(day)"
+  }
+
+  /// "Link a refund…": opens the search over incoming transactions that may be the refund of the
+  /// expense (same account, not more than what is still open, equal amounts first).
+  public func beginLinkRefund(_ id: Txn.ID) async {
+    guard canLinkRefund(id), let refunds, let txn = row(id) else { return }
+    let picker = RefundPickerModel(
+      kind: .chooseRefund, subjectID: id, title: "Link a refund",
+      subtitle: (txn.payee.isEmpty ? "Expense" : "“\(txn.payee)”") + " · " + shortSubtitle(txn),
+      repository: refunds, accountNames: accountNames(), calendar: calendar)
+    refundPicker = picker
+    await picker.load()
+  }
+
+  /// "This is a refund of…": opens the search over expenses (ranked suggestions + search).
+  public func beginChooseOriginal(_ id: Txn.ID) async {
+    guard canChooseOriginal(id), let refunds, let txn = row(id) else { return }
+    let picker = RefundPickerModel(
+      kind: .chooseOriginal, subjectID: id, probe: RefundProbe(txn), title: "This is a refund of…",
+      subtitle: (txn.payee.isEmpty ? "Refund" : "“\(txn.payee)”") + " · " + shortSubtitle(txn),
+      repository: refunds, accountNames: accountNames(), calendar: calendar)
+    refundPicker = picker
+    await picker.load()
+  }
+
+  public func cancelRefundPicker() { refundPicker = nil }
+
+  /// Links the chosen option: for "This is a refund of…" the subject becomes the refund of the
+  /// option (an income turns into an expense refund of the original's category); for "Link a
+  /// refund…" the option becomes the refund of the subject. A failure stays in the sheet.
+  public func chooseRefundOption(_ optionID: Txn.ID) async {
+    guard let refunds, let picker = refundPicker, let subject = picker.subjectID else { return }
+    do {
+      switch picker.kind {
+      case .chooseOriginal: try await refunds.linkRefund(subject, to: optionID)
+      case .chooseRefund: try await refunds.linkRefund(optionID, to: subject)
+      }
+    } catch {
+      picker.errorMessage = RefundMessages.text(for: error)
+      return
+    }
+    refundPicker = nil
+    errorMessage = nil
+    await reload()
+    await onDataChange?()
+  }
+
+  /// "Unlink refund": the refund keeps its category and follows R-SET-3 again.
+  public func unlinkRefund(_ id: Txn.ID) async {
+    guard canUnlinkRefund(id), let refunds else { return }
+    do {
+      try await refunds.unlinkRefund(id)
+      errorMessage = nil
+    } catch {
+      errorMessage = "Couldn't unlink the refund."
+    }
+    await reload()
+    await onDataChange?()
+  }
+
+  /// Whether `id` is among the loaded rows (the list can scroll to it).
+  public func isLoaded(_ id: Txn.ID) -> Bool { rows.contains { $0.txn.id == id } }
 
   // MARK: Debt filter (R-DEBT-22, docs/status/C21.md)
 

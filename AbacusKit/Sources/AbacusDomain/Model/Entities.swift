@@ -219,6 +219,12 @@ public struct Txn: Hashable, Identifiable, Sendable {
   /// zero it. It stays on the account (list, balance) but is **not** income or expense: reports,
   /// budgets, donuts, "income vs expenses" and the list totals skip it, like a transfer.
   public var isBalanceCorrection: Bool
+  /// R-TX-4 (C30): the expense this refund returns money for. Only an expense with `isRefund` may
+  /// carry it, and the target is an expense that is not itself a refund. No foreign key (CloudKit
+  /// safe); deleting the original clears it in `TxnRepository.delete`. A linked refund keeps the
+  /// original's category in `categoryID` and always reduces that category's spending (on the
+  /// refund's own date), whatever R-SET-3 says.
+  public var refundOfID: UUID?
 
   public init(
     id: UUID = UUID(), type: TxnType, occurredAt: Date, accountID: Account.ID,
@@ -227,7 +233,7 @@ public struct Txn: Hashable, Identifiable, Sendable {
     originalCurrencyCode: String? = nil, payee: String = "", note: String = "",
     eventID: Event.ID? = nil, source: TxnSource = .manual, importBatchID: ImportBatch.ID? = nil,
     isPendingAtBank: Bool = false, createdAt: Date = Date(), bookedDay: String? = nil,
-    debtRecordID: DebtRecord.ID? = nil, isBalanceCorrection: Bool = false
+    debtRecordID: DebtRecord.ID? = nil, isBalanceCorrection: Bool = false, refundOfID: UUID? = nil
   ) {
     self.id = id
     self.type = type
@@ -250,7 +256,11 @@ public struct Txn: Hashable, Identifiable, Sendable {
     self.bookedDay = bookedDay
     self.debtRecordID = debtRecordID
     self.isBalanceCorrection = isBalanceCorrection
+    self.refundOfID = refundOfID
   }
+
+  /// A refund linked to the expense it returns (R-TX-4, C30).
+  public var isLinkedRefund: Bool { type == .expense && isRefund && refundOfID != nil }
 
   /// Money comes into `accountID` from outside the app's accounts: a debt leg without a
   /// destination marked `isRefund` (They repaid, I borrowed).

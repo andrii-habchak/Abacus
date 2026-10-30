@@ -48,6 +48,17 @@ struct TransactionsView: View {
           onSave: { saved in Task { await model.saveConvertToDebt(saved) } })
       }
     }
+    .sheet(
+      isPresented: Binding(
+        get: { model.refundPicker != nil },
+        set: { if !$0 { model.cancelRefundPicker() } })
+    ) {
+      if let picker = model.refundPicker {
+        RefundPickerSheet(
+          model: picker, onChoose: { option in Task { await model.chooseRefundOption(option.id) } },
+          onCancel: { model.cancelRefundPicker() })
+      }
+    }
     .onChange(of: displayCurrency, initial: true) { _, currency in
       model.displayCurrency = currency
     }
@@ -83,6 +94,7 @@ struct TransactionsView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
+      ScrollViewReader { proxy in
       List(selection: $model.selection) {
         // One flat ForEach (day header, rows, attached lines): a nested one costs SwiftUI about
         // 0.5 ms per row on every appended page (C28, measured).
@@ -93,7 +105,7 @@ struct TransactionsView: View {
               .listRowInsets(rowInsets(vertical: 0))
               .selectionDisabled()
           case .row(let row):
-            TransactionRowView(row: row)
+            TransactionRowView(row: row, onJump: { jump(to: $0, proxy: proxy) })
               .tag(row.id)
               .listRowInsets(rowInsets(vertical: 4))
               .onAppear { model.rowAppeared(row.id) }
@@ -120,9 +132,33 @@ struct TransactionsView: View {
             Task { await model.unlinkTransfer(id) }
           }
         }
+        // R-TX-4 (C30): a refund is linked to the expense it returns.
+        if ids.count == 1, let id = ids.first {
+          if model.canLinkRefund(id) {
+            Button("Link a Refund…") { Task { await model.beginLinkRefund(id) } }
+          }
+          if model.canChooseOriginal(id) {
+            Button("This Is a Refund of…") { Task { await model.beginChooseOriginal(id) } }
+          }
+          if model.canUnlinkRefund(id) {
+            Button("Unlink Refund") { Task { await model.unlinkRefund(id) } }
+          }
+        }
       } primaryAction: { ids in
         if let id = ids.first { onOpen?(id) }
       }
+      }
+    }
+  }
+
+  /// Clicking "Refunded …" / "Refund of …" shows the other end of the link: selected and scrolled
+  /// to when it is among the loaded rows, else opened in the editor.
+  private func jump(to id: Txn.ID, proxy: ScrollViewProxy) {
+    if model.isLoaded(id) {
+      model.selection = id
+      withAnimation { proxy.scrollTo(TransactionListContent.Item.ID.transaction(id), anchor: .center) }
+    } else {
+      onOpen?(id)
     }
   }
 

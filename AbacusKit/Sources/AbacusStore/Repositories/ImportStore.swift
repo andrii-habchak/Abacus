@@ -140,6 +140,7 @@ public struct SQLiteImportStore: ImportStore {
         guard try Txn.find(txn.id).fetchCount(db) > 0 else { throw RepositoryError.notFound }
         try Txn.upsert { Txn.Draft(txn) }.execute(db)
       }
+      try RefundLinks.repair(db)
       for chunk in commit.fingerprints.chunked(500) {
         let fingerprints = chunk.map { item in
           var fingerprint = item
@@ -199,6 +200,7 @@ public struct SQLiteImportStore: ImportStore {
       // left in them.
       try DebtRecord.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
       try Txn.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
+      try RefundLinks.repair(db)
       try ImportFingerprint.where { $0.batchID.eq(batchID) }.delete().execute(db)
 
       let events = try Event.where { $0.importBatchID.eq(batchID) }.fetchAll(db)

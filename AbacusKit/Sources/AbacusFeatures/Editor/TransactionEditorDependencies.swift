@@ -26,6 +26,8 @@ public struct TransactionEditorDependencies: Sendable {
   /// Asks for the official rates of `days` (`RateRefresher.ensureRates(for:)`, which follows
   /// the auto-refresh flag) and answers the rates known afterwards. Nil: rates in memory only.
   public var requestRates: (@Sendable ([Day]) async -> (any CurrencyConverter)?)?
+  /// The "Refund of" field of a refund (C30); nil = not offered.
+  public var refunds: (any RefundRepository)?
   public var calendar: Calendar
   /// Date and time a new transaction starts with.
   public var now: @Sendable () -> Date

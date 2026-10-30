@@ -27,6 +27,7 @@ struct DebtMigrationV13Tests {
       // The test reads this database with the current model before v13: v14's column is added early.
       try db.execute(
         sql: #"ALTER TABLE "txns" ADD COLUMN "isBalanceCorrection" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
+      try db.execute(sql: #"ALTER TABLE "txns" ADD COLUMN "refundOfID" TEXT"#)
       func account(_ id: Int, _ name: String, _ currency: String, _ kind: String, opening: Int64 = 0, archived: Bool = false) throws {
         try db.execute(
           sql: """

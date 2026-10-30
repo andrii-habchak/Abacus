@@ -57,6 +57,8 @@ public struct ReportEntry: Hashable, Sendable {
 extension Calc {
   /// The reportable amounts of a transaction (R-TX-4, R-TX-6, R-SET-3):
   /// - expense → expense under its category;
+  /// - expense refund linked to its original (`refundOfID`) → a negative expense under the
+  ///   original's category, on the refund's day, regardless of the setting (C30);
   /// - expense refund → setting off: income under `.refunds`, the category's spending unchanged;
   ///   setting on: a negative expense under its category;
   /// - income → income under its category; an income reversal → negative income under its
@@ -87,6 +89,10 @@ extension Calc {
     // A balance correction (R-ACC-4) is neither income nor expense.
     if txn.isBalanceCorrection { return entries }
     switch txn.type {
+    case .expense where txn.isLinkedRefund:
+      // C30: a refund linked to its expense always nets that category (the refund keeps the
+      // original's category), on the refund's own day, whatever R-SET-3 says.
+      entries.append(entry(.expense, key(txn.categoryID), -txn.amountMinor))
     case .expense where txn.isRefund:
       entries.append(refund(txn.categoryID, txn.amountMinor))
     case .expense:

@@ -35,6 +35,7 @@ public struct SQLiteRuleRepository: RuleRepository {
         guard try Txn.find(txn.id).fetchCount(db) > 0 else { throw RepositoryError.notFound }
         try Txn.upsert { Txn.Draft(txn) }.execute(db)
       }
+      try RefundLinks.repair(db)
     }
   }
 
@@ -51,6 +52,7 @@ public struct SQLiteRuleRepository: RuleRepository {
         try Txn.upsert { Txn.Draft(record.after.applied(to: current)) }.execute(db)
         try RuleApplication.insert { RuleApplication.Draft(record) }.execute(db)
       }
+      try RefundLinks.repair(db)
     }
   }
 
@@ -101,6 +103,7 @@ public struct SQLiteRuleRepository: RuleRepository {
         result.restored += 1
       }
       try RuleApplication.where { $0.ruleID.eq(ruleID) }.delete().execute(db)
+      try RefundLinks.repair(db)
       return result
     }
   }
