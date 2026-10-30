@@ -82,6 +82,8 @@ and copies it).
 | S3 Budget/rules polish | background agent | `wp/S3-polish` | **merged** 2026-10-27 (Save button states, rules tester removed; notes `docs/status/S3.md`) |
 | C15 Rule conditions | background agent | `wp/C15-rule-match` | **merged** 2026-10-30 (Description starts with; "exactly" shown as Description equals; no migration; notes `docs/status/C15.md`) |
 | C16 PKO hold sign | background agent | `wp/C16-pending-sign` | **merged** 2026-10-30 (holds always expenses; settling repairs a wrong-sign hold; owner DB checked: nothing to repair; notes `docs/status/C16.md`) |
+| C18 Debts view | background agent | `wp/C18-debts-view` | **merged** 2026-10-30 (accounts card per person, display-currency totals; interpretations in `docs/status/C18.md`) |
+| C17 Debt linking | background agent | `wp/C17-debt-linking` | in progress (R-DEBT-9…13) |
 | S2 Lists | background agent | `wp/S2-lists` | **merged** 2026-10-27 (NSOutlineView lists, sheet editors, split New account; real mouse drag not tested; notes `docs/status/S2.md`) |
 | S1 Stability | background agent | `wp/S1-stability` | **merged** 2026-10-27 (debts binding crash reproduced and fixed, safe bindings, Day/Month speed-up, soak + hang watch tools; timings in `docs/status/S1.md`) |
 | C14 Debts | background agent | `wp/C14-debts` | **merged** 2026-10-27 (debts separate from accounts, migration v10 converts debt accounts — real-data invariants hold; follow-up: dashboard opens scrolled when Debts is first; interpretations in `docs/status/C14.md`) |
