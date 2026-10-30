@@ -74,25 +74,24 @@ struct ManageAccountsTests {
     #expect(old?.isArchived == true)
   }
 
-  @Test("R-ACC-4: archiving an account whose balance is not zero warns and needs confirmation")
+  @Test("R-ACC-4: archiving an account whose balance is not zero shows the balance on the archive sheet (C29) and needs confirmation")
   func archiveWarning() async throws {
     let model = await model()
     model.select(PreviewData.pkoPersonal.id)
     #expect(model.archiveTitle == "Archive…")
     await model.archiveOrUnarchive()
-    let dialog = try #require(model.dialog)
-    #expect(dialog.title == "Archive “PKO Personal”?")
-    #expect(dialog.message.hasPrefix("Its balance is \(model.balanceText!), not zero."))
-    #expect(dialog.confirmTitle == "Archive anyway")
-    #expect(dialog.isDestructive)
+    let sheet = try #require(model.archiveSheet)
+    #expect(model.dialog == nil)
+    #expect(sheet.title == "Archive “PKO Personal”?")
+    #expect(sheet.balanceText == model.balanceText)
     // Nothing changes before the confirmation.
     #expect(model.account(PreviewData.pkoPersonal.id)?.isArchived == false)
-    model.cancelDialog()
-    #expect(model.dialog == nil)
+    model.cancelArchiveSheet()
+    #expect(model.archiveSheet == nil)
     #expect(model.account(PreviewData.pkoPersonal.id)?.isArchived == false)
 
     await model.archiveOrUnarchive()
-    await model.confirmDialog()
+    await model.confirmArchive()
     #expect(model.account(PreviewData.pkoPersonal.id)?.isArchived == true)
     #expect(model.showArchived)
     #expect(model.archiveTitle == "Unarchive")

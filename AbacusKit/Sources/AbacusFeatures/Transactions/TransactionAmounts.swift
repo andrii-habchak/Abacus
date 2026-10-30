@@ -71,6 +71,8 @@ public struct TransactionTotalsRule: Sendable {
     var income: Int64 = 0
     var expense: Int64 = 0
     let txn = row.txn
+    // A balance correction (R-ACC-4) is not income or expense (C29).
+    if txn.isBalanceCorrection { return (0, 0) }
     if includeUncategorised && txn.categoryID == nil || matches(txn.categoryID) {
       switch (txn.type, txn.isRefund) {
       case (.expense, false): expense += txn.amountMinor

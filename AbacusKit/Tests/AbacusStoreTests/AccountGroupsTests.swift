@@ -58,6 +58,9 @@ struct AccountGroupsTests {
       ?? DatabaseQueue(configuration: configuration)
     try AbacusDatabase.migrator().migrate(queue, upTo: v9)
     try queue.write { db in
+      // The test writes `Txn` rows of the current model; v14's column is added early (v14 skips it then).
+      try db.execute(
+        sql: #"ALTER TABLE "txns" ADD COLUMN "isBalanceCorrection" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
       #expect(try !db.columns(in: "accounts").contains { $0.name == "groupID" })
       for row in rows {
         try db.execute(

@@ -61,7 +61,7 @@ extension Calc {
   ///   setting on: a negative expense under its category;
   /// - income → income under its category; an income reversal → negative income under its
   ///   category (the setting is about spending only);
-  /// - transfer → nothing;
+  /// - transfer → nothing; a balance correction (`isBalanceCorrection`) → nothing;
   /// - each attached record → its own kind under its own category, except a refund line: an
   ///   `.income` record in an expense category (D22) is counted like an expense refund above.
   ///
@@ -84,6 +84,8 @@ extension Calc {
     }
 
     var entries: [ReportEntry] = []
+    // A balance correction (R-ACC-4) is neither income nor expense.
+    if txn.isBalanceCorrection { return entries }
     switch txn.type {
     case .expense where txn.isRefund:
       entries.append(refund(txn.categoryID, txn.amountMinor))

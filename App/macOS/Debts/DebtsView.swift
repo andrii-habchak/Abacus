@@ -27,6 +27,7 @@ struct DebtsView: View {
       .sheet(isPresented: Binding(get: { model.recordDraft != nil }, set: { if !$0 { model.recordDraft = nil } })) {
         DebtRecordFormSheet(model: model)
       }
+      .settlePromptSheet(model: model)
       .onChange(of: displayCurrency, initial: true) { _, currency in model.displayCurrency = currency }
       .task {
         if model.phase == .idle { await model.load() }
@@ -143,7 +144,9 @@ struct DebtContextMenu: View {
   var body: some View {
     Button("Edit…", action: onEdit)
     Button("Show transactions") { model.showTransactions(debtID) }
-    Button(actions.settledTitle) { Task { await model.setSettled(debtID, !actions.isSettled) } }
+    Button(actions.settledTitle) {
+      Task { if actions.isSettled { await model.setSettled(debtID, false) } else { await model.requestSettle(debtID) } }
+    }
       .disabled(!actions.canToggleSettled)
     Divider()
     Button("Delete…", role: .destructive, action: onDelete)
@@ -296,7 +299,7 @@ struct DebtHeaderView: View {
         if header.isSettled {
           Button("Reopen") { Task { await model.setSettled(header.debtID, false) } }
         } else {
-          Button("Mark settled") { Task { await model.setSettled(header.debtID, true) } }
+          Button("Mark settled") { Task { await model.requestSettle(header.debtID) } }
             .disabled(!header.canSettle)
             .help(header.canSettle ? "Moves the debt to Settled" : "Only a zero balance can be settled")
         }

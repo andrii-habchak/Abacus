@@ -63,6 +63,33 @@ public enum AccountDebtChoice: Equatable, Sendable {
   case new(name: String)
 }
 
+/// The confirmation sheet of "Archive…" for an account whose balance is not zero (R-ACC-4, C29):
+/// the balance, Cancel / Archive and one checkbox. An account that is **not** in a debt can book a
+/// compensation transaction that zeroes it; an account **in a debt** can instead forgive the debt
+/// by its balance (a manual `forgive` record, R-DEBT-4).
+public struct AccountArchiveSheet: Identifiable, Equatable, Sendable {
+  public let id: Account.ID
+  public let accountName: String
+  /// The balance now, in the account currency; never zero.
+  public let balance: Money
+  public let balanceText: String
+  /// Set when the account is linked to a debt (R-DEBT-17).
+  public let debtID: Debt.ID?
+  public let debtName: String?
+  /// "Create a compensation transaction" (accounts outside a debt).
+  public var createCompensation = false
+  /// "Forgive the debt" (accounts in a debt).
+  public var forgiveDebt = false
+  /// R-DEBT-4: the forgive record counts as an expense; on by default, offered only when money
+  /// owed to me is forgiven.
+  public var countAsExpense = true
+
+  public var isLinkedToDebt: Bool { debtID != nil }
+  /// A positive balance of a debt account = they owe me (R-DEBT-18).
+  public var offersCountAsExpense: Bool { isLinkedToDebt && balance.minorUnits > 0 }
+  public var title: String { "Archive “\(accountName)”?" }
+}
+
 /// The inspector form of an account group (R-MGMT-9): name and an optional colour.
 public struct AccountGroupDraft: Equatable, Sendable {
   public let id: AccountGroup.ID
@@ -125,6 +152,8 @@ public final class AccountsModel {
   public var searchText = ""
   /// The currency filter; nil = all currencies.
   public var currencyFilter: Currency?
+  /// The account-type filter (R-MGMT-9, C29); empty = every kind.
+  public var kindFilter: Set<AccountKind> = []
   /// The page's order (R-MGMT-9); remembered in the settings.
   public private(set) var sort: AccountSort = .default
   /// Group sums are in this currency (the app's display currency).
@@ -146,6 +175,9 @@ public final class AccountsModel {
   /// The group inspector's form (a group selected or "New group").
   public var groupDraft: AccountGroupDraft?
   public private(set) var dialog: ManageDialog?
+  /// The archive confirmation of an account with a balance (R-ACC-4, C29); its checkboxes are set
+  /// through `setCreateCompensation` / `setForgiveDebt` / `setCountAsExpense`.
+  public private(set) var archiveSheet: AccountArchiveSheet?
   public private(set) var errorMessage: String?
   /// The open editor sheet (D55); nil while none is open.
   public private(set) var sheet: AccountSheet?
@@ -250,7 +282,7 @@ public final class AccountsModel {
   /// currency filter, the search (a matching account brings its group; a matching group shows
   /// its accounts). Empty groups show only without a search or filter.
   public var rows: [AccountRow] {
-    let filtering = !trimmedSearch.isEmpty || currencyFilter != nil
+    let filtering = !trimmedSearch.isEmpty || currencyFilter != nil || !kindFilter.isEmpty
     var result: [AccountRow] = []
     var pendingGroup: (group: AccountGroup, matches: Bool)?
     var groupShown = false
@@ -267,6 +299,7 @@ public final class AccountsModel {
         let inGroup = account.groupID.flatMap { id in groups.contains { $0.id == id } ? id : nil }
         if inGroup == nil { pendingGroup = nil }
         if let filter = currencyFilter, account.currency != filter { continue }
+        if !kindFilter.isEmpty, !kindFilter.contains(account.kind) { continue }
         let groupMatches = inGroup != nil && pendingGroup?.matches == true
         guard matches(account.name) || groupMatches else { continue }
         if let pending = pendingGroup, inGroup != nil, !groupShown {
@@ -279,7 +312,7 @@ public final class AccountsModel {
       }
     }
     // A group whose name matches but has no account left after the currency filter.
-    if !trimmedSearch.isEmpty, currencyFilter == nil {
+    if !trimmedSearch.isEmpty, currencyFilter == nil, kindFilter.isEmpty {
       let shown = Set(result.map(\.id))
       for group in groups where matches(group.name) && !shown.contains(group.id) {
         if let index = insertionIndex(for: group, in: result) { result.insert(groupRow(group), at: index) }
@@ -300,8 +333,40 @@ public final class AccountsModel {
     guard rows.isEmpty, !accounts.isEmpty else { return nil }
     let search = trimmedSearch
     if !search.isEmpty { return "No accounts match “\(search)”." }
-    if let currencyFilter { return "No \(currencyFilter.rawValue) accounts." }
+    if let currencyFilter, kindFilter.isEmpty { return "No \(currencyFilter.rawValue) accounts." }
+    if hasActiveFilters { return "No accounts match the filters." }
     return nil
+  }
+
+  // MARK: Filters (R-MGMT-9, C29)
+
+  /// The account-type filter's choices: the kinds that exist among the listed accounts under the
+  /// current currency filter (so every choice finds something), in the order of
+  /// `AccountKind.allCases`; a kind already selected stays so it can be removed.
+  public var kindOptions: [AccountKind] {
+    let present = Set(
+      visibleAccounts.filter { currencyFilter == nil || $0.currency == currencyFilter }.map(\.kind)
+    ).union(kindFilter)
+    return AccountKind.allCases.filter(present.contains)
+  }
+
+  public func toggleKind(_ kind: AccountKind) {
+    if kindFilter.contains(kind) { kindFilter.remove(kind) } else { kindFilter.insert(kind) }
+  }
+
+  /// "All types" / "Bank account" / "Bank account +1" for the filter button.
+  public var kindFilterLabel: String {
+    let selected = AccountKind.allCases.filter(kindFilter.contains)
+    guard let first = selected.first else { return "All types" }
+    return selected.count == 1 ? ManageText.kindTitle(first) : "\(ManageText.kindTitle(first)) +\(selected.count - 1)"
+  }
+
+  /// The currency or the type filter is on (blue outline, "Clear filters").
+  public var hasActiveFilters: Bool { currencyFilter != nil || !kindFilter.isEmpty }
+
+  public func clearFilters() {
+    currencyFilter = nil
+    kindFilter = []
   }
 
   /// The currency filter's choices (`Currency.displayOrder`).
@@ -414,9 +479,38 @@ public final class AccountsModel {
       .sorted { $0.personName.localizedCaseInsensitiveCompare($1.personName) == .orderedAscending }
   }
 
-  /// R-DEBT-17: an account of kind "Debt (person)" is the person's virtual account; any other
-  /// kind (a bank account such as "Revolut Anna") is their external account and keeps its kind.
-  public func debtRole(_ draft: AccountDraft) -> DebtAccountRole { draft.kind == .debt ? .virtual : .external }
+  /// R-DEBT-17: the role of the link Save writes. **It stays as it is** (C29): an account already
+  /// linked keeps its role when its kind changes, in particular external never flips to virtual.
+  /// A new link takes the role from the account's *stored* kind (a new account: the chosen one):
+  /// a "Debt (person)" account is the person's virtual account, any other (a bank account such as
+  /// "Revolut Anna", also when it is turned into a Debt account in the same Save) is their external one.
+  public func debtRole(_ draft: AccountDraft) -> DebtAccountRole {
+    if !draft.isNew, let link = debtLinks[draft.id] { return link.role }
+    let base = draft.isNew ? draft.kind : (account(draft.id)?.kind ?? draft.kind)
+    return base == .debt ? .virtual : .external
+  }
+
+  /// The kinds the picker offers: the debt kind needs the debt section to link to (C29).
+  public func liabilityKindOptions(for draft: AccountDraft) -> [AccountKind] {
+    ManageText.liabilityKinds(offeredFor: draft.kind, debtsAvailable: offersDebts)
+  }
+
+  /// A short note when the kind change moves the account between assets and liabilities in net
+  /// worth (C29); nil for a new account or when the class stays. Net worth is assets − liabilities
+  /// of the signed balances, so the total does not change, only the side it is listed on; an
+  /// account linked to a debt is counted only through the debt (R-DEBT-18).
+  public func kindChangeNote(_ draft: AccountDraft) -> String? {
+    guard !draft.isNew, let stored = account(draft.id), stored.kind.isLiability != draft.kind.isLiability else {
+      return nil
+    }
+    if draft.debt != .none {
+      return "This account is linked to a debt, so net worth counts its balance only through the debt; "
+        + "changing the kind to \(ManageText.kindTitle(draft.kind)) does not move it."
+    }
+    let from = stored.kind.isLiability ? "Liabilities" : "Assets"
+    let to = draft.kind.isLiability ? "Liabilities" : "Assets"
+    return "Net worth: the balance moves from \(from) to \(to) (the total does not change)."
+  }
 
   /// What the section says under the picker: where the account is now and what Save will do.
   public func debtNotice(_ draft: AccountDraft) -> String? {
@@ -444,7 +538,9 @@ public final class AccountsModel {
     switch debtRole(draft) {
     case .virtual: return "A \"Debt (person)\" account is the person's virtual account: no statement."
     case .external:
-      return "The person's own account (external): its transactions drive the debt; the account keeps its kind."
+      return draft.kind == .debt
+        ? "Linked as the person's own account (external): its transactions drive the debt; the role does not change with the kind."
+        : "The person's own account (external): its transactions drive the debt; the account keeps its kind."
     }
   }
 
@@ -623,6 +719,10 @@ public final class AccountsModel {
   public func validationMessage(_ draft: AccountDraft) -> String? {
     if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name." }
     if format.parseAmount(draft.openingBalance) == nil { return "The opening balance is not a number." }
+    // C29: a Debt (person) account is always in a debt.
+    if offersDebts, draft.kind == .debt, draft.debt == .none {
+      return "Choose or create the debt for a Debt (person) account."
+    }
     return debtValidation(draft)
   }
 
@@ -1073,25 +1173,127 @@ public final class AccountsModel {
 
   // MARK: Archive and delete
 
-  /// Archive… asks first; with a non-zero balance the dialog warns (R-ACC-4). Unarchive is direct.
+  /// Archive… asks first. A zero balance: the one-line confirmation. A balance that is not zero
+  /// (R-ACC-4, C29): the archive sheet with the balance and one checkbox (compensation
+  /// transaction, or "Forgive the debt" for an account in a debt). Unarchive is direct.
   public func archiveOrUnarchive() async {
     guard let account = selectedAccount else { return }
     if account.isArchived {
       await setArchived(account.id, false)
-    } else {
-      let balance = balance(account)
-      dialog =
-        balance.minorUnits != 0
-        ? ManageDialog(
-          action: .archiveAccount(account.id), title: "Archive “\(account.name)”?",
-          message:
-            "Its balance is \(format.money(balance)), not zero. Archived accounts are hidden from pickers and the dashboard and are not counted in net worth. Its history stays.",
-          confirmTitle: "Archive anyway", isDestructive: true)
-        : ManageDialog(
-          action: .archiveAccount(account.id), title: "Archive “\(account.name)”?",
-          message: "It will be hidden from pickers and the dashboard. Its history stays.",
-          confirmTitle: "Archive", isDestructive: false)
+      return
     }
+    let balance = balance(account)
+    if balance.minorUnits == 0 {
+      dialog = ManageDialog(
+        action: .archiveAccount(account.id), title: "Archive “\(account.name)”?",
+        message: "It will be hidden from pickers and the dashboard. Its history stays.",
+        confirmTitle: "Archive", isDestructive: false)
+      return
+    }
+    let debt = linkedDebt(of: account.id)
+    archiveSheet = AccountArchiveSheet(
+      id: account.id, accountName: account.name, balance: balance, balanceText: format.money(balance),
+      debtID: debt?.id, debtName: debt?.personName)
+  }
+
+  public func setCreateCompensation(_ on: Bool) { archiveSheet?.createCompensation = on }
+  public func setForgiveDebt(_ on: Bool) { archiveSheet?.forgiveDebt = on }
+  public func setCountAsExpense(_ on: Bool) { archiveSheet?.countAsExpense = on }
+
+  public func cancelArchiveSheet() { archiveSheet = nil }
+
+  /// What the compensation checkbox will book: "Books an expense of zł120.00 on this account today,
+  /// category “Balance correction”. Reports and budgets ignore it."
+  public func compensationHint(_ sheet: AccountArchiveSheet) -> String {
+    let kind = sheet.balance.minorUnits < 0 ? "an income" : "an expense"
+    let amount = format.money(Money(minorUnits: abs(sheet.balance.minorUnits), currency: sheet.balance.currency))
+    return "Books \(kind) of \(amount) on this account today (category “\(Self.correctionCategoryName)”), so "
+      + "the balance becomes 0. Reports, budgets and charts do not count it."
+  }
+
+  /// "Forgive the debt (€120.00)".
+  public func forgiveTitle(_ sheet: AccountArchiveSheet) -> String {
+    let amount = format.money(Money(minorUnits: abs(sheet.balance.minorUnits), currency: sheet.balance.currency))
+    return "Forgive the debt (\(amount) \(sheet.balance.currency.rawValue))"
+  }
+
+  public func forgiveHint(_ sheet: AccountArchiveSheet) -> String {
+    let who = sheet.debtName.map { "“\($0)”" } ?? "the debt"
+    return "Adds a “Forgive” record to \(who) in \(sheet.balance.currency.rawValue) that closes this account's balance. "
+      + "The archived account stays linked and keeps counting in the debt."
+  }
+
+  /// The category of the compensation transaction (R-ACC-4).
+  public static let correctionCategoryName = "Balance correction"
+
+  /// The note of the compensation transaction.
+  public static let correctionNote = "Zeroes the account on archiving."
+
+  /// Archive on the sheet's Archive button (R-ACC-4, C29): optionally the compensation
+  /// transaction (account outside a debt) or the forgive record (account in a debt), then the
+  /// archive. The account's balance is read again now; when it became zero meanwhile only the
+  /// archive remains.
+  public func confirmArchive() async {
+    guard let sheet = archiveSheet else { return }
+    archiveSheet = nil
+    guard let account = account(sheet.id) else { return }
+    let balance = balance(account)
+    do {
+      if balance.minorUnits != 0 {
+        if sheet.isLinkedToDebt, sheet.forgiveDebt, let debtID = sheet.debtID {
+          try await forgive(balance, of: account, in: debtID, countAsExpense: sheet.countAsExpense)
+        } else if !sheet.isLinkedToDebt, sheet.createCompensation {
+          try await compensate(balance, on: account)
+        }
+      }
+      try await dependencies.accounts.setArchived(account.id, true)
+      self.sheet = nil
+      showArchived = true
+      await onDataChange?()
+      await load()
+    } catch {
+      errorMessage = ManageFailure.message(error, doing: "archive the account")
+      await load()
+    }
+  }
+
+  /// One transaction that zeroes the account: income when the balance is negative, expense when
+  /// positive, |balance| in the account currency, today, category "Balance correction", flagged so
+  /// no report counts it (R-ACC-4).
+  private func compensate(_ balance: Money, on account: Account) async throws {
+    let kind: CategoryKind = balance.minorUnits < 0 ? .income : .expense
+    let category = try await correctionCategory(kind)
+    let txn = Txn(
+      type: kind == .income ? .income : .expense,
+      occurredAt: dependencies.today().date(calendar: format.calendar), accountID: account.id,
+      amountMinor: abs(balance.minorUnits), categoryID: category.id, payee: Self.correctionCategoryName,
+      note: Self.correctionNote, source: .manual, isBalanceCorrection: true)
+    try await dependencies.txns.save(txn, lines: [])
+  }
+
+  /// The "Balance correction" category of `kind`: an existing one (a live one first), else created.
+  private func correctionCategory(_ kind: CategoryKind) async throws -> AbacusDomain.Category {
+    let all = try await dependencies.categories.categories(kind: kind, includeArchived: true)
+    let named = all.filter { $0.parentID == nil && $0.name.caseInsensitiveCompare(Self.correctionCategoryName) == .orderedSame }
+    if let found = named.first(where: { !$0.isArchived }) ?? named.first { return found }
+    let created = AbacusDomain.Category(
+      name: Self.correctionCategoryName, kind: kind, colorHex: ColorPalette.pick(avoiding: all.map(\.colorHex)),
+      position: (all.map(\.position).max() ?? -1) + 1)
+    try await dependencies.categories.save(created)
+    return created
+  }
+
+  /// A manual forgive record on the debt in the account's currency that closes this account's
+  /// balance: positive (they owe me) = "Forgave", counted as an expense when asked (R-DEBT-4);
+  /// negative (I owe them) = "Forgiven by them", no report flag.
+  private func forgive(_ balance: Money, of account: Account, in debtID: Debt.ID, countAsExpense: Bool) async throws {
+    guard let repository = dependencies.debts else { return }
+    let owedToMe = balance.minorUnits > 0
+    let record = DebtRecord(
+      debtID: debtID, kind: owedToMe ? .forgaveThem : .forgivenByThem, day: dependencies.today().string,
+      amountMinor: abs(balance.minorUnits), currency: balance.currency,
+      note: "Forgiven when “\(account.name)” was archived.", reportKind: owedToMe && countAsExpense ? .expense : nil)
+    try await repository.save(record)
   }
 
   /// Delete… (R-ACC-5): only an account without transactions, after a confirmation.
