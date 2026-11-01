@@ -164,7 +164,7 @@ struct ImportView: View {
 
 // MARK: - Step bar
 
-/// "1 Choose file · 2 Review · 3 Done", History, Choose file….
+/// "Choose file → Review → Done" (no numbers: they read as a file count), History, Choose file….
 struct ImportStepBar: View {
   let model: ImportWizardModel
   let chooseFile: () -> Void
@@ -173,10 +173,13 @@ struct ImportStepBar: View {
     HStack(spacing: 12) {
       HStack(spacing: 6) {
         ForEach(ImportWizardModel.Step.allCases, id: \.self) { step in
+          if step != ImportWizardModel.Step.allCases.first {
+            Image(systemName: "arrow.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary)
+          }
           let colors =
             step == model.step
             ? ImportPalette.stepCurrent : step.rawValue < model.step.rawValue ? ImportPalette.stepDone : ImportPalette.stepNext
-          Text("\(step.rawValue)  \(step.title)")
+          Text(step.title)
             .font(.system(size: 12, weight: step == model.step ? .semibold : .regular))
             .foregroundStyle(colors.text)
             .padding(.horizontal, 10)
