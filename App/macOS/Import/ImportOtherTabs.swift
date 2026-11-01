@@ -220,7 +220,7 @@ struct ImportNeedsReviewTab: View {
               .padding(.bottom, 6)
           }
           if !rows.isEmpty {
-            ImportRowsHeader(columns: columns)
+            ImportRowsHeader(columns: columns, model: model)
             ImportRule(color: ImportPalette.softRule)
           }
           LazyVStack(spacing: 0) {

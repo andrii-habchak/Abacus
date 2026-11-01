@@ -10,6 +10,16 @@ struct ImportReviewStep: View {
   var body: some View {
     VStack(spacing: 0) {
       ImportFileBar(model: model)
+      if let warning = model.targetWarning {
+        // C41: the rows are already in another account, or the remembered account is a guess.
+        Label(warning, systemImage: "exclamationmark.triangle")
+          .font(.system(size: 12))
+          .foregroundStyle(ImportPalette.label)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, ImportMetrics.horizontalPadding)
+          .padding(.vertical, 6)
+          .background(ImportPalette.duplicateFill)
+      }
       ImportRule(color: ImportPalette.softRule)
       if model.needsTargetAccount {
         ImportTargetPrompt(model: model)

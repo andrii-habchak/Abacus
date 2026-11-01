@@ -60,6 +60,8 @@ public final class ImportWizardModel {
   public private(set) var preview: ImportPreview?
   /// PKO: the account the statement goes into; nil until chosen when nothing is remembered.
   public private(set) var targetAccountID: Account.ID?
+  /// C41: PKO: accounts the open file's rows are already imported into, with the row counts.
+  public internal(set) var targetOverlaps: [Account.ID: Int] = [:]
   public private(set) var accounts: [Account] = []
   /// Account groups: account pickers list A–Z under them (R-MGMT-8).
   public private(set) var accountGroups: [AccountGroup] = []
@@ -78,6 +80,8 @@ public final class ImportWizardModel {
   /// C31: the rows selected in the list (row ids); bulk actions work on them.
   public internal(set) var selection: Set<String> = []
   @ObservationIgnored var selectionAnchor: String?
+  /// C41: the header sort of the row lists; nil = the file's order (the default).
+  public internal(set) var rowSort: ImportRowSort?
   /// C31: the "Save rules" sheet after a bulk category; nil when closed.
   public var ruleSheet: RuleSuggestionSheet?
   /// C31: the "New category" sheet; nil when closed.
@@ -101,6 +105,11 @@ public final class ImportWizardModel {
   public var isHistoryShown = false
   /// The batch waiting for the "Undo import?" confirmation.
   public private(set) var pendingUndo: ImportBatch?
+  /// C41: transactions each batch still has (empty when unknown); read with the history.
+  public private(set) var batchCounts: [ImportBatch.ID: Int] = [:]
+  /// C41: what the last undo removed ("… 12 transactions removed", or that there was nothing
+  /// of its own to remove); shown as an alert, the view clears it.
+  public var undoNotice: String?
   /// Rows whose category pick is not saved as a rule (`ImportPreview.setSavesRule`).
   public internal(set) var noRuleRows: Set<String> = []
   /// Display values, rebuilt after every change of the preview.
@@ -159,6 +168,11 @@ public final class ImportWizardModel {
   private func reloadHistory() async {
     do {
       history = try await pipeline.history()
+      if let load = dependencies.batchTransactionCounts, let counts = try? await load() {
+        batchCounts = Dictionary(uniqueKeysWithValues: history.map { ($0.id, counts[$0.id] ?? 0) })
+      } else {
+        batchCounts = [:]
+      }
     } catch {
       errorMessage = "Couldn't load the import history."
     }
@@ -201,6 +215,7 @@ public final class ImportWizardModel {
       setPreview(nil)
       resetReviewState()
       step = .review
+      await refreshTargetOverlaps()
       return
     }
     // A remembered account is resolved by the pipeline itself, which marks it as remembered.
@@ -230,7 +245,7 @@ public final class ImportWizardModel {
   /// PKO without a remembered or chosen account: the review step shows only the picker.
   public var needsTargetAccount: Bool { file?.source == .pko && preview == nil }
 
-  private func buildPreview(_ loaded: LoadedFile, target: Account.ID?) async {
+  func buildPreview(_ loaded: LoadedFile, target: Account.ID?) async {
     activity = .previewing
     defer { activity = .idle }
     do {
@@ -243,6 +258,7 @@ public final class ImportWizardModel {
     } catch {
       errorMessage = Self.message(for: error, fileName: loaded.name)
     }
+    await refreshTargetOverlaps()
   }
 
   private func resetReviewState() {
@@ -264,6 +280,7 @@ public final class ImportWizardModel {
   public func cancel() {
     file = nil
     targetAccountID = nil
+    targetOverlaps = [:]
     setPreview(nil)
     resetReviewState()
     step = .chooseFile
@@ -277,9 +294,10 @@ public final class ImportWizardModel {
     tab = status == .needsReview ? .review : .transactions
   }
 
+  /// The Transactions tab's rows: the pressed card's status, in the header's sort (C41).
   public var visibleRows: [ImportRowItem] {
-    guard let filter else { return rowItems }
-    return rowItems.filter { $0.status == filter }
+    guard let filter else { return sorted(rowItems) }
+    return sorted(rowItems.filter { $0.status == filter })
   }
 
   /// Category of an expense/income row. Picking the file's own new category returns the row
@@ -537,14 +555,25 @@ public final class ImportWizardModel {
     pendingUndo = nil
   }
 
+  /// The confirmation's "Undo Import" button. Takes the batch at once: the dialog clears
+  /// `pendingUndo` (`cancelUndo()`) when it closes, before an async task would run (C41 — that
+  /// race made the button do nothing).
+  @discardableResult
+  public func startConfirmedUndo() -> Task<Void, Never>? {
+    guard let batch = pendingUndo else { return nil }
+    pendingUndo = nil
+    return Task { await confirmUndo(batch) }
+  }
+
   /// Removes the batch's transactions (and the accounts, categories and events it created
   /// that nothing else uses, D28). From the done screen it returns to step 1 with the history
-  /// open, where the batch shows as undone.
-  public func confirmUndo() async {
-    guard let batch = pendingUndo else { return }
+  /// open, where the batch shows as undone. `undoNotice` then says what was removed.
+  public func confirmUndo(_ chosen: ImportBatch? = nil) async {
+    guard let batch = chosen ?? pendingUndo else { return }
     pendingUndo = nil
     activity = .undoing
     defer { activity = .idle }
+    let count = await transactionCount(of: batch.id)
     do {
       try await pipeline.undo(batch.id)
       onDataChanged?()
@@ -552,10 +581,12 @@ public final class ImportWizardModel {
         cancel()
         isHistoryShown = true
       }
+      undoNotice = Self.undoNotice(fileName: batch.fileName, removed: count)
     } catch {
       errorMessage = "The import couldn't be undone; nothing was changed. \(error.localizedDescription)"
     }
     await reloadHistory()
+    await reviewAfterUndo(of: batch)
   }
 
   public var undoConfirmationTitle: String {
@@ -563,8 +594,32 @@ public final class ImportWizardModel {
   }
 
   public var undoConfirmationMessage: String {
-    "Its transactions are removed, together with the accounts, categories and events it created "
+    let general =
+      "Its transactions are removed, together with the accounts, categories and events it created "
       + "that nothing else uses. Pending payments it settled and transactions it linked stay as they are."
+    guard let batch = pendingUndo, let count = batchCounts[batch.id] else { return general }
+    if count == 0 {
+      return "This import has no transactions of its own: its rows were already imported, skipped or linked to "
+        + "transactions that existed before, and those stay. Undo only marks it undone and forgets its links."
+    }
+    return ImportFormat.count(count, "transaction") + " will be removed, together with the accounts, categories "
+      + "and events it created that nothing else uses. Pending payments it settled and transactions it linked stay as they are."
+  }
+
+  /// C41: what an undo removed, shown after it ran.
+  static func undoNotice(fileName: String, removed: Int?) -> String {
+    switch removed {
+    case nil: "The import of “\(fileName)” was undone."
+    case 0?:
+      "The import of “\(fileName)” is marked undone. It had no transactions of its own to remove: its rows "
+        + "were already imported, skipped or linked to existing transactions, which stay as they are."
+    case let n?: "The import of “\(fileName)” was undone: " + ImportFormat.count(n, "transaction") + " removed."
+    }
+  }
+
+  private func transactionCount(of batchID: ImportBatch.ID) async -> Int? {
+    guard let load = dependencies.batchTransactionCounts, let counts = try? await load() else { return nil }
+    return counts[batchID] ?? 0
   }
 
   // MARK: Updating
