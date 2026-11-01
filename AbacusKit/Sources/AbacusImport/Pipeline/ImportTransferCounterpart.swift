@@ -90,6 +90,11 @@ public struct ImportCounterpartOption: Hashable, Identifiable, Sendable {
   public var deviation: Double?
   /// Days between the row and the candidate.
   public var dayGap: Int
+  /// C40: the candidate moves money the same way as the row (listed when the search is empty, but
+  /// it cannot be the other side).
+  public var isSameDirection = false
+  /// It can be chosen: it can be absorbed and moves money the other way.
+  public var isUsable: Bool { candidate.refusal == nil && !isSameDirection }
   public var id: Txn.ID { candidate.txn.id }
 }
 
@@ -106,7 +111,7 @@ public enum TransferCounterpartRanker {
 
   public static func rank(
     _ candidates: [TransferCounterpartCandidate], probe: CounterpartProbe, converter: (any CurrencyConverter)?,
-    calendar: Calendar, matching search: String = "", limit: Int = 30
+    calendar: Calendar, matching search: String = "", includeSameDirection: Bool = false, limit: Int = 30
   ) -> [ImportCounterpartOption] {
     let rowDay = Day(probe.occurredAt, calendar: calendar)
     let needle = fold(search)
@@ -115,7 +120,9 @@ public enum TransferCounterpartRanker {
     var options: [ImportCounterpartOption] = []
     for candidate in candidates {
       let txn = candidate.txn
-      guard let flow = Flow.of(txn, on: probe.targetAccountID), flow == (probe.isInflow ? .out : .in) else { continue }
+      guard let flow = Flow.of(txn, on: probe.targetAccountID) else { continue }
+      let sameDirection = flow != (probe.isInflow ? .out : .in)
+      if sameDirection, !includeSameDirection { continue }
       let amount = side(of: txn, on: probe.targetAccountID)
       guard amount > 0 else { continue }
       if !needle.isEmpty {
@@ -131,11 +138,12 @@ public enum TransferCounterpartRanker {
       options.append(
         ImportCounterpartOption(
           candidate: candidate, amountMinor: amount, impliedRate: rate, expectedMinor: expected, deviation: deviation,
-          dayGap: abs(rowDay.distance(to: Day(txn.occurredAt, calendar: calendar), calendar: calendar))))
+          dayGap: abs(rowDay.distance(to: Day(txn.occurredAt, calendar: calendar), calendar: calendar)),
+          isSameDirection: sameDirection))
     }
     options.sort { a, b in
-      let ka = (a.candidate.refusal == nil ? 0 : 1, a.deviation ?? .infinity, a.dayGap, a.candidate.txn.occurredAt)
-      let kb = (b.candidate.refusal == nil ? 0 : 1, b.deviation ?? .infinity, b.dayGap, b.candidate.txn.occurredAt)
+      let ka = (a.isUsable ? 0 : 1, a.deviation ?? .infinity, a.dayGap, a.candidate.txn.occurredAt)
+      let kb = (b.isUsable ? 0 : 1, b.deviation ?? .infinity, b.dayGap, b.candidate.txn.occurredAt)
       if ka != kb { return ka < kb }
       return a.id.uuidString < b.id.uuidString
     }
@@ -286,6 +294,11 @@ extension ImportPreview {
     if row.review != nil {
       decisions.counterparts[id] = counterpart
       applyReviewChoice(.transfer(accountID: accountID), forRow: id)
+    } else if fileGivesTransfer(id) {
+      // C40: a transfer the file gives (Saldo, own account recognised by its number) keeps its
+      // type; only its other side changes.
+      decisions.counterparts[id] = counterpart
+      decisions.counterAccounts[id] = accountID
     } else {
       decisions.counterparts[id] = counterpart
       decisions.transfers[id] = accountID
@@ -299,7 +312,7 @@ extension ImportPreview {
   /// Rows that can take a transfer with a given other side: a new expense/income (also a possible
   /// duplicate imported anyway, or a row that already is such a transfer), or a Needs review row
   /// that offers "Transfer to my account".
-  private func counterpartRowIsEligible(_ id: String) -> Bool {
+  func counterpartRowIsEligible(_ id: String) -> Bool {
     guard let row = row(id), row.source.kind != .openingBalance else { return false }
     if let review = row.review {
       switch review.reason {
@@ -379,6 +392,33 @@ extension ImportPipeline {
     return TransferCounterpartRanker.rank(
       found.filter { !touched.contains($0.txn.id) }, probe: probe, converter: await converter(), calendar: calendar,
       matching: search, limit: limit)
+  }
+
+  /// C40: the transactions of `accountID` on `from…through` (inclusive) for the "Find the other
+  /// side…" sheet with its account and date pickers: every transaction of the account in that
+  /// window (an empty search lists them all), those that cannot be chosen (moving money the same
+  /// way as the row, or refused) marked and listed last. A search text filters by description,
+  /// note and amount.
+  public func counterpartOptions(
+    for preview: ImportPreview, row rowID: String, to accountID: Account.ID, from: Day, through: Day,
+    matching search: String = "", limit: Int = 300
+  ) async throws -> [ImportCounterpartOption] {
+    guard let counterparts, let probe = preview.counterpartProbe(forRow: rowID, to: accountID) else { return [] }
+    let (start, end) = from <= through ? (from, through) : (through, from)
+    let found = try await counterparts.counterpartCandidates(accountID: accountID, from: start, to: end)
+    var touched = preview.touchedExistingTxnIDs
+    // The transaction the row itself takes over stays listed (the user may keep it).
+    if let own = preview.convertedTxnID(forRow: rowID) { touched.remove(own) }
+    return TransferCounterpartRanker.rank(
+      found.filter { !touched.contains($0.txn.id) }, probe: probe, converter: await converter(), calendar: calendar,
+      matching: search, includeSameDirection: true, limit: limit)
+  }
+
+  /// C40: the transactions already stored on `accountID` on `day` (the transfer popup lists them
+  /// under each side). Empty without a counterpart repository.
+  public func transactions(onAccount accountID: Account.ID, day: Day) async throws -> [TransferCounterpartCandidate] {
+    guard let counterparts else { return [] }
+    return try await counterparts.counterpartCandidates(accountID: accountID, from: day, to: day)
   }
 
   /// Looks for the existing estimated transfer each eligible row is the real figure of and stores

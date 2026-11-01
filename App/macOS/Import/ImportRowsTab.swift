@@ -153,6 +153,11 @@ struct ImportRowView: View {
     .contentShape(Rectangle())
     // Click selects; Cmd toggles, Shift ranges (controls inside the row keep their own clicks).
     .onTapGesture { importSelect(model, row.id) }
+    // C40: double click on a transfer opens the transfer popup.
+    .simultaneousGesture(
+      TapGesture(count: 2).onEnded {
+        if model.canEditTransfer(row: row.id) { model.openTransferEditor(forRow: row.id) }
+      })
     .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }

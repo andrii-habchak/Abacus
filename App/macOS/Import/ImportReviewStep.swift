@@ -55,11 +55,21 @@ struct ImportReviewStep: View {
     }
     .sheet(
       isPresented: Binding(
-        get: { model.counterpartPicker != nil },
+        // C40: while the transfer popup is open, it presents "Find the other side…" itself.
+        get: { model.counterpartPicker != nil && model.transferEditor == nil },
         set: { if !$0 { model.cancelCounterpart() } })
     ) {
       if let picker = model.counterpartPicker {
         ImportCounterpartSheet(model: model, picker: picker.model)
+      }
+    }
+    .sheet(
+      isPresented: Binding(
+        get: { model.transferEditor != nil },
+        set: { if !$0 { model.cancelTransferEditor() } })
+    ) {
+      if let editor = model.transferEditor {
+        ImportTransferSheet(model: model, editor: editor)
       }
     }
     .sheet(
