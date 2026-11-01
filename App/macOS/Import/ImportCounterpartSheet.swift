@@ -79,6 +79,21 @@ struct ImportCounterpartSheet: View {
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
+      // C40: the other account and the date window the transactions are listed for.
+      HStack(spacing: 8) {
+        Text("Account").foregroundStyle(.secondary)
+        AccountPicker(
+          items: picker.accountItems, selection: account, placeholder: "Choose account…", width: 200,
+          accessibilityTitle: "Other account")
+        Spacer(minLength: 8)
+        DatePicker("From", selection: $picker.fromDate, displayedComponents: .date)
+          .datePickerStyle(.field)
+          .fixedSize()
+        DatePicker("to", selection: $picker.throughDate, displayedComponents: .date)
+          .datePickerStyle(.field)
+          .fixedSize()
+      }
+      .font(.system(size: 12))
       TextField("Search description, note or amount", text: $picker.search)
         .textFieldStyle(.roundedBorder)
       list
@@ -96,8 +111,8 @@ struct ImportCounterpartSheet: View {
       }
     }
     .padding(20)
-    .frame(width: 560, height: 600)
-    .task(id: picker.search) {
+    .frame(width: 620, height: 640)
+    .task(id: picker.query) {
       // A short pause so typing does not query on every keystroke.
       try? await Task.sleep(for: .milliseconds(150))
       if Task.isCancelled { return }
@@ -110,7 +125,7 @@ struct ImportCounterpartSheet: View {
     if picker.options.isEmpty {
       VStack {
         Spacer()
-        Text(picker.isLoading ? "Searching…" : "No matching transaction within 5 days. Type to search further back.")
+        Text(picker.isLoading ? "Searching…" : picker.emptyText)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
         Spacer()
@@ -143,6 +158,10 @@ struct ImportCounterpartSheet: View {
       }
       .listStyle(.bordered)
     }
+  }
+
+  private var account: Binding<Account.ID?> {
+    Binding(get: { picker.accountID }, set: { if let id = $0 { picker.selectAccount(id) } })
   }
 
   private var noCounterpartYet: some View {

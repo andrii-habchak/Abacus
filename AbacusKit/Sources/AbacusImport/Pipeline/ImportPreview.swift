@@ -84,6 +84,12 @@ public struct ImportPreview: Sendable {
     var counterparts: [String: TransferCounterpart] = [:]
     /// C38: accepted and declined matches with an estimated transfer.
     var estimates: [String: ImportEstimateDecision] = [:]
+    /// C40: the statement-side account the user chose for a transfer row (same currency as the
+    /// file's account; see `ImportTransferEdit.swift`).
+    var ownAccounts: [String: Account.ID] = [:]
+    /// C40: the other account of a transfer the file itself gives (Saldo transfers, own accounts
+    /// recognised by their number), chosen by the user.
+    var counterAccounts: [String: Account.ID] = [:]
   }
 
   init(
@@ -612,7 +618,7 @@ private struct Resolver {
   private mutating func resolve(_ i: Int) -> (PreviewRow, RowPlan) {
     let source = parsed[i]
     let found = analysis[i]
-    let account = preview.accountRef(source.account)
+    let account = preview.statementAccount(of: source)
     var row = PreviewRow(
       source: source, status: .new, detail: nil, type: nil, account: account,
       counterAccount: source.counterAccount.map(preview.accountRef), amountMinor: source.amountMinor,
@@ -685,6 +691,11 @@ private struct Resolver {
     var shape = baseShape(source, found)
     row.type = shape.type
     var transferRuleDetail: String?
+    if shape.type == .transfer, let target = decisions.counterAccounts[source.id] {
+      // C40: the user chose the other account of a transfer the file gives.
+      applyCounterAccount(target, source: source, account: account, shape: &shape, row: &row)
+      transferRuleDetail = "Transfer to “\(preview.name(of: AccountRef.existing(target)))” (chosen)"
+    }
     // C31: a transfer the user chose for this row wins over rules and debt decisions.
     var userTransfer: (CategoryRule?, Account.ID, Int64)?
     // C38: the other side the user gave (found transaction, typed or estimated amount) wins over
@@ -752,7 +763,9 @@ private struct Resolver {
       row.createsTransaction = false
       return (row, .convert(absorbed, shape))
     }
-    if let other = found.completesTransfer {
+    if let other = found.completesTransfer,
+      decisions.counterAccounts[source.id].map({ other.accountID == $0 || other.toAccountID == $0 }) ?? true
+    {
       row.detail = "Completes the transfer imported from the other account on \(dayText(other.occurredAt))"
       return (row, .convert(other, shape))
     }
@@ -788,7 +801,7 @@ private struct Resolver {
 
   private func baseShape(_ source: NormalizedRow, _ found: RowAnalysis) -> TxnShape {
     var shape = TxnShape(
-      type: .expense, from: preview.accountRef(source.account), amountMinor: source.amountMinor,
+      type: .expense, from: preview.statementAccount(of: source), amountMinor: source.amountMinor,
       isRefund: source.isRefund, lines: source.lines, occurredAt: source.occurredAt, payee: source.payee,
       note: source.note, original: source.original, isPending: source.isPending,
       bookedDay: bookedDay(source), fingerprints: source.fingerprints)
@@ -800,6 +813,12 @@ private struct Resolver {
       shape.toAmountMinor = transfer.toAmountMinor
       shape.isRefund = false
       shape.original = nil
+      // C40: the statement-side account the user chose replaces the file's account.
+      let fileAccount = preview.accountRef(source.account)
+      let own = preview.statementAccount(of: source)
+      if own != fileAccount {
+        if shape.from == fileAccount { shape.from = own } else if shape.to == fileAccount { shape.to = own }
+      }
       return shape
     }
     switch source.kind {
@@ -1039,7 +1058,7 @@ private struct Resolver {
     guard from == .user, !decisions.noRule.contains(source.id), source.category == nil,
       case .some(.some) = decisions.categories[source.id]
     else { return nil }
-    let accountID: Account.ID? = if case .existing(let id) = preview.accountRef(source.account) { id } else { nil }
+    let accountID: Account.ID? = if case .existing(let id) = preview.statementAccount(of: source) { id } else { nil }
     let kind: CategoryKind = source.kind == .income ? .income : .expense
     if matcher.match(description: source.payee, accountID: accountID, kind: kind) != nil { return nil }
     let pattern = decisions.rulePatterns[source.id] ?? RulePattern.derive(from: source.payee)
@@ -1158,7 +1177,7 @@ private struct Resolver {
     }
     guard let choice else { return (row, .nothing) }
 
-    let account = preview.accountRef(source.account)
+    let account = preview.statementAccount(of: source)
     let flow = source.flow ?? .out
     var shape = TxnShape(
       type: .expense, from: account, amountMinor: source.amountMinor, lines: source.lines,
@@ -1280,6 +1299,40 @@ private struct Resolver {
       row.counterAmountMinor = existing.amountMinor
       return (row, .convert(existing, shape))
     }
+  }
+
+  /// C40: the other side of a transfer the file gives becomes `target`. Its amount: the one the
+  /// user gave (found transaction, typed or estimated), else the old other side's amount when the
+  /// currency is the same, else the row's own amount in the same currency, else what the file says
+  /// in that currency. Without any of them the commit is blocked with an issue.
+  private mutating func applyCounterAccount(
+    _ target: Account.ID, source: NormalizedRow, account: AccountRef, shape: inout TxnShape, row: inout PreviewRow
+  ) {
+    guard let other = preview.context.account(target), account != .existing(target) else { return }
+    let ownIsFrom = shape.from == account
+    let oldOther: AccountRef? = ownIsFrom ? shape.to : shape.from
+    let oldOtherAmount = ownIsFrom ? (shape.toAmountMinor ?? shape.amountMinor) : shape.amountMinor
+    let ownAmount = ownIsFrom ? shape.amountMinor : (shape.toAmountMinor ?? shape.amountMinor)
+    let ownCurrency = preview.currency(of: account)
+    let counterpart = decisions.counterparts[source.id].flatMap { $0.accountID == target ? $0 : nil }
+    var otherAmount = counterpart?.amountMinor
+    if otherAmount == nil, let oldOther, preview.currency(of: oldOther) == other.currency { otherAmount = oldOtherAmount }
+    if otherAmount == nil, ownCurrency == other.currency { otherAmount = ownAmount }
+    if otherAmount == nil { otherAmount = amount(of: source, in: other.currency, accountCurrency: ownCurrency) }
+    guard let otherAmount else {
+      issues.append("“\(source.payee)”: the amount in \(other.currency.rawValue) is unknown; find the other side or give the amount")
+      return
+    }
+    if ownIsFrom {
+      shape.to = .existing(target)
+      shape.toAmountMinor = otherAmount
+    } else {
+      shape.from = .existing(target)
+      shape.amountMinor = otherAmount
+    }
+    row.counterAccount = .existing(target)
+    row.counterAmountMinor = otherAmount
+    if let counterpart { applyCounterpart(counterpart, shape: &shape, row: &row, flow: ownIsFrom ? .out : .in) }
   }
 
   /// The row's amount in `currency`: itself, the in-transit amount or the original amount.

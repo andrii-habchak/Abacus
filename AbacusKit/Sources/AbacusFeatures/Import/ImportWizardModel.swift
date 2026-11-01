@@ -90,6 +90,8 @@ public final class ImportWizardModel {
   public var refundPicker: ImportRefundPicker?
   /// C38: the "Find the other side…" sheet of a row's transfer; nil when closed.
   public var counterpartPicker: ImportCounterpartPicker?
+  /// C40: the transfer popup of a row (double click); nil when closed.
+  public var transferEditor: ImportTransferEditor?
   /// C31: what the last bulk action did ("Category set on 12 rows"), shown in the bulk bar.
   public internal(set) var bulkMessage: String?
   /// C31: the state before the last bulk action (undo of one step).
