@@ -356,6 +356,14 @@ struct RuleEditorSheet: View {
           Text("Not case sensitive; accents ignored")
             .font(.caption)
             .foregroundStyle(.secondary)
+          if TextFolding.hasUnreadable(draft.pattern) {
+            Text(
+              "This text has unreadable characters (shown as a box), copied from the bank text. Each matches any one character; retype the word to replace them."
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+          }
         }
       }
     }
