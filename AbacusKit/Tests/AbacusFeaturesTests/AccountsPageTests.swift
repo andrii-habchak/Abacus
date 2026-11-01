@@ -26,6 +26,29 @@ struct AccountsPageTests {
 
   func names(_ model: AccountsModel) -> [String] { model.rows.map(\.name) }
 
+  // MARK: Show all transactions (C43)
+
+  @Test("C43: the context menu action sends an account, or all accounts of a group, to the session")
+  func showTransactionsAction() async {
+    let model = await model()
+    var shown: [Set<UUID>] = []
+    model.onShowTransactions = { shown.append($0) }
+    model.showTransactions(of: usd)
+    model.showTransactions(of: UUID())
+    model.showTransactions(of: pko)
+    #expect(shown == [[usd], Set(model.accounts.filter { $0.groupID == pko }.map(\.id))])
+    #expect(shown[1].contains(personal) && shown[1].count == 3)
+  }
+
+  @Test("C43: the session opens Transactions on those accounts with all dates")
+  func sessionShowsAccounts() {
+    let session = AppSession.preview()
+    session.showTransactions(ofAccounts: [usd])
+    #expect(session.app.section == .transactions)
+    #expect(session.app.pendingTransactionFilters?.accountIDs == [usd])
+    #expect(session.app.pendingTransactionFilters?.dateRange == TransactionFilters.allDates)
+  }
+
   // MARK: Groups
 
   @Test("R-MGMT-9: a group shows its account count and the sum of its accounts in the display currency")

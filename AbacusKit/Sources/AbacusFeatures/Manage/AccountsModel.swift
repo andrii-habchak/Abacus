@@ -188,6 +188,8 @@ public final class AccountsModel {
   /// Called after this screen changed data other screens show (names, colours: R-MGMT-7),
   /// so the transaction list and the dashboard re-read it.
   @ObservationIgnored public var onDataChange: (@MainActor () async -> Void)?
+  /// "Show all transactions" in a row's context menu (C43): the accounts to filter the list by.
+  @ObservationIgnored public var onShowTransactions: (@MainActor (Set<Account.ID>) -> Void)?
   /// The selection before "New account" / "New group", given back when the sheet is cancelled.
   @ObservationIgnored private var selectionBeforeNew: UUID?
   @ObservationIgnored private var converter: (any CurrencyConverter)?
@@ -609,6 +611,24 @@ public final class AccountsModel {
       colorHex: ColorPalette.pick(avoiding: accounts.map(\.colorHex)))
     self.draft = draft
     sheet = .account(draft)
+  }
+
+  // MARK: Context menu: show transactions (C43)
+
+  /// "Show all transactions": the Transactions page filtered to this account, or to every account
+  /// of the group (archived ones included), every date. Does nothing for an unknown row or an
+  /// empty group.
+  public func showTransactions(of id: UUID) {
+    let ids: Set<Account.ID>
+    if account(id) != nil {
+      ids = [id]
+    } else if group(id) != nil {
+      ids = Set(accounts.filter { $0.groupID == id }.map(\.id))
+    } else {
+      return
+    }
+    guard !ids.isEmpty else { return }
+    onShowTransactions?(ids)
   }
 
   // MARK: Editor sheet (D55)

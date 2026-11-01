@@ -87,6 +87,8 @@ public final class AppSession {
     categories.onDataChange = referenceChanged
     // "Show all transactions" in a category's context menu (C33).
     categories.onShowTransactions = { [weak self] id in self?.showTransactions(ofCategory: id) }
+    // "Show all transactions" in an account's or group's context menu (C43).
+    accounts.onShowTransactions = { [weak self] ids in self?.showTransactions(ofAccounts: ids) }
     events.onDataChange = referenceChanged
     // A rule applied to existing transactions or rolled back (C9): the list, the dashboard and
     // balances follow at once.
@@ -366,6 +368,13 @@ public final class AppSession {
     }
     guard let category = categories.category(id) else { return }
     app.showTransactions(.category(category.id, kind: category.kind, dateRangeBefore: before))
+  }
+
+  /// An account's (or a group's accounts') "Show all transactions" (Accounts page, C43): the list
+  /// filtered to those accounts, every date.
+  public func showTransactions(ofAccounts ids: Set<Account.ID>) {
+    guard !ids.isEmpty else { return }
+    app.showTransactions(TransactionFilters(dateRange: TransactionFilters.allDates, accountIDs: ids))
   }
 
   /// An import's "Show transactions" (done step, history): the list filtered to the

@@ -19,7 +19,7 @@ source is copied into this folder (`<n>-<name>.dc.html`).
 
 ### 1 · Shell + Dashboard
 - Sidebar: Overview (Dashboard, Transactions, Events), Manage (Accounts, Categories, Budget,
-  Import, Exchange rates, Rules), Settings at the bottom.
+  Rules, Exchange rates, Import), Settings at the bottom.
 - Toolbar: title, "NBU rates · <date>", display-currency segmented control (UAH/PLN/EUR/USD),
   "New transaction".
 - Net worth: headline = today; change since last month-end; 12-month line chart (month-end

@@ -120,8 +120,8 @@ struct AppModelTests {
   @Test("R-DEBT-5 sidebar order: Overview (with Debts) then Manage; ⌘1…⌘9, then ⌘0 for the tenth")
   func sectionOrder() {
     #expect(AppModel.sectionsInOrder.map(\.title) == [
-      "Dashboard", "Transactions", "Events", "Debts", "Accounts", "Categories", "Budget", "Import", "Exchange rates",
-      "Rules",
+      "Dashboard", "Transactions", "Events", "Debts", "Accounts", "Categories", "Budget", "Rules", "Exchange rates",
+      "Import",
     ])
     #expect(AppModel.shortcutKeys == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
   }

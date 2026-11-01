@@ -113,5 +113,5 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
   }
 
   public static let overview: [AppSection] = [.dashboard, .transactions, .events, .debts]
-  public static let manage: [AppSection] = [.accounts, .categories, .budget, .importFiles, .rates, .rules]
+  public static let manage: [AppSection] = [.accounts, .categories, .budget, .rules, .rates, .importFiles]
 }
