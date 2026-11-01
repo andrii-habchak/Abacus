@@ -2,6 +2,29 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.6.0] — Unreleased
+
+No database migration beyond 1.5.1; back up `abacus.sqlite` first anyway.
+
+### Added
+
+- Import: transfer popup (double-click a transfer row) to change From and To accounts, see what it relates to,
+  and change the matched transaction; "Find the other side…" has an account picker and a date window and lists
+  everything when the search is empty.
+- Import: sortable columns in the review lists; History "Move to another account…" for a PKO batch; warnings
+  when the target account looks wrong.
+- Rules: Ł and other special letters match their plain forms; resolving a review card suggests a rule.
+- About panel shows the author and the GitHub link.
+
+### Changed
+
+- Import step bar reads Choose file → Review → Done (no numbers); "Undo import" has no ellipsis and is disabled
+  for undone batches.
+
+### Fixed
+
+- Undo import from History did nothing (the confirmation cleared the batch before the undo ran).
+
 ## [1.5.1] — Unreleased
 
 Opening this version updates the database (migration v16: estimated transfer amounts and import snapshots);

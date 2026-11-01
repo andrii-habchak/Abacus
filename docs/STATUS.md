@@ -4,7 +4,7 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
-_Updated 2026-11-01 (orchestrator, newest)._ Also on `main`: C44 (History "Move to another account…" on the review list,
+_Updated 2026-11-01 (orchestrator, newest). Version 1.6.0 (build 12), DMG built for owner testing, not tagged. Also on `main`: C44 (History "Move to another account…" on the review list,
 "Undo import" label, Undone badge and disabled buttons; interpretations in `docs/status/C44.md`), step bar without
 numbers, About panel with author and GitHub link. Gate green (565 tests, app build). Not checked visually.
 
