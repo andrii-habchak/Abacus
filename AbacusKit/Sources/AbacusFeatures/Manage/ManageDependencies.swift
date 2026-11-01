@@ -57,7 +57,8 @@ public struct ManageDependencies: Sendable {
 extension ManageDependencies {
   /// The real store and rate refresher.
   public static func live(
-    database: any DatabaseWriter, refresher: RateRefresher, format: ManageFormat = ManageFormat()
+    database: any DatabaseWriter, refresher: RateRefresher, format: ManageFormat = ManageFormat(),
+    now: @escaping @Sendable () -> Date = { Date() }
   ) -> ManageDependencies {
     let calendar = format.calendar
     return ManageDependencies(
@@ -69,7 +70,7 @@ extension ManageDependencies {
       rules: SQLiteRuleRepository(database: database, calendar: calendar),
       settings: SQLiteSettingsRepository(database: database),
       converter: { await refresher.snapshot.table },
-      today: { Day(Date(), calendar: calendar) }, format: format,
+      today: { Day(now(), calendar: calendar) }, format: format,
       debts: SQLiteDebtRepository(database: database, calendar: calendar))
   }
 

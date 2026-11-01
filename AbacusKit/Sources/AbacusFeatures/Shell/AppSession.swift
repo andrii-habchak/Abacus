@@ -182,7 +182,7 @@ public final class AppSession {
       app: AppModel(environment: environment),
       dashboard: DashboardModel(dependencies: .live(database: database, refresher: refresher)),
       transactions: transactions, editorDependencies: editor,
-      manage: .live(database: database, refresher: refresher),
+      manage: .live(database: database, refresher: refresher, now: now),
       debts: .live(database: database, refresher: refresher), database: database, refresher: refresher)
     relay.session = session
     session.rebuild = { moved in

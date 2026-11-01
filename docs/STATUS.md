@@ -4,6 +4,15 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-01 (orchestrator, latest)._ **C40–C43 are on `main`** (not versioned/tagged): C40 transfer popup
+(double-click, From/To, related transactions, Change transaction) and account + date window in the counterpart
+sheet; C41 import column sorting, undo fix (confirm button cleared the batch before the task ran), target-account
+warnings; C42 special-letter folding in rule matching (Ł etc.) and rule suggestions for review resolutions;
+C43 account "Show all transactions", Rules before Import in the sidebar. Budget test wiring fixed
+(`ManageDependencies.live` now uses the session clock). Gate green; new UI not checked visually.
+Proposals not built (see `docs/status/C41.md`): History "Move to another account…", "Replace with a new file…",
+balance-continuity account detection.
+
 _Updated 2026-10-31 (orchestrator, latest)._ **1.5.1 is on `main`** (build 11, not tagged): C36 import review
 (selection fix, merged Needs review tab, rules resolve unknown types), C37 searchable account pickers and Edit
 rule layout, C38 own-account transfer counterparts (migration v16), C39 re-assign search and built-in target.
