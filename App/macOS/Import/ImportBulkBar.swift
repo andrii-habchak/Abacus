@@ -8,7 +8,7 @@ import SwiftUI
 
 /// Click on a row or card: plain = this one, Cmd = toggle, Shift = range (Accounts/Categories manner).
 @MainActor
-func importSelect(_ model: ImportWizardModel, _ id: String) {
+func importSelect(_ model: any ImportRowSelecting, _ id: String) {
   // The modifiers of the click being handled, else the keyboard state right now.
   let flags = (NSApp.currentEvent?.modifierFlags ?? []).union(NSEvent.modifierFlags)
   if flags.contains(.shift) {

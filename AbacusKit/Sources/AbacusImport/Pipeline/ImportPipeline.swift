@@ -82,7 +82,7 @@ public struct ImportPipeline: Sendable {
 
     var target: Account?
     var remembered = false
-    let parsed: ParsedImport
+    var parsed: ParsedImport
     switch source {
     case .saldo:
       parsed = try SaldoParser(timeZone: calendar.timeZone).parse(data)
@@ -96,6 +96,7 @@ public struct ImportPipeline: Sendable {
       guard let account = context.account(id) else { throw ImportPipelineError.unknownAccount }
       target = account
       parsed = try PKOParser(account: account, calendar: calendar).parse(data)
+      parsed.rows = try movedKeys(of: data, rows: parsed.rows, currency: account.currency, accounts: context.accounts)
     }
     context.mappings = context.mappings.filter { $0.source == source }
 

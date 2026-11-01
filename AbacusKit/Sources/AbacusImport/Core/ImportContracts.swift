@@ -133,6 +133,10 @@ public struct NormalizedRow: Hashable, Sendable, Identifiable {
   public var counterpartyIBAN: String?
   /// Problems the preview should show for this row (e.g. unbalanced legs).
   public var warnings: [String]
+  /// C44 (PKO): the moved keys this row would have if it had been imported into another account
+  /// of the statement's currency and then moved (`ImportFingerprint.movedID`). Looked up only,
+  /// never stored; set by the pipeline.
+  public var movedFingerprints: [String] = []
 
   public var id: String { fingerprints[0] }
 

@@ -99,6 +99,16 @@ struct RowAnalyzer {
     for (i, row) in rows.enumerated() {
       result[i].exactTxnID = row.fingerprints.lazy.compactMap { existing[$0] }.first
     }
+    // C44: rows of a batch moved to this account ("Move to another account…") are imported here.
+    let movedKeys = rows.flatMap(\.movedFingerprints)
+    if let targetAccountID, !movedKeys.isEmpty {
+      let owners = try await store.fingerprintOwners(movedKeys)
+      for (i, row) in rows.enumerated() where result[i].exactTxnID == nil {
+        result[i].exactTxnID = row.movedFingerprints.lazy
+          .compactMap { owners[$0] }
+          .first { $0.accountIDs.contains(targetAccountID) }?.txnID
+      }
+    }
 
     let ibanIndex = Dictionary(
       context.accounts.compactMap { account in

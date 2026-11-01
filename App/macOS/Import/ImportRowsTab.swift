@@ -61,7 +61,8 @@ struct ImportRowsTab: View {
 /// C41: a click sorts by the column (ascending, descending, back to the file's order).
 struct ImportRowsHeader: View {
   let columns: ImportColumns
-  let model: ImportWizardModel
+  /// The review (C41) or the "Move to another account" list (C44).
+  let model: any ImportRowSorting
 
   var body: some View {
     let c = columns
@@ -111,6 +112,35 @@ struct ImportRowView: View {
 
   var body: some View {
     HStack(alignment: .center, spacing: ImportColumns.spacing) {
+      ImportRowCells(row: row, columns: columns)
+      ImportRowActions(model: model, row: row)
+        .frame(width: columns.category, alignment: .leading)
+    }
+    .font(.system(size: 13))
+    .padding(.horizontal, ImportMetrics.horizontalPadding)
+    .padding(.vertical, 7)
+    .frame(minHeight: 40)
+    .background(isSelected ? ImportPalette.accentFill : Color.clear)
+    .contentShape(Rectangle())
+    // Click selects; Cmd toggles, Shift ranges (controls inside the row keep their own clicks).
+    .onTapGesture { importSelect(model, row.id) }
+    // C40: double click on a transfer opens the transfer popup.
+    .simultaneousGesture(
+      TapGesture(count: 2).onEnded {
+        if model.canEditTransfer(row: row.id) { model.openTransferEditor(forRow: row.id) }
+      })
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+  }
+}
+
+/// The cells of a row up to the Category / action column: status, date, description, account,
+/// amount. Shared by the review list and the "Move to another account" list (C44).
+struct ImportRowCells: View {
+  let row: ImportRowItem
+  let columns: ImportColumns
+
+  var body: some View {
+    Group {
       ImportBadge(text: row.statusLabel, colors: ImportPalette.badge(row.status))
         .frame(width: columns.status, alignment: .leading)
       Text(row.date)
@@ -142,23 +172,7 @@ struct ImportRowView: View {
         .minimumScaleFactor(0.8)
         .opacity(row.isDimmed ? 0.5 : 1)
         .frame(width: columns.amount, alignment: .trailing)
-      ImportRowActions(model: model, row: row)
-        .frame(width: columns.category, alignment: .leading)
     }
-    .font(.system(size: 13))
-    .padding(.horizontal, ImportMetrics.horizontalPadding)
-    .padding(.vertical, 7)
-    .frame(minHeight: 40)
-    .background(isSelected ? ImportPalette.accentFill : Color.clear)
-    .contentShape(Rectangle())
-    // Click selects; Cmd toggles, Shift ranges (controls inside the row keep their own clicks).
-    .onTapGesture { importSelect(model, row.id) }
-    // C40: double click on a transfer opens the transfer popup.
-    .simultaneousGesture(
-      TapGesture(count: 2).onEnded {
-        if model.canEditTransfer(row: row.id) { model.openTransferEditor(forRow: row.id) }
-      })
-    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }
 
