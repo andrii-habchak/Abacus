@@ -226,6 +226,10 @@ public struct PreviewRow: Identifiable, Hashable, Sendable {
   public internal(set) var categorySource: CategorySource
   /// The rule pattern this row's category choice will be saved as (R-IMP-8).
   public internal(set) var rulePattern: String?
+  /// C42: what a rule saved from this row's choice does (set for the rows a rule can be learned
+  /// from: category picks and the resolutions of unknown operation types); `rulePattern` is set
+  /// too unless the user turned the rule off.
+  public internal(set) var learnedAction: LearnedAction?
   public internal(set) var duplicate: DuplicateInfo?
   public internal(set) var review: ReviewInfo?
   /// The debt record the row becomes (R-DEBT-10/12).
@@ -294,13 +298,36 @@ public struct EventCandidate: Identifiable, Hashable, Sendable {
   public internal(set) var isSelected: Bool
 }
 
-/// A rule the commit saves (R-IMP-8).
+/// What a learned rule does (C42): the choices a rule can express.
+public enum LearnedAction: Hashable, Sendable {
+  case category(AbacusDomain.Category.ID)
+  case transfer(Account.ID)
+  case debt(person: String)
+}
+
+/// A rule the commit saves (R-IMP-8, C42).
 public struct RuleProposal: Identifiable, Hashable, Sendable {
-  public var id: String { pattern }
+  public var id: String { "\(pattern)|\(action)" }
   public let pattern: String
-  public let categoryID: AbacusDomain.Category.ID
-  /// Rows of this import it categorises (the one chosen included).
+  public let action: LearnedAction
+  /// Rows of this import it applies to (the one chosen included).
   public let rowCount: Int
+
+  /// The category of a category rule; nil for transfer and debt rules.
+  public var categoryID: AbacusDomain.Category.ID? {
+    if case .category(let id) = action { return id }
+    return nil
+  }
+
+  public init(pattern: String, categoryID: AbacusDomain.Category.ID, rowCount: Int) {
+    self.init(pattern: pattern, action: .category(categoryID), rowCount: rowCount)
+  }
+
+  public init(pattern: String, action: LearnedAction, rowCount: Int) {
+    self.pattern = pattern
+    self.action = action
+    self.rowCount = rowCount
+  }
 }
 
 public enum ImportPipelineError: Error, Equatable, Sendable {

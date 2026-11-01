@@ -671,7 +671,7 @@ private struct Resolver {
       row.detail = "Completes the transfer of \(dayText(estimated.txn.occurredAt)) (estimated amount)"
       return (row, .completeEstimate(estimated.txn, side, source.amountMinor, source.fingerprints))
     }
-    if let reason = found.review, !ruleResolvesUnknownType(source, reason: reason, account: account) {
+    if let reason = found.review, !ruleResolvesUnknownType(source, found, reason: reason, account: account) {
       return review(i, row, reason)
     }
     if decisions.excluded.contains(source.id) {
@@ -764,13 +764,26 @@ private struct Resolver {
   /// matches and its category is of that sign's kind (money in = income, money out = expense) the
   /// row is mapped by the rule and does not wait in Needs review. A choice the user already made
   /// on the row keeps it in review; other review reasons (transfers) are never touched.
-  private func ruleResolvesUnknownType(_ source: NormalizedRow, reason: ReviewReason, account: AccountRef) -> Bool {
+  private func ruleResolvesUnknownType(_ source: NormalizedRow, _ found: RowAnalysis, reason: ReviewReason, account: AccountRef) -> Bool {
     guard case .unknownOperationType = reason, decisions.reviews[source.id] == nil, let flow = source.flow else { return false }
     let kind: CategoryKind = flow == .in ? .income : .expense
     // The row must be recorded as that kind without being a refund of the other one.
     guard source.kind == (kind == .income ? .income : .expense), !source.isRefund else { return false }
     let accountID: Account.ID? = if case .existing(let id) = account { id } else { nil }
-    return matcher.match(description: source.payee, accountID: accountID, kind: kind, amountMinor: abs(source.amountMinor)) != nil
+    if matcher.match(description: source.payee, accountID: accountID, kind: kind, amountMinor: abs(source.amountMinor)) != nil {
+      return true
+    }
+    // C42: a transfer or debt rule (what a resolution of this card is saved as) resolves it too,
+    // when the first matching rule can act on the row.
+    let subject = RuleSubject(description: source.payee, accountID: accountID, amountMinor: abs(source.amountMinor), kind: kind)
+    guard let rule = matcher.match(subject) else { return false }
+    switch rule.action {
+    case .category: return false
+    case .debt: return true
+    case .transfer:
+      let shape = baseShape(source, found)
+      return transferTarget(rule, source: source, shape: shape, account: account) != nil
+    }
   }
 
   private func baseShape(_ source: NormalizedRow, _ found: RowAnalysis) -> TxnShape {
@@ -1033,33 +1046,82 @@ private struct Resolver {
     return pattern.isEmpty ? nil : pattern
   }
 
+  /// C42: what a rule saved from a resolved Needs review row would do. Only for rows of unknown
+  /// operation type (a rule then resolves later rows of the same payee, `ruleResolvesUnknownType`),
+  /// resolved as expense/income of the sign's kind with a category, as a transfer to an own
+  /// account, or as a transfer to a debt. Skip, pairing and a category-less record are not
+  /// expressible as a rule. Nil when an enabled rule already matches the row.
+  private func reviewRule(_ row: PreviewRow) -> (pattern: String, action: LearnedAction)? {
+    guard let review = row.review, case .unknownOperationType = review.reason, let choice = review.choice,
+      row.createsTransaction, let flow = row.source.flow
+    else { return nil }
+    let kind: CategoryKind = flow == .in ? .income : .expense
+    let action: LearnedAction
+    switch choice {
+    case .record(let recorded, let categoryID?) where recorded == kind: action = .category(categoryID)
+    case .transfer(let accountID): action = .transfer(accountID)
+    case .debt(let debt):
+      let person = debt.personName.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !person.isEmpty else { return nil }
+      action = .debt(person: person)
+    default: return nil
+    }
+    let accountID: Account.ID? = if case .existing(let id) = row.account { id } else { nil }
+    let subject = RuleSubject(description: row.source.payee, accountID: accountID, amountMinor: abs(row.source.amountMinor), kind: kind)
+    if matcher.match(subject) != nil { return nil }
+    let pattern = decisions.rulePatterns[row.id] ?? RulePattern.derive(from: row.source.payee)
+    return pattern.isEmpty ? nil : (pattern, action)
+  }
+
   /// R-IMP-8: proposals from the user's picks, applied at once to the other rows of this
-  /// import that have no category.
+  /// import that have no category. C42: also from the resolutions of unknown operation types
+  /// (category, transfer to an own account, transfer to a debt); those are saved as rules but
+  /// not applied to other rows of this import (the user decides them in review).
   private mutating func learnRules() {
-    var learned: [(pattern: String, categoryID: AbacusDomain.Category.ID, kind: CategoryKind)] = []
-    for row in rows {
-      guard let pattern = row.rulePattern, case .existing(let id)? = row.category,
-        let category = preview.context.category(id), !learned.contains(where: { $0.pattern == pattern })
-      else { continue }
-      learned.append((pattern, id, category.kind))
+    var learned: [(pattern: String, action: LearnedAction, kind: CategoryKind?)] = []
+    func add(_ pattern: String, _ action: LearnedAction, _ kind: CategoryKind?) {
+      if !learned.contains(where: { $0.pattern == pattern && $0.action == action }) { learned.append((pattern, action, kind)) }
+    }
+    for i in rows.indices {
+      if let rule = reviewRule(rows[i]) {
+        rows[i].learnedAction = rule.action
+        if !decisions.noRule.contains(rows[i].id) { rows[i].rulePattern = rule.pattern }
+      }
+      guard let pattern = rows[i].rulePattern else { continue }
+      if case .existing(let id)? = rows[i].category, let category = preview.context.category(id),
+        rows[i].review == nil
+      {
+        rows[i].learnedAction = .category(id)
+        add(pattern, .category(id), category.kind)
+      } else if let action = rows[i].learnedAction {
+        add(pattern, action, nil)
+      }
     }
     guard !learned.isEmpty else { return }
-    var hits = Dictionary(learned.map { ($0.pattern, 0) }, uniquingKeysWith: { a, _ in a })
+    func key(_ pattern: String, _ action: LearnedAction) -> String { "\(pattern)|\(action)" }
+    var hits = Dictionary(learned.map { (key($0.pattern, $0.action), 0) }, uniquingKeysWith: { a, _ in a })
     for i in rows.indices {
-      if let pattern = rows[i].rulePattern { hits[pattern, default: 0] += 1; continue }
+      if let pattern = rows[i].rulePattern, let action = rows[i].learnedAction {
+        hits[key(pattern, action), default: 0] += 1
+        continue
+      }
       guard rows[i].categorySource == .none, rows[i].createsTransaction, decisions.categories[rows[i].id] == nil,
         rows[i].review == nil, case .create(var shape) = plans[i]
       else { continue }
       let kind: CategoryKind = rows[i].type == .income ? .income : .expense
       let text = RulePattern.normalized(rows[i].source.payee)
-      guard let rule = learned.first(where: { $0.kind == kind && text.contains($0.pattern) }) else { continue }
-      rows[i].category = .existing(rule.categoryID)
+      guard let rule = learned.first(where: {
+        guard case .category = $0.action else { return false }
+        return $0.kind == kind && TextFolding.matches(text: text, pattern: $0.pattern, mode: .contains)
+      }), case .category(let categoryID) = rule.action
+      else { continue }
+      rows[i].category = .existing(categoryID)
       rows[i].categorySource = .learnedRule(pattern: rule.pattern)
-      shape.category = .existing(rule.categoryID)
+      shape.category = .existing(categoryID)
       plans[i] = .create(shape)
-      hits[rule.pattern, default: 0] += 1
+      hits[key(rule.pattern, rule.action), default: 0] += 1
     }
-    proposals = learned.map { RuleProposal(pattern: $0.pattern, categoryID: $0.categoryID, rowCount: hits[$0.pattern] ?? 1) }
+    proposals = learned.map { RuleProposal(pattern: $0.pattern, action: $0.action, rowCount: hits[key($0.pattern, $0.action)] ?? 1) }
   }
 
   // MARK: Review

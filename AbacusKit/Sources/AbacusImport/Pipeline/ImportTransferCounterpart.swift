@@ -169,8 +169,8 @@ public enum TransferCounterpartRanker {
   }
 
   private static func fold(_ text: String) -> String {
-    text.trimmingCharacters(in: .whitespacesAndNewlines)
-      .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+    TextFolding.fold(text.trimmingCharacters(in: .whitespacesAndNewlines))
+      .folding(options: [.widthInsensitive], locale: nil)
   }
 
   /// A search text that is an amount ("100", "100,5"): digits and one separator, as written with a dot.

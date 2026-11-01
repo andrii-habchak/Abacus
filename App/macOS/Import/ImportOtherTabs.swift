@@ -311,6 +311,15 @@ struct ImportReviewCard: View {
       if item.selected == .transfer, let counterpart = item.counterpart {
         ImportCounterpartLine(model: model, rowID: item.id, counterpart: counterpart)
       }
+      if let note = item.ruleNote, let saves = item.savesRule {
+        // C42: the resolution becomes a rule like a category pick does; one click turns it off.
+        HStack(spacing: 8) {
+          Text(note).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+          Button(saves ? "Don't save" : "Save as rule") { model.setSavesRule(!saves, forRow: item.id) }
+            .buttonStyle(.link)
+            .font(.system(size: 11))
+        }
+      }
       if item.selected == nil {
         Text("Needs a decision — the suggestion is marked.")
           .font(.system(size: 11))

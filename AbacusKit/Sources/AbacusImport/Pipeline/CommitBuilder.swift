@@ -352,10 +352,18 @@ struct CommitBuilder {
     var rules: [CategoryRule] = []
     var rulePosition = (context.rules.map(\.position).max() ?? -1) + 1
     for proposal in preview.rulesToSave {
-      rules.append(
-        CategoryRule(
-          pattern: proposal.pattern, categoryID: proposal.categoryID, origin: .imported,
-          hitCount: proposal.rowCount, position: rulePosition))
+      var rule = CategoryRule(
+        pattern: proposal.pattern, action: .category, origin: .imported, hitCount: proposal.rowCount, position: rulePosition)
+      switch proposal.action {
+      case .category(let id): rule.categoryID = id
+      case .transfer(let id):
+        rule.action = .transfer
+        rule.transferAccountID = id
+      case .debt(let person):
+        rule.action = .debt
+        rule.debtPersonName = person
+      }
+      rules.append(rule)
       rulePosition += 1
     }
     for rule in context.rules {

@@ -55,7 +55,14 @@ public struct RuleSuggestion: Identifiable, Hashable, Sendable {
   public var pattern: String
   /// What `RulePattern.derive` gave.
   public var derived: String
-  public var categoryID: AbacusDomain.Category.ID
+  /// What the rule does (C42: a category, a transfer to an own account or to a debt).
+  public var action: LearnedAction
+  /// Set for a category rule.
+  public var categoryID: AbacusDomain.Category.ID? {
+    if case .category(let id) = action { return id }
+    return nil
+  }
+  /// The action as shown next to the pattern: the category path, "Transfer to Savings", "Transfer to debt · Ann".
   public var categoryName: String
   public var rowIDs: [String]
   /// A description of the first row, to show where the pattern comes from.
@@ -327,6 +334,7 @@ extension ImportWizardModel {
       message += " \(Self.rows(needingOtherSide.count)) need the amount on that account: select one row to find the other side."
     }
     finishBulk(message)
+    offerRules(forRows: reviewIDs)
   }
 
   /// Opens the debt sheet for the selection: the first row's amounts are shown; the choice
@@ -358,6 +366,7 @@ extension ImportWizardModel {
       }
     }
     finishBulk("\(Self.rows(count)) now transfer\(count == 1 ? "s" : "") to the debt account of “\(link.personName)”.")
+    offerRules(forRows: ids)
   }
 
   /// Excludes the selected rows from the import.
@@ -420,14 +429,12 @@ extension ImportWizardModel {
     var order: [String] = []
     var groups: [String: RuleSuggestion] = [:]
     for id in ids {
-      guard let row = preview.row(id), row.categorySource == .user, let pattern = row.rulePattern,
-        case .existing(let categoryID)? = row.category
-      else { continue }
-      let key = "\(pattern)|\(categoryID.uuidString)"
+      guard let row = preview.row(id), let pattern = row.rulePattern, let action = row.learnedAction else { continue }
+      let key = "\(pattern)|\(action)"
       if groups[key] == nil {
         order.append(key)
         groups[key] = RuleSuggestion(
-          id: key, pattern: pattern, derived: pattern, categoryID: categoryID, categoryName: categoryPath(categoryID),
+          id: key, pattern: pattern, derived: pattern, action: action, categoryName: ruleActionLabel(action),
           rowIDs: [], example: row.source.payee)
       }
       groups[key]?.rowIDs.append(id)
@@ -435,7 +442,16 @@ extension ImportWizardModel {
     return order.compactMap { groups[$0] }
   }
 
-  private func offerRules(forRows ids: [String]) {
+  /// "Food › Coffee", "Transfer to Savings", "Transfer to debt · Ann".
+  func ruleActionLabel(_ action: LearnedAction) -> String {
+    switch action {
+    case .category(let id): categoryPath(id)
+    case .transfer(let id): "Transfer to " + (accounts.first { $0.id == id }?.name ?? "an account")
+    case .debt(let person): "Transfer to debt · \(person)"
+    }
+  }
+
+  func offerRules(forRows ids: [String]) {
     let suggestions = ruleSuggestions(forRows: ids)
     ruleSheet = suggestions.isEmpty ? nil : RuleSuggestionSheet(suggestions: suggestions)
   }
