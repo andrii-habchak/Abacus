@@ -74,10 +74,19 @@ struct ImportView: View {
       model.undoConfirmationTitle,
       isPresented: Binding(get: { model.pendingUndo != nil }, set: { if !$0 { model.cancelUndo() } })
     ) {
-      Button("Undo Import", role: .destructive) { Task { await model.confirmUndo() } }
+      // Takes the batch before the dialog's dismissal clears it (C41).
+      Button("Undo Import", role: .destructive) { model.startConfirmedUndo() }
       Button("Cancel", role: .cancel) { model.cancelUndo() }
     } message: {
       Text(model.undoConfirmationMessage)
+    }
+    .alert(
+      "Import undone",
+      isPresented: Binding(get: { model.undoNotice != nil }, set: { if !$0 { model.undoNotice = nil } })
+    ) {
+      Button("OK") { model.undoNotice = nil }
+    } message: {
+      Text(model.undoNotice ?? "")
     }
     .task {
       model.onDataChanged = onDataChanged
@@ -324,7 +333,9 @@ struct ImportHistoryPanel: View {
       ScrollView {
         VStack(spacing: 10) {
           ForEach(model.historyItems) { item in
-            ImportHistoryEntry(item: item, showTransactions: { showTransactions(item.id) }) {
+            ImportHistoryEntry(
+              item: item, transactionCount: model.batchCounts[item.id], showTransactions: { showTransactions(item.id) }
+            ) {
               model.requestUndo(item.batch)
             }
           }
@@ -345,6 +356,8 @@ struct ImportHistoryPanel: View {
 
 struct ImportHistoryEntry: View {
   let item: ImportHistoryItem
+  /// C41: transactions the batch still has; nil = unknown.
+  var transactionCount: Int? = nil
   var showTransactions: () -> Void = {}
   let undo: () -> Void
 
@@ -364,6 +377,14 @@ struct ImportHistoryEntry: View {
         .font(.system(size: 12))
         .foregroundStyle(ImportPalette.label)
         .fixedSize(horizontal: false, vertical: true)
+      if !item.isUndone, let transactionCount {
+        Text(
+          transactionCount == 0
+            ? "No transactions of its own (rows already imported, skipped or linked)"
+            : "\(transactionCount.formatted()) transaction\(transactionCount == 1 ? "" : "s") from this import")
+          .font(.system(size: 11))
+          .foregroundStyle(.secondary)
+      }
       HStack {
         Spacer()
         if item.isUndone {

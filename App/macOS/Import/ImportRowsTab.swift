@@ -34,7 +34,7 @@ struct ImportRowsTab: View {
       let rows = model.visibleRows
       VStack(spacing: 0) {
         ImportBulkBar(model: model)
-        ImportRowsHeader(columns: columns)
+        ImportRowsHeader(columns: columns, model: model)
         ImportRule(color: ImportPalette.softRule)
         ScrollView {
           LazyVStack(spacing: 0) {
@@ -58,24 +58,48 @@ struct ImportRowsTab: View {
 }
 
 /// Column titles of the row list (Transactions tab and the Categories part of Needs review).
+/// C41: a click sorts by the column (ascending, descending, back to the file's order).
 struct ImportRowsHeader: View {
   let columns: ImportColumns
+  let model: ImportWizardModel
 
   var body: some View {
     let c = columns
     HStack(spacing: ImportColumns.spacing) {
-      Text("Status").frame(width: c.status, alignment: .leading)
-      Text("Date").frame(width: c.date, alignment: .leading)
-      Text("Description").frame(width: c.description, alignment: .leading)
-      Text("Account").frame(width: c.account, alignment: .leading)
-      Text("Amount").frame(width: c.amount, alignment: .trailing)
-      Text("Category / action").frame(width: c.category, alignment: .leading)
+      header(.status).frame(width: c.status, alignment: .leading)
+      header(.date).frame(width: c.date, alignment: .leading)
+      header(.description).frame(width: c.description, alignment: .leading)
+      header(.account).frame(width: c.account, alignment: .leading)
+      header(.amount).frame(width: c.amount, alignment: .trailing)
+      header(.category).frame(width: c.category, alignment: .leading)
     }
     .font(.system(size: 11, weight: .semibold))
-    .foregroundStyle(.secondary)
     .padding(.horizontal, ImportMetrics.horizontalPadding)
     .padding(.vertical, 8)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func header(_ column: ImportSortColumn) -> some View {
+    let direction = model.sortDirection(of: column)
+    return Button {
+      model.toggleSort(column)
+    } label: {
+      HStack(spacing: 3) {
+        Text(column.title).lineLimit(1)
+        if let direction {
+          Image(systemName: direction ? "chevron.up" : "chevron.down")
+            .font(.system(size: 8, weight: .bold))
+        }
+      }
+      .foregroundStyle(direction == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .help(
+      direction == nil
+        ? "Sort by \(column.title)"
+        : direction == true ? "Sorted ascending; click for descending" : "Sorted descending; click for the file's order")
+    .accessibilityValue(direction == nil ? "" : direction == true ? "Sorted ascending" : "Sorted descending")
   }
 }
 

@@ -121,7 +121,7 @@ extension ImportWizardModel {
 
   /// The category rows the Needs review tab shows under the current sub-filter.
   public var visibleCategoryRows: [ImportRowItem] {
-    reviewFilter == .decisions ? [] : categoryRows
+    reviewFilter == .decisions ? [] : sorted(categoryRows)
   }
 
   /// Decisions + categories, each row once: the Needs review tab and card count.

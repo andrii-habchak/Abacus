@@ -10,10 +10,17 @@ public struct ImportWizardDependencies: Sendable {
   public var pipeline: ImportPipeline
   /// Reads a file picked in the open panel or dropped on the window.
   public var readFile: @Sendable (URL) throws -> Data
+  /// C41: how many transactions each batch still has (the undo confirmation and its result say
+  /// what is removed); nil = unknown.
+  public var batchTransactionCounts: (@Sendable () async throws -> [ImportBatch.ID: Int])?
 
-  public init(pipeline: ImportPipeline, readFile: @escaping @Sendable (URL) throws -> Data = Self.readSecurityScoped) {
+  public init(
+    pipeline: ImportPipeline, readFile: @escaping @Sendable (URL) throws -> Data = Self.readSecurityScoped,
+    batchTransactionCounts: (@Sendable () async throws -> [ImportBatch.ID: Int])? = nil
+  ) {
     self.pipeline = pipeline
     self.readFile = readFile
+    self.batchTransactionCounts = batchTransactionCounts
   }
 
   public var calendar: Calendar { pipeline.calendar }
@@ -30,16 +37,18 @@ public struct ImportWizardDependencies: Sendable {
     database: any DatabaseWriter, calendar: Calendar = .current, now: @escaping @Sendable () -> Date = { Date() },
     converter: @escaping @Sendable () async -> (any CurrencyConverter)? = { nil }
   ) -> ImportWizardDependencies {
-    ImportWizardDependencies(
+    let store = SQLiteImportStore(database: database, calendar: calendar)
+    return ImportWizardDependencies(
       pipeline: ImportPipeline(
-        store: SQLiteImportStore(database: database, calendar: calendar),
+        store: store,
         accounts: SQLiteAccountRepository(database: database, calendar: calendar),
         categories: SQLiteCategoryRepository(database: database),
         events: SQLiteEventRepository(database: database),
         rules: SQLiteRuleRepository(database: database, calendar: calendar),
         calendar: calendar, now: now, converter: converter,
         refunds: SQLiteRefundRepository(database: database, calendar: calendar, converter: converter),
-        counterparts: SQLiteTransferCounterpartRepository(database: database, calendar: calendar)))
+        counterparts: SQLiteTransferCounterpartRepository(database: database, calendar: calendar)),
+      batchTransactionCounts: { try await store.transactionCounts() })
   }
 }
 
