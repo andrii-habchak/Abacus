@@ -2,6 +2,25 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.6.1] — Unreleased
+
+Opening this version updates the database (migration v17: the trace of moved import batches); back up
+`abacus.sqlite` first.
+
+### Added
+
+- Moved import transactions show "Moved from <account>" (badge in the list, hint in the editor).
+- Import review: every kind of review card suggests a rule (transfers in another currency, unpaired halves,
+  debts), with the same note and "Save as rule" toggle as category picks; a matching rule pre-selects the card.
+- Rules: unreadable characters (�) are shown as ▯ with a help line in Edit rule.
+
+### Changed
+
+- "Find the other side…" starts on the transfer's own day, lists everything stored for the account, and offers
+  "Widen to ±5 days" and other accounts with transactions that day.
+- "Move to another account" has no ellipsis; on the "Transactions moved" alert OK is the default button.
+- PKO files with mixed encodings decode line by line instead of failing.
+
 ## [1.6.0] — Unreleased
 
 No database migration beyond 1.5.1; back up `abacus.sqlite` first anyway.
