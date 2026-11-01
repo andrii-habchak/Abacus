@@ -427,9 +427,14 @@ public protocol ImportStore: Sendable {
   func undo(_ batchID: ImportBatch.ID) async throws
   /// Debts and records with their legs: who an import row can be recorded for (R-DEBT-10/12).
   func debtBook() async throws -> DebtBook
+  /// C44: stored fingerprints among `ids` with their transaction and the accounts it is on now
+  /// (moved PKO keys are matched to the account the transaction was moved to).
+  func fingerprintOwners(_ ids: [String]) async throws -> [String: FingerprintOwner]
 }
 
 extension ImportStore {
   /// Fakes without debts.
   public func debtBook() async throws -> DebtBook { .empty }
+  /// Fakes without moved batches.
+  public func fingerprintOwners(_ ids: [String]) async throws -> [String: FingerprintOwner] { [:] }
 }

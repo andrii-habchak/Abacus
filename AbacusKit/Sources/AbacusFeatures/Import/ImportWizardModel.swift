@@ -42,6 +42,8 @@ public final class ImportWizardModel {
   /// What the model is busy with; the views disable their controls meanwhile.
   public enum Activity: Equatable, Sendable {
     case idle, reading, previewing, committing, undoing
+    /// C44: moving a batch to another account (or undoing that).
+    case moving
   }
 
   /// The file being imported.
@@ -99,7 +101,7 @@ public final class ImportWizardModel {
   public var canUndoBulk: Bool { bulkUndo != nil }
   /// C31: the rows a "Transfer to debt account" sheet opened from the bulk bar records.
   public internal(set) var debtBulkRowIDs: [String] = []
-  public private(set) var activity: Activity = .idle
+  public internal(set) var activity: Activity = .idle
   /// Shown as an alert; the view clears it.
   public var errorMessage: String?
   public private(set) var summary: ImportSummary?
@@ -112,6 +114,12 @@ public final class ImportWizardModel {
   /// C41: what the last undo removed ("… 12 transactions removed", or that there was nothing
   /// of its own to remove); shown as an alert, the view clears it.
   public var undoNotice: String?
+  /// C44: the "Move to another account" list of a batch; nil when closed.
+  public var moveSheet: ImportMoveModel?
+  /// C44: what the last move did ("12 transactions … moved"), shown as an alert with Undo move.
+  public var moveNotice: String?
+  /// C44: the last move, for its Undo move; nil once undone or when another notice replaced it.
+  public internal(set) var lastMove: ImportMoveResult?
   /// Rows whose category pick is not saved as a rule (`ImportPreview.setSavesRule`).
   public internal(set) var noRuleRows: Set<String> = []
   /// Display values, rebuilt after every change of the preview.
@@ -167,7 +175,7 @@ public final class ImportWizardModel {
     await reloadReference()
   }
 
-  private func reloadHistory() async {
+  func reloadHistory() async {
     do {
       history = try await pipeline.history()
       if let load = dependencies.batchTransactionCounts, let counts = try? await load() {
@@ -557,7 +565,7 @@ public final class ImportWizardModel {
     pendingUndo = nil
   }
 
-  /// The confirmation's "Undo Import" button. Takes the batch at once: the dialog clears
+  /// The confirmation's "Undo import" button. Takes the batch at once: the dialog clears
   /// `pendingUndo` (`cancelUndo()`) when it closes, before an async task would run (C41 — that
   /// race made the button do nothing).
   @discardableResult

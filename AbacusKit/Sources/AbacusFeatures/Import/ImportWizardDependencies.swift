@@ -13,14 +13,23 @@ public struct ImportWizardDependencies: Sendable {
   /// C41: how many transactions each batch still has (the undo confirmation and its result say
   /// what is removed); nil = unknown.
   public var batchTransactionCounts: (@Sendable () async throws -> [ImportBatch.ID: Int])?
+  /// C44: what "Move to another account…" offers for a batch; nil = the action is not offered.
+  public var movePlan: (@Sendable (ImportBatch.ID) async throws -> ImportMovePlan)?
+  /// C44: moves transactions of a batch (batch, transactions, from account or nil = the batch's,
+  /// to account) in one database transaction.
+  public var moveBatch: (@Sendable (ImportBatch.ID, [Txn.ID], Account.ID?, Account.ID) async throws -> ImportMoveResult)?
 
   public init(
     pipeline: ImportPipeline, readFile: @escaping @Sendable (URL) throws -> Data = Self.readSecurityScoped,
-    batchTransactionCounts: (@Sendable () async throws -> [ImportBatch.ID: Int])? = nil
+    batchTransactionCounts: (@Sendable () async throws -> [ImportBatch.ID: Int])? = nil,
+    movePlan: (@Sendable (ImportBatch.ID) async throws -> ImportMovePlan)? = nil,
+    moveBatch: (@Sendable (ImportBatch.ID, [Txn.ID], Account.ID?, Account.ID) async throws -> ImportMoveResult)? = nil
   ) {
     self.pipeline = pipeline
     self.readFile = readFile
     self.batchTransactionCounts = batchTransactionCounts
+    self.movePlan = movePlan
+    self.moveBatch = moveBatch
   }
 
   public var calendar: Calendar { pipeline.calendar }
@@ -48,7 +57,9 @@ public struct ImportWizardDependencies: Sendable {
         calendar: calendar, now: now, converter: converter,
         refunds: SQLiteRefundRepository(database: database, calendar: calendar, converter: converter),
         counterparts: SQLiteTransferCounterpartRepository(database: database, calendar: calendar)),
-      batchTransactionCounts: { try await store.transactionCounts() })
+      batchTransactionCounts: { try await store.transactionCounts() },
+      movePlan: { try await store.movePlan($0) },
+      moveBatch: { try await store.move($0, txnIDs: $1, from: $2, to: $3) })
   }
 }
 

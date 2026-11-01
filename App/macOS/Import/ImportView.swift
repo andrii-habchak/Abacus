@@ -55,7 +55,7 @@ struct ImportView: View {
     .frame(minWidth: 0, idealWidth: 900, maxWidth: .infinity, minHeight: 0, idealHeight: 600, maxHeight: .infinity)
     .background(ImportPalette.surface)
     .navigationTitle("Import")
-    .disabled(model.activity == .committing || model.activity == .undoing)
+    .disabled(model.activity == .committing || model.activity == .undoing || model.activity == .moving)
     .overlay { busyOverlay }
     .dropDestination(for: URL.self) { urls, _ in
       guard let url = urls.first else { return false }
@@ -75,7 +75,7 @@ struct ImportView: View {
       isPresented: Binding(get: { model.pendingUndo != nil }, set: { if !$0 { model.cancelUndo() } })
     ) {
       // Takes the batch before the dialog's dismissal clears it (C41).
-      Button("Undo Import", role: .destructive) { model.startConfirmedUndo() }
+      Button("Undo import", role: .destructive) { model.startConfirmedUndo() }
       Button("Cancel", role: .cancel) { model.cancelUndo() }
     } message: {
       Text(model.undoConfirmationMessage)
@@ -87,6 +87,24 @@ struct ImportView: View {
       Button("OK") { model.undoNotice = nil }
     } message: {
       Text(model.undoNotice ?? "")
+    }
+    // C44: History → Move to another account….
+    .sheet(isPresented: Binding(get: { model.moveSheet != nil }, set: { if !$0 { model.cancelMove() } })) {
+      if let sheet = model.moveSheet {
+        ImportMoveSheet(model: model, sheet: sheet)
+      }
+    }
+    .alert(
+      "Transactions moved",
+      isPresented: Binding(get: { model.moveNotice != nil }, set: { if !$0 { model.moveNotice = nil } })
+    ) {
+      // Takes the move before the alert's dismissal clears the notice.
+      if model.lastMove != nil {
+        Button("Undo move") { model.startUndoLastMove() }
+      }
+      Button("OK") { model.moveNotice = nil }
+    } message: {
+      Text(model.moveNotice ?? "")
     }
     .task {
       model.onDataChanged = onDataChanged
@@ -126,6 +144,7 @@ struct ImportView: View {
     case .reading, .previewing: "Reading the file…"
     case .committing: "Importing — nothing is saved unless everything succeeds…"
     case .undoing: "Undoing the import…"
+    case .moving: "Moving the transactions…"
     case .idle: nil
     }
     if let text {
@@ -269,7 +288,7 @@ struct ImportDoneStep: View {
       .foregroundStyle(ImportPalette.label)
       .multilineTextAlignment(.center)
       HStack(spacing: 10) {
-        Button("Undo this import") { model.requestUndoOfLastImport() }
+        Button("Undo import") { model.requestUndoOfLastImport() }
         Button("Show transactions", action: showTransactions)
           .buttonStyle(.borderedProminent)
       }
@@ -303,8 +322,8 @@ struct ImportDoneStep: View {
 
 // MARK: - History
 
-/// The import history (R-IMP-6): batches with their counts, "Show transactions" and
-/// "Undo import…", undone ones greyed.
+/// The import history (R-IMP-6): batches with their counts, "Show transactions", "Move to another
+/// account…" (C44) and "Undo import"; undone ones greyed with their buttons disabled.
 struct ImportHistoryPanel: View {
   let model: ImportWizardModel
   var showTransactions: (ImportBatch.ID) -> Void = { _ in }
@@ -337,7 +356,9 @@ struct ImportHistoryPanel: View {
         VStack(spacing: 10) {
           ForEach(model.historyItems) { item in
             ImportHistoryEntry(
-              item: item, transactionCount: model.batchCounts[item.id], showTransactions: { showTransactions(item.id) }
+              item: item, transactionCount: model.batchCounts[item.id], showTransactions: { showTransactions(item.id) },
+              moveUnavailableReason: model.moveUnavailableReason(item.batch),
+              move: { Task { await model.requestMove(item.batch) } }
             ) {
               model.requestUndo(item.batch)
             }
@@ -362,6 +383,9 @@ struct ImportHistoryEntry: View {
   /// C41: transactions the batch still has; nil = unknown.
   var transactionCount: Int? = nil
   var showTransactions: () -> Void = {}
+  /// C44: why "Move to another account…" is disabled; nil = enabled.
+  var moveUnavailableReason: String? = nil
+  var move: () -> Void = {}
   let undo: () -> Void
 
   var body: some View {
@@ -371,6 +395,9 @@ struct ImportHistoryEntry: View {
           .font(.system(size: 13, weight: .semibold))
           .lineLimit(2)
         Spacer(minLength: 0)
+        if item.isUndone {
+          ImportBadge(text: "Undone", colors: ImportPalette.badge(.skipped))
+        }
         Text(item.when)
           .font(.system(size: 11))
           .foregroundStyle(.secondary)
@@ -388,23 +415,53 @@ struct ImportHistoryEntry: View {
           .font(.system(size: 11))
           .foregroundStyle(.secondary)
       }
-      HStack {
-        Spacer()
-        if item.isUndone {
-          Text("Undone — its transactions were removed")
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
-        } else {
-          Button("Show transactions", action: showTransactions)
-            .controlSize(.small)
-          Button("Undo import…", action: undo)
-            .controlSize(.small)
+      if item.isUndone {
+        Text("Undone — its transactions were removed")
+          .font(.system(size: 11))
+          .foregroundStyle(.secondary)
+      }
+      // One line when the panel is wide enough, else Move on a line of its own.
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 6) {
+          Spacer(minLength: 0)
+          showButton
+          moveButton
+          undoButton
         }
+        VStack(alignment: .trailing, spacing: 6) {
+          moveButton
+          HStack(spacing: 6) {
+            showButton
+            undoButton
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
       }
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 10)
     .background(RoundedRectangle(cornerRadius: 8).strokeBorder(ImportPalette.border))
     .opacity(item.isUndone ? 0.6 : 1)
+  }
+
+  private var showButton: some View {
+    Button("Show transactions", action: showTransactions)
+      .controlSize(.small)
+      .disabled(item.isUndone)
+  }
+
+  private var moveButton: some View {
+    Button("Move to another account…", action: move)
+      .controlSize(.small)
+      .disabled(moveUnavailableReason != nil)
+      .help(moveUnavailableReason ?? "Move this statement's transactions to another account in the same currency")
+  }
+
+  /// R-IMP-6: asks for the confirmation first; disabled once the import is undone (C44).
+  private var undoButton: some View {
+    Button("Undo import", action: undo)
+      .controlSize(.small)
+      .disabled(item.isUndone)
+      .help(item.isUndone ? "This import is undone." : "Remove this import's transactions")
   }
 }
