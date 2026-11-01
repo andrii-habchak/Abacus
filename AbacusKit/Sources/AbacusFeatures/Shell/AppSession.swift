@@ -164,7 +164,8 @@ public final class AppSession {
       events: SQLiteEventRepository(database: database), converter: RateTable(),
       calendar: calendar, today: { Day(now(), calendar: calendar) },
       settings: SQLiteSettingsRepository(database: database),
-      debts: SQLiteDebtRepository(database: database, calendar: calendar), refunds: refunds)
+      debts: SQLiteDebtRepository(database: database, calendar: calendar), refunds: refunds,
+      moves: SQLiteImportStore(database: database, calendar: calendar))
     var editor = TransactionEditorDependencies(
       transactions: SQLiteTxnRepository(database: database, calendar: calendar, converter: currentRates),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),
@@ -173,6 +174,7 @@ public final class AppSession {
       settings: SQLiteSettingsRepository(database: database), converter: RateTable(), calendar: calendar,
       now: now)
     editor.refunds = refunds
+    editor.moves = SQLiteImportStore(database: database, calendar: calendar)
     // An old day picked in the editor loads its rates (R-EDIT-4, R-FX-1).
     editor.requestRates = { days in
       await refresher.ensureRates(for: days)

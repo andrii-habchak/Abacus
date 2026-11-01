@@ -71,6 +71,9 @@ public final class TransactionsViewModel {
   /// Refund links of the loaded rows (C30): per expense its refunds, per refund its original.
   /// Read with each page in two aggregate queries.
   public private(set) var refundLinks = RefundLinkSummary()
+  /// C48: the move traces of the loaded rows ("Moved from <account>"); empty without a reader.
+  public private(set) var moveTraces: [Txn.ID: TxnMove] = [:]
+  @ObservationIgnored let moveReader: (any TxnMoveReading)?
   /// "Link a refund…", "This is a refund of…", "Unlink refund"; nil = not offered.
   @ObservationIgnored let refunds: (any RefundRepository)?
   /// The search sheet of a refund link; nil when closed.
@@ -83,9 +86,11 @@ public final class TransactionsViewModel {
     refundsReduceSpending: Bool = false, filters: TransactionFilters = .default,
     calendar: Calendar = .current, today: @escaping @Sendable () -> Day = { Day(Date()) },
     settings: (any SettingsRepository)? = nil, debts: (any DebtRepository)? = nil,
-    refunds: (any RefundRepository)? = nil, pageSize: Int = 500
+    refunds: (any RefundRepository)? = nil, pageSize: Int = 500,
+    moves: (any TxnMoveReading)? = nil
   ) {
     self.refunds = refunds
+    self.moveReader = moves
     self.pageSize = max(1, pageSize)
     self.settings = settings
     self.debts = debts
@@ -164,7 +169,7 @@ public final class TransactionsViewModel {
     generation += 1
     let current = generation
     guard let query = query else {
-      apply(page: [], summary: TxnListSummary(), generation: current, query: nil, links: RefundLinkSummary())
+      apply(page: [], summary: TxnListSummary(), generation: current, query: nil, links: RefundLinkSummary(), moves: [:])
       await loadFacets()
       return
     }
@@ -175,7 +180,8 @@ public final class TransactionsViewModel {
       async let aggregate = transactions.summary(matching: query)
       let (fetched, sum) = try await (page, aggregate)
       let links = await links(for: fetched)
-      apply(page: fetched, summary: sum, generation: current, query: query, links: links, limit: limit)
+      let moves = await moveTraces(for: fetched)
+      apply(page: fetched, summary: sum, generation: current, query: query, links: links, moves: moves, limit: limit)
     } catch {
       guard current == generation else { return }
       isLoading = false
@@ -196,13 +202,20 @@ public final class TransactionsViewModel {
     return (try? await refunds.refundLinks(for: page.map(\.txn.id))) ?? RefundLinkSummary()
   }
 
+  /// Move traces of a page (one read); empty without a reader.
+  private func moveTraces(for page: [TxnWithLines]) async -> [Txn.ID: TxnMove] {
+    guard let moveReader, !page.isEmpty else { return [:] }
+    return (try? await moveReader.moves(for: page.map(\.txn.id))) ?? [:]
+  }
+
   private func apply(
     page fetched: [TxnWithLines], summary sum: TxnListSummary, generation current: Int, query: TxnQuery?,
-    links: RefundLinkSummary, limit: Int? = nil
+    links: RefundLinkSummary, moves: [Txn.ID: TxnMove], limit: Int? = nil
   ) {
     guard current == generation else { return }
     loadedQuery = query
     refundLinks = links
+    moveTraces = moves
     rows = fetched
     summary = sum
     exhausted = limit.map { fetched.count < $0 } ?? true
@@ -223,13 +236,15 @@ public final class TransactionsViewModel {
     let offset = rows.count
     let fetched = try? await transactions.page(matching: query, offset: offset, limit: pageSize)
     let pageLinks = await links(for: fetched ?? [])
+    let pageMoves = await moveTraces(for: fetched ?? [])
     isLoadingMore = false
     guard current == generation, let fetched, rows.count == offset else { return }
     if fetched.count < pageSize { exhausted = true }
     guard !fetched.isEmpty else { return }
     rows += fetched
     refundLinks.merge(pageLinks)
-    builder.append(fetched, refundLinks: pageLinks, to: &content)
+    moveTraces.merge(pageMoves) { _, new in new }
+    builder.append(fetched, refundLinks: pageLinks, moves: pageMoves, to: &content)
     updateLoadMoreTrigger()
   }
 
@@ -259,7 +274,7 @@ public final class TransactionsViewModel {
       includeUncategorised: filters.includeUncategorised,
       refundsReduceSpending: refundsReduceSpending, calendar: calendar)
     builder = newBuilder
-    content = newBuilder.content(rows: rows, refundLinks: refundLinks)
+    content = newBuilder.content(rows: rows, refundLinks: refundLinks, moves: moveTraces)
     updateLoadMoreTrigger()
   }
 

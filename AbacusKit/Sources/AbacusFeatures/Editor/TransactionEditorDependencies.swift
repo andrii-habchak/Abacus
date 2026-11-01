@@ -28,6 +28,8 @@ public struct TransactionEditorDependencies: Sendable {
   public var requestRates: (@Sendable ([Day]) async -> (any CurrencyConverter)?)?
   /// The "Refund of" field of a refund (C30); nil = not offered.
   public var refunds: (any RefundRepository)?
+  /// C48: "Moved from <account> · <date>" of a transaction of a moved import batch; nil = not shown.
+  public var moves: (any TxnMoveReading)?
   public var calendar: Calendar
   /// Date and time a new transaction starts with.
   public var now: @Sendable () -> Date

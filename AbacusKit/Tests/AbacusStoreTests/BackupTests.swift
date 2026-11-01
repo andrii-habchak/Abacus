@@ -63,6 +63,12 @@ struct BackupTests {
     transfer.categoryID = nil
     try await f.imports.commit(
       ImportCommit(batch: ImportBatch(source: .pko, fileName: "c38.csv"), updatedTxns: [transfer], absorbedOriginals: [income]))
+    // C48 (v17): the trace of a transaction moved to another account.
+    try await f.database.write { db in
+      try TxnMove.insert {
+        TxnMove(txnID: F.id(100), fromAccountID: F.card.id, toAccountID: F.bank.id, movedAt: F.at("2026-04-01"))
+      }.execute(db)
+    }
   }
 
   @Test("R-SET-2: export writes all tables to one file; restore replaces all data with it")

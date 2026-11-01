@@ -100,6 +100,7 @@ public final class TransactionEditorModel {
         }
         draft = EditorDraft(editing: row, accounts: reference.accountsByID)
         await loadRefundOfLabel()
+        await loadMovedNote(id)
       } catch {
         errorMessage = "Couldn't load the transaction."
         return
@@ -277,6 +278,22 @@ public final class TransactionEditorModel {
   public func clearRefundOriginal() {
     draft.refundOfID = nil
     draft.refundOfLabel = nil
+  }
+
+  /// C48: "Moved from PKO private to Business · 1 Nov 2026" when the transaction belongs to a moved
+  /// import batch; nil otherwise. Read-only text above the form.
+  public private(set) var movedNote: String?
+
+  private func loadMovedNote(_ id: Txn.ID) async {
+    guard let moves = dependencies.moves, let move = (try? await moves.moves(for: [id]))?[id] else { return }
+    let formatter = DateFormatter()
+    formatter.calendar = calendar
+    formatter.timeZone = calendar.timeZone
+    formatter.dateFormat = "d MMM yyyy"
+    let accounts = reference.accountsByID
+    movedNote =
+      "Moved from \(TxnMoveText.name(move.fromAccountID, accounts)) to \(TxnMoveText.name(move.toAccountID, accounts)) · "
+      + formatter.string(from: move.movedAt)
   }
 
   /// The stored link's text ("Booking.com · 12 Oct 2026").

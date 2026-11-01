@@ -90,6 +90,7 @@ struct TransactionRowView: View {
           .layoutPriority(1)
         ForEach(row.badges, id: \.self) { badge in
           TransactionBadge(badge: badge)
+            .help(badge.kind == .moved ? row.movedNote ?? "" : "")
         }
       }
       HStack(spacing: 4) {
