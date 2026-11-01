@@ -4,6 +4,10 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-01 (orchestrator, newest)._ Also on `main`: C44 (History "Move to another account…" on the review list,
+"Undo import" label, Undone badge and disabled buttons; interpretations in `docs/status/C44.md`), step bar without
+numbers, About panel with author and GitHub link. Gate green (565 tests, app build). Not checked visually.
+
 _Updated 2026-11-01 (orchestrator, latest)._ **C40–C43 are on `main`** (not versioned/tagged): C40 transfer popup
 (double-click, From/To, related transactions, Change transaction) and account + date window in the counterpart
 sheet; C41 import column sorting, undo fix (confirm button cleared the batch before the task ran), target-account
