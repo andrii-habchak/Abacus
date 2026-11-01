@@ -3,7 +3,7 @@ import AbacusImport
 import Foundation
 import Observation
 
-/// C44: "Move to another account…" of an import batch (History). Lists the batch's transactions
+/// C44: "Move to another account" of an import batch (History). Lists the batch's transactions
 /// in the review's row list (same columns, header sort and selection), all movable ones selected,
 /// with the searchable account picker for the target (accounts in the batch's currency) and a
 /// summary of what the move does. `ImportWizardModel.startMove()` runs it.
@@ -283,14 +283,34 @@ public final class ImportMoveModel: ImportRowSorting, ImportRowSelecting {
 
 // MARK: - Wizard: History → Move to another account (C44)
 
+/// A button of the "Transactions moved" alert (C45: OK is the default, Undo move the plain one).
+public struct ImportNoticeButton: Hashable, Sendable {
+  public enum Action: Hashable, Sendable { case dismiss, undoMove }
+  public var title: String
+  public var action: Action
+  /// The blue button that Return presses.
+  public var isDefault: Bool
+}
+
 extension ImportWizardModel {
-  /// Whether History offers "Move to another account…" for `batch`: a PKO statement, not undone,
+  /// The History button and the sheet's name (C45: no ellipsis).
+  public static let moveActionTitle = "Move to another account"
+
+  /// The buttons of the "Transactions moved" alert, in order: OK (the default) first, then
+  /// Undo move while the move can still be undone.
+  public var moveNoticeButtons: [ImportNoticeButton] {
+    var buttons = [ImportNoticeButton(title: "OK", action: .dismiss, isDefault: true)]
+    if lastMove != nil { buttons.append(ImportNoticeButton(title: "Undo move", action: .undoMove, isDefault: false)) }
+    return buttons
+  }
+
+  /// Whether History offers "Move to another account" for `batch`: a PKO statement, not undone,
   /// with transactions of its own.
   public func canMove(_ batch: ImportBatch) -> Bool {
     moveUnavailableReason(batch) == nil
   }
 
-  /// Why "Move to another account…" is disabled for `batch` (the button's help); nil = enabled.
+  /// Why "Move to another account" is disabled for `batch` (the button's help); nil = enabled.
   public func moveUnavailableReason(_ batch: ImportBatch) -> String? {
     if dependencies.movePlan == nil || dependencies.moveBatch == nil { return "Not available here." }
     if batch.isUndone { return "This import is undone." }

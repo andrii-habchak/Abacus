@@ -93,8 +93,11 @@ public struct ImportCounterpartOption: Hashable, Identifiable, Sendable {
   /// C40: the candidate moves money the same way as the row (listed when the search is empty, but
   /// it cannot be the other side).
   public var isSameDirection = false
-  /// It can be chosen: it can be absorbed and moves money the other way.
-  public var isUsable: Bool { candidate.refusal == nil && !isSameDirection }
+  /// C45: another row of this import already settles, links or takes over the candidate (listed,
+  /// but it cannot be the other side).
+  public var isTakenByAnotherRow = false
+  /// It can be chosen: it can be absorbed, moves money the other way and no other row uses it.
+  public var isUsable: Bool { candidate.refusal == nil && !isSameDirection && !isTakenByAnotherRow }
   public var id: Txn.ID { candidate.txn.id }
 }
 
@@ -111,7 +114,8 @@ public enum TransferCounterpartRanker {
 
   public static func rank(
     _ candidates: [TransferCounterpartCandidate], probe: CounterpartProbe, converter: (any CurrencyConverter)?,
-    calendar: Calendar, matching search: String = "", includeSameDirection: Bool = false, limit: Int = 30
+    calendar: Calendar, matching search: String = "", includeSameDirection: Bool = false, taken: Set<Txn.ID> = [],
+    limit: Int = 30
   ) -> [ImportCounterpartOption] {
     let rowDay = Day(probe.occurredAt, calendar: calendar)
     let needle = fold(search)
@@ -139,7 +143,7 @@ public enum TransferCounterpartRanker {
         ImportCounterpartOption(
           candidate: candidate, amountMinor: amount, impliedRate: rate, expectedMinor: expected, deviation: deviation,
           dayGap: abs(rowDay.distance(to: Day(txn.occurredAt, calendar: calendar), calendar: calendar)),
-          isSameDirection: sameDirection))
+          isSameDirection: sameDirection, isTakenByAnotherRow: taken.contains(txn.id)))
     }
     options.sort { a, b in
       let ka = (a.isUsable ? 0 : 1, a.deviation ?? .infinity, a.dayGap, a.candidate.txn.occurredAt)
@@ -397,8 +401,8 @@ extension ImportPipeline {
   /// C40: the transactions of `accountID` on `from…through` (inclusive) for the "Find the other
   /// side…" sheet with its account and date pickers: every transaction of the account in that
   /// window (an empty search lists them all), those that cannot be chosen (moving money the same
-  /// way as the row, or refused) marked and listed last. A search text filters by description,
-  /// note and amount.
+  /// way as the row, refused, or — C45 — already used by another row of this import) marked and
+  /// listed last. A search text filters by description, note and amount.
   public func counterpartOptions(
     for preview: ImportPreview, row rowID: String, to accountID: Account.ID, from: Day, through: Day,
     matching search: String = "", limit: Int = 300
@@ -410,8 +414,8 @@ extension ImportPipeline {
     // The transaction the row itself takes over stays listed (the user may keep it).
     if let own = preview.convertedTxnID(forRow: rowID) { touched.remove(own) }
     return TransferCounterpartRanker.rank(
-      found.filter { !touched.contains($0.txn.id) }, probe: probe, converter: await converter(), calendar: calendar,
-      matching: search, includeSameDirection: true, limit: limit)
+      found, probe: probe, converter: await converter(), calendar: calendar, matching: search, includeSameDirection: true,
+      taken: touched, limit: limit)
   }
 
   /// C40: the transactions already stored on `accountID` on `day` (the transfer popup lists them

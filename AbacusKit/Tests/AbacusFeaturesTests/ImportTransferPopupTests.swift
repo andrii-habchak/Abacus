@@ -217,6 +217,10 @@ struct ImportTransferPopupTests {
     let id = try transferRowID(model)
     model.beginCounterpart(forRow: id, to: Self.savings.id)
     let picker = try #require(model.counterpartPicker)
+    // C45: the window starts on the transfer's day; SHOP is the day before.
+    await picker.model.load()
+    #expect(picker.model.options.isEmpty && picker.model.emptyHint?.canWiden == true)
+    picker.model.widen()
     await picker.model.load()
     let option = try #require(picker.model.options.first)
     #expect(option.title == "SHOP" && !option.isUsable)
