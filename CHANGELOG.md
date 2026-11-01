@@ -9,6 +9,8 @@ back up `abacus.sqlite` first.
 
 ### Added
 
+- Accounts: the context menu of an account or group has "Show all transactions" (Transactions filtered to it, all dates).
+- Sidebar: Manage lists Rules before Exchange rates and Import.
 - Import: a transfer between your own accounts in different currencies can now be made from a row whose
   received amount is unknown: "Find the other side…" lists transactions of the other account within
   5 days (ranked by the rate), or type the received amount, or estimate it at the NBU rate (shown as
