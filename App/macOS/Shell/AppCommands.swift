@@ -1,4 +1,5 @@
 import AbacusFeatures
+import AppKit
 import SwiftUI
 
 /// Menu commands: File › New Transaction (⌘N); View › the sections (⌘1…⌘9, ⌘0) and Refresh Rates
@@ -10,6 +11,9 @@ struct AppCommands: Commands {
   private var app: AppModel { session.app }
 
   var body: some Commands {
+    CommandGroup(replacing: .appInfo) {
+      Button("About Abacus") { Self.showAbout() }
+    }
     CommandGroup(replacing: .newItem) {
       Button("New Transaction") { app.requestNewTransaction() }
         .keyboardShortcut("n")
@@ -40,5 +44,23 @@ struct AppCommands: Commands {
       }
       .help("Adds synthetic accounts and transactions to an empty database, for a demo.")
     }
+  }
+
+  /// The standard About panel with the author and the GitHub link as credits.
+  private static func showAbout() {
+    let credits = NSMutableAttributedString(
+      string: "Author: Andrii Habchak\n",
+      attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.labelColor])
+    credits.append(
+      NSAttributedString(
+        string: "github.com/andrii-habchak/Abacus",
+        attributes: [
+          .font: NSFont.systemFont(ofSize: 12),
+          .link: URL(string: "https://github.com/andrii-habchak/Abacus")!,
+        ]))
+    let centred = NSMutableParagraphStyle()
+    centred.alignment = .center
+    credits.addAttribute(.paragraphStyle, value: centred, range: NSRange(location: 0, length: credits.length))
+    NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
   }
 }
