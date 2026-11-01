@@ -158,6 +158,13 @@ public struct ReviewInfo: Hashable, Sendable {
   /// `acceptSuggestedReviewChoices`) chooses.
   public var suggested: ReviewChoice
   public var choice: ReviewChoice?
+  /// C46: the enabled rule that made `suggested` (a rule saved from an earlier resolution).
+  public var suggestedByRule: CategoryRule.ID? = nil
+  /// C46: its label, for the card ("Suggested by rule “…”").
+  public var suggestingRuleLabel: String? = nil
+  /// C46: the chosen resolution could be a rule, but this enabled rule already matches the row
+  /// (its label), so nothing new is proposed.
+  public var matchingRule: String? = nil
 }
 
 /// The expense an incoming row may be the refund of (C35): an existing transaction, or another

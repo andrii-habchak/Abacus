@@ -113,6 +113,16 @@ struct ImportView: View {
         // UI checks: `-AbacusImportFile <csv>` opens the review step, e.g. for an in-app snapshot.
         if model.step == .chooseFile, let path = UserDefaults.standard.string(forKey: "AbacusImportFile") {
           await model.open(url: URL(filePath: path))
+          // `-AbacusImportAccount <name>`: the statement's account when the file does not name it.
+          if model.needsTargetAccount, let name = UserDefaults.standard.string(forKey: "AbacusImportAccount") {
+            // Sample data may still be loading: wait for the account a few seconds.
+            for _ in 0..<20 where !model.accounts.contains(where: { $0.name == name }) {
+              try? await Task.sleep(for: .milliseconds(250))
+              await model.refreshReference()
+            }
+            if let account = model.accounts.first(where: { $0.name == name }) { await model.chooseTargetAccount(account.id) }
+          }
+          if UserDefaults.standard.bool(forKey: "AbacusImportResolveReview") { resolveReviewForSnapshot() }
         }
       #endif
     }
@@ -123,6 +133,39 @@ struct ImportView: View {
     }
     .onAppear { Task { await model.refreshReference() } }
   }
+
+  #if DEBUG
+    /// UI checks: with `-AbacusImportFile`, `-AbacusImportResolveReview YES` resolves the Needs
+    /// review cards as a user would, so a snapshot shows their rule lines: a transfer to an own
+    /// account in another currency → that account with an estimated (or typed) other side; an
+    /// unknown type → its sign's kind and the first category, except the last such card, which only
+    /// confirms the suggestion (the hint without a category).
+    private func resolveReviewForSnapshot() {
+      model.tab = .review
+      model.reviewFilter = .decisions
+      let records = model.reviewItems.filter { !$0.title.hasPrefix("Transfer to an own account") }
+      for item in model.reviewItems {
+        if item.title.hasPrefix("Transfer to an own account") {
+          model.selectReviewOption(.transfer, forRow: item.id)
+          if let picker = model.counterpartPicker {
+            if picker.model.estimate != nil {
+              model.useEstimatedCounterpart()
+            } else {
+              picker.model.manualText = "100.00"
+              model.useManualCounterpart()
+            }
+          }
+        } else if case .record(let kind) = item.suggested {
+          model.selectReviewOption(.record(kind), forRow: item.id)
+          guard item.id != records.last?.id || records.count == 1 else { continue }
+          let first = item.categoryOptions.lazy.compactMap { option -> AbacusDomain.Category.ID? in
+            if case .existing(let id) = option.choice { id } else { nil }
+          }.first
+          if let first { model.selectReviewCategory(first, forRow: item.id) }
+        }
+      }
+    }
+  #endif
 
   @ViewBuilder
   private var content: some View {

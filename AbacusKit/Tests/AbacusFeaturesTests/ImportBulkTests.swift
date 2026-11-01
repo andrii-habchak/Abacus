@@ -282,8 +282,8 @@ struct ImportBulkTests {
     let decided = try #require(model.reviewItems.first { $0.id == item.id })
     #expect(decided.selected == .record(kind))
     #expect(decided.selectedCategory == category)
-    // Review rows get no learned rule.
-    #expect(model.ruleSheet == nil)
+    // C46: a review row recorded with a category offers its rule, whatever the review reason.
+    #expect(model.ruleSheet?.suggestions.map(\.rowIDs) == [[item.id]])
   }
 
   // MARK: Categories created during the import

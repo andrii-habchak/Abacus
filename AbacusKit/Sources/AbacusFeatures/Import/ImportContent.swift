@@ -217,9 +217,11 @@ public struct ImportReviewItem: Identifiable, Hashable, Sendable {
   public var counterpart: ImportCounterpartItem? = nil
   /// C38: the row looks like the real figure of an estimated transfer.
   public var estimate: ImportEstimateItem? = nil
-  /// C42: "Will be saved as a rule “…” → …" once the card is resolved in a way a rule can express
-  /// (category, transfer to an own account, debt); nil when no rule can be learned from it.
-  public var ruleNote: String? = nil
+  /// C42/C46: the rule line under the card, styled like a category pick's note: "Will be saved as
+  /// a rule “…” → …" (blue) once resolved in a way a rule can express, "Not saved as a rule",
+  /// "Suggested by rule “…”" / "By rule “…”" when a rule exists, or the hint that a category makes
+  /// a rule; nil when nothing applies (Skip, pairing).
+  public var ruleNote: ImportNote? = nil
   /// With `ruleNote`: whether the rule will be saved (default yes; `setSavesRule` turns it off).
   public var savesRule: Bool? = nil
 }
@@ -773,7 +775,16 @@ extension ImportWizardModel {
     case .skip:
       selected = .skip
     case nil:
-      break
+      // C46: a suggestion made by a rule pre-fills the details, so confirming it keeps them.
+      switch review.suggested {
+      case .record(let kind, let categoryID) where kind == recordKind: selectedCategory = categoryID
+      case .transfer(let id): selectedTransfer = id
+      default: break
+      }
+      // The own account found by its number is the natural other side of the transfer.
+      if selectedTransfer == nil, case .transferAmountUnknown = review.reason, case .existing(let id)? = row.counterAccount {
+        selectedTransfer = id
+      }
     }
     let suggested: ImportReviewOption = switch review.suggested {
     case .pair, .pairExisting: .pair
@@ -800,11 +811,27 @@ extension ImportWizardModel {
       ruleNote: reviewRuleNote(row), savesRule: row.learnedAction == nil ? nil : row.rulePattern != nil)
   }
 
-  /// C42: the rule a resolved review card will save, or the note that it won't.
-  func reviewRuleNote(_ row: PreviewRow) -> String? {
-    guard let action = row.learnedAction else { return nil }
-    guard let pattern = row.rulePattern else { return "Not saved as a rule" }
-    return "Will be saved as a rule “\(pattern)” → \(ruleActionLabel(action))"
+  /// C42/C46: the rule a resolved review card will save, the note that it won't, the rule that
+  /// already covers it, or how to get one.
+  func reviewRuleNote(_ row: PreviewRow) -> ImportNote? {
+    guard let review = row.review else { return nil }
+    if let action = row.learnedAction {
+      guard let pattern = row.rulePattern else { return ImportNote("Not saved as a rule") }
+      return ImportNote("Will be saved as a rule “\(pattern)” → \(ruleActionLabel(action))", .info)
+    }
+    guard let choice = review.choice else {
+      return review.suggestingRuleLabel.map { ImportNote("Suggested by rule “\($0)”", .success) }
+    }
+    if let label = review.matchingRule {
+      if review.suggestedByRule != nil, choice == review.suggested { return ImportNote("By rule “\(label)”") }
+      return ImportNote("Rule “\(label)” already matches this text; no new rule")
+    }
+    if case .record(let kind, nil) = choice, kind == (row.isInflow ? .income : .expense),
+      !RulePattern.derive(from: row.source.payee).isEmpty
+    {
+      return ImportNote("Choose a category to save it as a rule")
+    }
+    return nil
   }
 
   /// "Transfer to debt · Ann · €46.50 (new debt)".

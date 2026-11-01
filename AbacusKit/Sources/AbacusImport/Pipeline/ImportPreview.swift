@@ -289,6 +289,13 @@ public struct ImportPreview: Sendable {
     for row in rows {
       guard let review = row.review, decisions.reviews[row.id] == nil else { continue }
       if case .pair(let other) = review.suggested, decisions.reviews[other] != nil { continue }
+      // C46: a transfer (suggested by a rule) whose amount on the other account is unknown waits
+      // for the user to give the other side.
+      if case .transfer(let target) = review.suggested, needsCounterpart(row: row.id, to: target),
+        decisions.counterparts[row.id]?.accountID != target
+      {
+        continue
+      }
       applyReviewChoice(review.suggested, forRow: row.id)
     }
     recompute()
@@ -1065,31 +1072,41 @@ private struct Resolver {
     return pattern.isEmpty ? nil : pattern
   }
 
-  /// C42: what a rule saved from a resolved Needs review row would do. Only for rows of unknown
-  /// operation type (a rule then resolves later rows of the same payee, `ruleResolvesUnknownType`),
-  /// resolved as expense/income of the sign's kind with a category, as a transfer to an own
-  /// account, or as a transfer to a debt. Skip, pairing and a category-less record are not
-  /// expressible as a rule. Nil when an enabled rule already matches the row.
+  /// C42/C46: what a rule saved from a resolved Needs review row would do, for every review
+  /// reason (C42 had unknown operation types only): expense/income of the sign's kind with a
+  /// category → category rule, a transfer to an own account → transfer rule, a transfer to a
+  /// debt → debt rule. Skip, pairing, a record without category and a record of the other kind
+  /// (a reversal) are not expressible as a rule. Nil when an enabled rule already matches the row
+  /// (`ruleAlreadyMatching` says which).
   private func reviewRule(_ row: PreviewRow) -> (pattern: String, action: LearnedAction)? {
-    guard let review = row.review, case .unknownOperationType = review.reason, let choice = review.choice,
-      row.createsTransaction, let flow = row.source.flow
-    else { return nil }
-    let kind: CategoryKind = flow == .in ? .income : .expense
-    let action: LearnedAction
-    switch choice {
-    case .record(let recorded, let categoryID?) where recorded == kind: action = .category(categoryID)
-    case .transfer(let accountID): action = .transfer(accountID)
-    case .debt(let debt):
-      let person = debt.personName.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !person.isEmpty else { return nil }
-      action = .debt(person: person)
-    default: return nil
-    }
-    let accountID: Account.ID? = if case .existing(let id) = row.account { id } else { nil }
-    let subject = RuleSubject(description: row.source.payee, accountID: accountID, amountMinor: abs(row.source.amountMinor), kind: kind)
-    if matcher.match(subject) != nil { return nil }
+    guard let action = reviewRuleAction(row), ruleAlreadyMatching(row) == nil else { return nil }
     let pattern = decisions.rulePatterns[row.id] ?? RulePattern.derive(from: row.source.payee)
     return pattern.isEmpty ? nil : (pattern, action)
+  }
+
+  /// The action a rule would take for the row's review choice; nil when not expressible.
+  private func reviewRuleAction(_ row: PreviewRow) -> LearnedAction? {
+    // The row must import: created, or (C38) taking over a found transaction as its transfer.
+    guard let review = row.review, let choice = review.choice, row.createsTransaction || row.absorbedTxn != nil,
+      let flow = row.source.flow
+    else { return nil }
+    let kind: CategoryKind = flow == .in ? .income : .expense
+    switch choice {
+    case .record(let recorded, let categoryID?) where recorded == kind: return .category(categoryID)
+    case .transfer(let accountID): return .transfer(accountID)
+    case .debt(let debt):
+      let person = debt.personName.trimmingCharacters(in: .whitespacesAndNewlines)
+      return person.isEmpty ? nil : .debt(person: person)
+    default: return nil
+    }
+  }
+
+  /// The enabled rule (any action) that already matches a review row's text, amount and account.
+  private func ruleAlreadyMatching(_ row: PreviewRow) -> CategoryRule? {
+    guard let flow = row.source.flow else { return nil }
+    let kind: CategoryKind = flow == .in ? .income : .expense
+    let accountID: Account.ID? = if case .existing(let id) = row.account { id } else { nil }
+    return matcher.match(RuleSubject(description: row.source.payee, accountID: accountID, amountMinor: abs(row.source.amountMinor), kind: kind))
   }
 
   /// R-IMP-8: proposals from the user's picks, applied at once to the other rows of this
@@ -1105,6 +1122,9 @@ private struct Resolver {
       if let rule = reviewRule(rows[i]) {
         rows[i].learnedAction = rule.action
         if !decisions.noRule.contains(rows[i].id) { rows[i].rulePattern = rule.pattern }
+      } else if rows[i].review?.choice != nil, reviewRuleAction(rows[i]) != nil, let existing = ruleAlreadyMatching(rows[i]) {
+        // C46: tell the card why nothing is proposed.
+        rows[i].review?.matchingRule = existing.label
       }
       guard let pattern = rows[i].rulePattern else { continue }
       if case .existing(let id)? = rows[i].category, let category = preview.context.category(id),
@@ -1145,17 +1165,45 @@ private struct Resolver {
 
   // MARK: Review
 
-  private func suggestion(_ source: NormalizedRow, _ found: RowAnalysis, _ reason: ReviewReason) -> ReviewChoice {
+  private func suggestion(_ source: NormalizedRow, _ found: RowAnalysis, _ reason: ReviewReason) -> (ReviewChoice, CategoryRule?) {
     let kind: CategoryKind = source.flow == .in ? .income : .expense
     if case .unpairedTransferHalf = reason {
       if let first = found.pairRows.first, let other = parsed.first(where: { $0.id == first }),
         other.transferHalf?.transit == source.transferHalf?.transit
       {
-        return .pair(rowID: first)
+        return (.pair(rowID: first), nil)
       }
-      if let existing = found.pairExisting.first { return .pairExisting(existing.id) }
+      if let existing = found.pairExisting.first { return (.pairExisting(existing.id), nil) }
     }
-    return .record(kind, categoryID: nil)
+    if let (choice, rule) = ruleSuggestion(source, reason) { return (choice, rule) }
+    return (.record(kind, categoryID: nil), nil)
+  }
+
+  /// C46: the choice an enabled rule matching the row makes (a rule saved from an earlier review
+  /// resolution): its category, its own account (where the card offers a transfer) or its debt.
+  /// The card keeps waiting for the user; "Use suggestions" applies it.
+  private func ruleSuggestion(_ source: NormalizedRow, _ reason: ReviewReason) -> (ReviewChoice, CategoryRule)? {
+    guard let flow = source.flow else { return nil }
+    let kind: CategoryKind = flow == .in ? .income : .expense
+    let account = preview.statementAccount(of: source)
+    let accountID: Account.ID? = if case .existing(let id) = account { id } else { nil }
+    let subject = RuleSubject(description: source.payee, accountID: accountID, amountMinor: abs(source.amountMinor), kind: kind)
+    for rule in matcher.candidates(for: subject) {
+      switch rule.action {
+      case .category:
+        guard let categoryID = rule.categoryID else { continue }
+        return (.record(kind, categoryID: categoryID), rule)
+      case .transfer:
+        if case .unpairedTransferHalf = reason { continue }
+        guard let target = rule.transferAccountID else { continue }
+        return (.transfer(accountID: target), rule)
+      case .debt:
+        guard let person = rule.debtPerson, let currency = preview.currency(of: account) else { continue }
+        let debt = preview.context.debts.debt(person: person)
+        return (.debt(ImportDebtChoice(personName: person, debtID: debt?.id, currency: currency)), rule)
+      }
+    }
+    return nil
   }
 
   private mutating func review(_ i: Int, _ base: PreviewRow, _ reason: ReviewReason) -> (PreviewRow, RowPlan) {
@@ -1164,9 +1212,10 @@ private struct Resolver {
     var row = base
     row.status = .needsReview
     let choice = decisions.reviews[source.id]
+    let (suggested, suggestingRule) = suggestion(source, found, reason)
     row.review = ReviewInfo(
       reason: reason, pairRows: found.pairRows, pairExisting: found.pairExisting,
-      suggested: suggestion(source, found, reason), choice: choice)
+      suggested: suggested, choice: choice, suggestedByRule: suggestingRule?.id, suggestingRuleLabel: suggestingRule?.label)
     switch reason {
     case .unpairedTransferHalf(let direction):
       row.detail = direction == .outgoing
