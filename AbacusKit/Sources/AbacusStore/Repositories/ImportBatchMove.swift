@@ -28,7 +28,7 @@ extension SQLiteImportStore {
     }
   }
 
-  /// C44: what "Move to another account…" offers for a PKO batch: its own transactions (each
+  /// C44: what "Move to another account" offers for a PKO batch: its own transactions (each
   /// movable or with the reason it is not) and the existing transactions it linked or settled,
   /// which stay. Throws `ImportMoveError.notMovable` for undone and non-PKO batches.
   public func movePlan(_ batchID: ImportBatch.ID) async throws -> ImportMovePlan {

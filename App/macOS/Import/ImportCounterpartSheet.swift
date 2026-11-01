@@ -123,11 +123,32 @@ struct ImportCounterpartSheet: View {
   @ViewBuilder
   private var list: some View {
     if picker.options.isEmpty {
-      VStack {
+      VStack(spacing: 10) {
         Spacer()
         Text(picker.isLoading ? "Searching…" : picker.emptyText)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
+        // C45: one click to a wider window or to an account that has transactions in this one.
+        if !picker.isLoading, let hint = picker.emptyHint {
+          if hint.canWiden {
+            Button("Widen to ±5 days") { picker.widen() }
+          }
+          if !hint.otherAccounts.isEmpty {
+            VStack(spacing: 4) {
+              Text("Other accounts with transactions in these days:")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+              HStack(spacing: 10) {
+                ForEach(hint.otherAccounts.prefix(4)) { hit in
+                  Button(hit.title) { picker.selectAccount(hit.id) }
+                    .buttonStyle(.link)
+                    .help("Show the transactions of “\(hit.name)”")
+                }
+              }
+              .font(.system(size: 12))
+            }
+          }
+        }
         Spacer()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)

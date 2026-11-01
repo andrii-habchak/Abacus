@@ -101,6 +101,11 @@ struct ImportCounterpartTests {
     #expect(picker.model.subtitle.contains("JAN PRZYKLAD") && picker.model.subtitle.contains("10.03.2026"))
     #expect(picker.model.estimate?.rateText == "1 USD = 4.00 PLN")
 
+    // C45: the window is the transfer's day; the candidate is the day after, one click away.
+    #expect(picker.model.fromDay == Day("2026-03-10")! && picker.model.throughDay == Day("2026-03-10")!)
+    await picker.model.load()
+    #expect(picker.model.options.isEmpty && picker.model.emptyHint?.canWiden == true)
+    picker.model.widen()
     await picker.model.load()
     let option = try #require(picker.model.options.first)
     #expect(option.id == found.id && option.title == "Wlasny przelew")
@@ -144,6 +149,7 @@ struct ImportCounterpartTests {
     let model = w.model
     model.selectReviewOption(.transfer, forRow: try #require(model.reviewItems.first).id)
     let picker = try #require(model.counterpartPicker)
+    picker.model.widen()
     await picker.model.load()
     let option = try #require(picker.model.options.first)
     #expect(!option.isUsable)

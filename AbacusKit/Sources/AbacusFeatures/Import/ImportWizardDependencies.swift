@@ -13,7 +13,7 @@ public struct ImportWizardDependencies: Sendable {
   /// C41: how many transactions each batch still has (the undo confirmation and its result say
   /// what is removed); nil = unknown.
   public var batchTransactionCounts: (@Sendable () async throws -> [ImportBatch.ID: Int])?
-  /// C44: what "Move to another account…" offers for a batch; nil = the action is not offered.
+  /// C44: what "Move to another account" offers for a batch; nil = the action is not offered.
   public var movePlan: (@Sendable (ImportBatch.ID) async throws -> ImportMovePlan)?
   /// C44: moves transactions of a batch (batch, transactions, from account or nil = the batch's,
   /// to account) in one database transaction.

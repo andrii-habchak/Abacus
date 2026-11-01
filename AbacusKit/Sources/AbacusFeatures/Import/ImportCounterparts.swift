@@ -47,9 +47,10 @@ public struct ImportCounterpartPicker: Identifiable {
 }
 
 /// The model of the "Find the other side…" sheet: the other account (C40: searchable picker), the
-/// date window (C40: date pickers; ±5 days by default, the transfer's day from the transfer popup),
-/// every transaction of that account in the window with a search field, a typed amount and the
-/// estimate at the day's rate.
+/// date window (C40: date pickers; C45: the transfer's day by default), every stored transaction of
+/// that account in the window with a search field (an empty search lists them all), a typed amount
+/// and the estimate at the day's rate. An empty list offers "Widen to ±5 days" and the other
+/// accounts that do have transactions in the window (C45).
 @MainActor
 @Observable
 public final class TransferCounterpartModel {
@@ -85,6 +86,22 @@ public final class TransferCounterpartModel {
     var estimate: Estimate?
   }
 
+  /// C45: what an empty list offers: a wider window and the accounts with transactions in this one.
+  public struct EmptyHint: Hashable, Sendable {
+    public struct AccountHit: Hashable, Identifiable, Sendable {
+      public var id: Account.ID
+      public var name: String
+      /// Stored transactions of the account in the window.
+      public var count: Int
+      /// "Cash USD · 2".
+      public var title: String { "\(name) · \(count)" }
+    }
+
+    /// "Widen to ±5 days" is offered (the window is narrower than that around the transfer's day).
+    public var canWiden: Bool
+    public var otherAccounts: [AccountHit]
+  }
+
   /// What the candidates are loaded for.
   public struct Query: Hashable, Sendable {
     public var accountID: Account.ID
@@ -109,17 +126,25 @@ public final class TransferCounterpartModel {
   /// The amount typed for "Use this amount" (the other account's currency, positive).
   public var manualText = ""
   public private(set) var options: [Option] = []
+  /// C45: set when the list is empty for an empty search.
+  public private(set) var emptyHint: EmptyHint?
   public private(set) var isLoading = false
   public var errorMessage: String?
 
   @ObservationIgnored private let source: @Sendable (Query) async throws -> [ImportCounterpartOption]
+  /// Stored transactions of an account in a window (C45: the accounts offered by an empty list).
+  @ObservationIgnored private let count: @Sendable (Account.ID, Day, Day) async throws -> Int
   @ObservationIgnored private let header: (Account.ID) -> Header
+  /// The transfer's day: "Widen to ±5 days" is around it.
+  @ObservationIgnored private let transferDay: Day
   @ObservationIgnored private let format: ImportFormat
   @ObservationIgnored private var generation = 0
 
   init(
-    accountID: Account.ID, accountItems: [AccountPickerItem], subtitle: String, days: ClosedRange<Day>, format: ImportFormat,
-    header: @escaping (Account.ID) -> Header, source: @escaping @Sendable (Query) async throws -> [ImportCounterpartOption]
+    accountID: Account.ID, accountItems: [AccountPickerItem], subtitle: String, transferDay: Day, days: ClosedRange<Day>,
+    format: ImportFormat, header: @escaping (Account.ID) -> Header,
+    source: @escaping @Sendable (Query) async throws -> [ImportCounterpartOption],
+    count: @escaping @Sendable (Account.ID, Day, Day) async throws -> Int = { _, _, _ in 0 }
   ) {
     let first = header(accountID)
     self.accountID = accountID
@@ -133,6 +158,8 @@ public final class TransferCounterpartModel {
     self.format = format
     self.header = header
     self.source = source
+    self.count = count
+    self.transferDay = transferDay
   }
 
   /// The window as days.
@@ -150,6 +177,16 @@ public final class TransferCounterpartModel {
     let range = low == high ? "on \(format.longDay(low))" : "from \(format.longDay(low)) to \(format.longDay(high))"
     return search.trimmingCharacters(in: .whitespaces).isEmpty
       ? "No transactions on “\(name)” \(range)." : "No transaction on “\(name)” \(range) matches the search."
+  }
+
+  /// C45: "Widen to ±5 days": the window becomes 5 days either side of the transfer's day (or
+  /// stays wider when the user already widened it further).
+  public func widen() {
+    let window = TransferCounterpartRanker.dayWindow
+    let low = min(transferDay.adding(days: -window, calendar: format.calendar), min(fromDay, throughDay))
+    let high = max(transferDay.adding(days: window, calendar: format.calendar), max(fromDay, throughDay))
+    fromDate = low.date(calendar: format.calendar)
+    throughDate = high.date(calendar: format.calendar)
   }
 
   /// Another account for the other side: title, currency and estimate follow it.
@@ -188,10 +225,31 @@ public final class TransferCounterpartModel {
       errorMessage = "Couldn't load transactions."
       return
     }
+    var hint: EmptyHint?
+    if found.isEmpty, query.search.trimmingCharacters(in: .whitespaces).isEmpty {
+      hint = await emptyHint(for: query)
+    }
     guard current == generation else { return }
     options = found.map(option)
+    emptyHint = hint
     isLoading = false
     if errorMessage == "Couldn't load transactions." { errorMessage = nil }
+  }
+
+  /// "Widen to ±5 days" when the window is narrower, and the other accounts with stored
+  /// transactions in the window (most first).
+  private func emptyHint(for query: Query) async -> EmptyHint {
+    let (low, high) = query.from <= query.through ? (query.from, query.through) : (query.through, query.from)
+    let window = TransferCounterpartRanker.dayWindow
+    let canWiden = low > transferDay.adding(days: -window, calendar: format.calendar)
+      || high < transferDay.adding(days: window, calendar: format.calendar)
+    var hits: [EmptyHint.AccountHit] = []
+    for item in accountItems where item.id != query.accountID && !item.isArchived {
+      let found = (try? await count(item.id, low, high)) ?? 0
+      if found > 0 { hits.append(EmptyHint.AccountHit(id: item.id, name: item.name, count: found)) }
+    }
+    hits.sort { $0.count != $1.count ? $0.count > $1.count : $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    return EmptyHint(canWiden: canWiden, otherAccounts: hits)
   }
 
   private func option(_ found: ImportCounterpartOption) -> Option {
@@ -206,6 +264,7 @@ public final class TransferCounterpartModel {
     }
     let refusal = found.candidate.refusal?.message
       ?? (found.isSameDirection ? "Money moves the same way as this row, so it can't be the other side." : nil)
+      ?? (found.isTakenByAnotherRow ? "Another row of this import already uses it." : nil)
     if let refusal { parts.append(refusal) }
     var detail = "Rate " + Self.rateText(found.impliedRate)
     if let deviation = found.deviation {
@@ -293,7 +352,8 @@ extension ImportWizardModel {
   }
 
   /// Opens "Find the other side…" for the row's transfer to `accountID` (the sheet's account
-  /// picker can change it). `days`: the date window; nil = ±5 days around the row.
+  /// picker can change it). `days`: the date window; nil = the row's day (C45; the sheet's date
+  /// pickers and "Widen to ±5 days" widen it).
   public func beginCounterpart(forRow id: String, to accountID: Account.ID, days: ClosedRange<Day>? = nil) {
     guard let preview, let row = preview.row(id), preview.counterpartProbe(forRow: id, to: accountID) != nil else { return }
     let pipeline = self.pipeline
@@ -322,17 +382,19 @@ extension ImportWizardModel {
         currencyCode: code, estimate: estimate)
     }
     let rowDay = Day(row.source.occurredAt, calendar: format.calendar)
-    let window = days
-      ?? rowDay.adding(days: -TransferCounterpartRanker.dayWindow, calendar: format.calendar)...rowDay.adding(
-        days: TransferCounterpartRanker.dayWindow, calendar: format.calendar)
+    let window = days ?? rowDay...rowDay
     let ownID: Account.ID? = if case .existing(let ownID) = row.account { ownID } else { nil }
     let items = AccountPickerItem.items(
       from: AccountOrder.pickerSections(accounts.filter { !$0.isArchived && $0.id != ownID }, groups: accountGroups))
     let model = TransferCounterpartModel(
-      accountID: accountID, accountItems: items, subtitle: subtitle, days: window, format: format, header: header,
+      accountID: accountID, accountItems: items, subtitle: subtitle, transferDay: rowDay, days: window, format: format,
+      header: header,
       source: { query in
         try await pipeline.counterpartOptions(
           for: preview, row: id, to: query.accountID, from: query.from, through: query.through, matching: query.search)
+      },
+      count: { account, from, through in
+        try await pipeline.counterparts?.counterpartCandidates(accountID: account, from: from, to: through).count ?? 0
       })
     counterpartPicker = ImportCounterpartPicker(rowID: id, model: model)
   }

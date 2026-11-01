@@ -88,7 +88,7 @@ struct ImportView: View {
     } message: {
       Text(model.undoNotice ?? "")
     }
-    // C44: History → Move to another account….
+    // C44: History → Move to another account.
     .sheet(isPresented: Binding(get: { model.moveSheet != nil }, set: { if !$0 { model.cancelMove() } })) {
       if let sheet = model.moveSheet {
         ImportMoveSheet(model: model, sheet: sheet)
@@ -98,11 +98,14 @@ struct ImportView: View {
       "Transactions moved",
       isPresented: Binding(get: { model.moveNotice != nil }, set: { if !$0 { model.moveNotice = nil } })
     ) {
-      // Takes the move before the alert's dismissal clears the notice.
-      if model.lastMove != nil {
-        Button("Undo move") { model.startUndoLastMove() }
+      // C45: OK first, so it is the blue default button; Undo move is the plain one. Undo move
+      // takes the move before the alert's dismissal clears the notice.
+      ForEach(model.moveNoticeButtons, id: \.self) { button in
+        switch button.action {
+        case .dismiss: Button(button.title) { model.moveNotice = nil }.keyboardShortcut(.defaultAction)
+        case .undoMove: Button(button.title) { model.startUndoLastMove() }
+        }
       }
-      Button("OK") { model.moveNotice = nil }
     } message: {
       Text(model.moveNotice ?? "")
     }
@@ -112,7 +115,15 @@ struct ImportView: View {
       #if DEBUG
         // UI checks: `-AbacusImportFile <csv>` opens the review step, e.g. for an in-app snapshot.
         if model.step == .chooseFile, let path = UserDefaults.standard.string(forKey: "AbacusImportFile") {
+          // A demo waits for the sample data's accounts, which load alongside this screen.
+          if UserDefaults.standard.string(forKey: "AbacusImportDemo") != nil {
+            for _ in 0..<50 where model.accounts.count < 2 {
+              try? await Task.sleep(for: .milliseconds(100))
+              await model.refreshReference()
+            }
+          }
           await model.open(url: URL(filePath: path))
+          await openDebugDemo()
         }
       #endif
     }
@@ -123,6 +134,45 @@ struct ImportView: View {
     }
     .onAppear { Task { await model.refreshReference() } }
   }
+
+  #if DEBUG
+    /// UI checks (in-app snapshot) after `-AbacusImportFile`: `-AbacusImportDemo counterpart:<account
+    /// name>` opens "Find the other side…" of the first row that needs it for that account
+    /// (`-AbacusImportTarget <account name>` picks the statement's account first);
+    /// `-AbacusImportDemo moved:<account name>` imports the file into the chosen statement account,
+    /// moves the batch to the named account and shows the "Transactions moved" alert;
+    /// `-AbacusImportDemo history:<any account name>` imports the file and opens History.
+    private func openDebugDemo() async {
+      guard let demo = UserDefaults.standard.string(forKey: "AbacusImportDemo"),
+        let colon = demo.firstIndex(of: ":")
+      else { return }
+      let kind = demo[..<colon]
+      let name = String(demo[demo.index(after: colon)...])
+      guard let account = model.accounts.first(where: { $0.name == name }) else { return }
+      // `-AbacusImportTarget <account name>`: the statement's account when the file doesn't say.
+      if model.needsTargetAccount, let target = UserDefaults.standard.string(forKey: "AbacusImportTarget"),
+        let statement = model.accounts.first(where: { $0.name == target })
+      {
+        await model.chooseTargetAccount(statement.id)
+      }
+      switch kind {
+      case "counterpart":
+        if let row = model.rowItems.first(where: { model.needsCounterpart(forRow: $0.id, to: account.id) }) {
+          model.beginCounterpart(forRow: row.id, to: account.id)
+        }
+      case "moved":
+        await model.commit()
+        guard let batch = model.history.first else { return }
+        await model.requestMove(batch)
+        model.moveSheet?.targetAccountID = account.id
+        await model.startMove()?.value
+      case "history":
+        await model.commit()
+        model.isHistoryShown = true
+      default: break
+      }
+    }
+  #endif
 
   @ViewBuilder
   private var content: some View {
@@ -383,7 +433,7 @@ struct ImportHistoryEntry: View {
   /// C41: transactions the batch still has; nil = unknown.
   var transactionCount: Int? = nil
   var showTransactions: () -> Void = {}
-  /// C44: why "Move to another account…" is disabled; nil = enabled.
+  /// C44: why "Move to another account" is disabled; nil = enabled.
   var moveUnavailableReason: String? = nil
   var move: () -> Void = {}
   let undo: () -> Void
@@ -451,7 +501,7 @@ struct ImportHistoryEntry: View {
   }
 
   private var moveButton: some View {
-    Button("Move to another account…", action: move)
+    Button(ImportWizardModel.moveActionTitle, action: move)
       .controlSize(.small)
       .disabled(moveUnavailableReason != nil)
       .help(moveUnavailableReason ?? "Move this statement's transactions to another account in the same currency")

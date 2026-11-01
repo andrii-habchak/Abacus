@@ -3,7 +3,7 @@ import AbacusFeatures
 import AbacusImport
 import SwiftUI
 
-/// C44: History → "Move to another account…". The batch's transactions in the review's row list
+/// C44: History → "Move to another account". The batch's transactions in the review's row list
 /// (same columns, header sort, click / Cmd / Shift selection; selected rows move), the account
 /// they move to (searchable picker, the batch's currency only), what the move does, and
 /// "Move N transactions".

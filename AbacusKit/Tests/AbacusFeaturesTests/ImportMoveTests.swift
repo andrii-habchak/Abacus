@@ -16,7 +16,7 @@ private let dollars = Account(
 private let archived = Account(
   id: PreviewData.id(9204), name: "Old PLN", currency: .PLN, kind: .bank, openingDate: opening, isArchived: true)
 
-/// C44: History → "Move to another account…" of an import batch, and the History buttons.
+/// C44: History → "Move to another account" of an import batch, and the History buttons.
 @MainActor
 @Suite("Move an import batch to another account (C44)")
 struct ImportMoveTests {
@@ -139,6 +139,10 @@ struct ImportMoveTests {
     h.model.moveSheet?.targetAccountID = business.id
     await h.model.startMove()?.value
     #expect(h.model.lastMove != nil)
+    // C45: the History button has no ellipsis; the alert's OK is the default, Undo move the plain one.
+    #expect(ImportWizardModel.moveActionTitle == "Move to another account")
+    #expect(h.model.moveNoticeButtons.map(\.title) == ["OK", "Undo move"])
+    #expect(h.model.moveNoticeButtons.map(\.isDefault) == [true, false])
 
     // What the alert does: the button's action, then the dismissal clears the notice.
     let task = h.model.startUndoLastMove()
@@ -146,6 +150,7 @@ struct ImportMoveTests {
     await task?.value
     #expect(h.model.lastMove == nil)
     #expect(h.model.moveNotice?.hasPrefix("The move of “all-types.csv” was undone") == true)
+    #expect(h.model.moveNoticeButtons.map(\.title) == ["OK"])
     var txns = try await h.txns().filter { $0.txn.importBatchID == batch.id }
     #expect(txns.allSatisfy { $0.txn.accountID == personal.id || $0.txn.toAccountID == personal.id })
     #expect(h.model.history.first?.accountID == personal.id)
