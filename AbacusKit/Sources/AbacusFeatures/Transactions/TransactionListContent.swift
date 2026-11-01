@@ -41,7 +41,7 @@ public struct TransactionListContent: Equatable, Sendable {
   }
 
   public struct Badge: Hashable, Sendable {
-    public enum Kind: Hashable, Sendable { case pending, refund, event, debt }
+    public enum Kind: Hashable, Sendable { case pending, refund, event, debt, moved }
     public var kind: Kind
     public var label: String
   }
@@ -92,6 +92,9 @@ public struct TransactionListContent: Equatable, Sendable {
     public var refundJumpID: Txn.ID? = nil
     /// The row is a refund linked to its original.
     public var isLinkedRefund = false
+    /// C48: "Moved from PKO private to Business · 1 Nov 2026" on a transaction of a moved import batch
+    /// (the badge's hover text); nil otherwise.
+    public var movedNote: String? = nil
   }
 
   public struct DaySection: Identifiable, Hashable, Sendable {
@@ -272,22 +275,26 @@ public struct TransactionListContent: Equatable, Sendable {
     private let displayCurrency: Currency
 
     /// Content for the first `rows` (a page, or all of them).
-    public func content(rows: [TxnWithLines], refundLinks: RefundLinkSummary = RefundLinkSummary()) -> TransactionListContent {
+    public func content(
+      rows: [TxnWithLines], refundLinks: RefundLinkSummary = RefundLinkSummary(), moves: [Txn.ID: TxnMove] = [:]
+    ) -> TransactionListContent {
       var content = TransactionListContent(days: [], totals: totals, format: format)
-      append(rows, refundLinks: refundLinks, to: &content)
+      append(rows, refundLinks: refundLinks, moves: moves, to: &content)
       return content
     }
 
     /// Adds the next page: its rows join the last day section when they share its day (a page
     /// boundary may fall inside a day), otherwise new sections start.
     public func append(
-      _ rows: [TxnWithLines], refundLinks: RefundLinkSummary = RefundLinkSummary(), to content: inout TransactionListContent
+      _ rows: [TxnWithLines], refundLinks: RefundLinkSummary = RefundLinkSummary(), moves: [Txn.ID: TxnMove] = [:],
+      to content: inout TransactionListContent
     ) {
       let dates = RefundNoteDates(calendar: calendar, locale: format.locale)
       for item in rows {
         let day = Day(item.txn.occurredAt, calendar: calendar)
         var row = TransactionListContent.row(item, reference: reference, calendar: calendar, format: format)
         refundNote(for: item.txn, links: refundLinks, dates: dates, into: &row)
+        if let move = moves[item.txn.id] { movedNote(move, dates: dates, into: &row) }
         if let last = content.days.indices.last, content.days[last].day == day {
           content.days[last].rows.append(row)
         } else {

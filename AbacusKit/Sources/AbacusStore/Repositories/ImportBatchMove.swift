@@ -52,7 +52,8 @@ extension SQLiteImportStore {
   /// refuses the whole move. Moving the result's `txnIDs` back from `to` to `from` undoes it.
   @discardableResult
   public func move(
-    _ batchID: ImportBatch.ID, txnIDs: [Txn.ID], from: Account.ID? = nil, to target: Account.ID
+    _ batchID: ImportBatch.ID, txnIDs: [Txn.ID], from: Account.ID? = nil, to target: Account.ID,
+    at date: Date = Date()
   ) async throws -> ImportMoveResult {
     try await database.write { db in
       guard let batch = try ImportBatch.find(batchID).fetchOne(db) else { throw RepositoryError.notFound }
@@ -89,6 +90,7 @@ extension SQLiteImportStore {
         if txn.accountID == source { txn.accountID = target }
         if txn.toAccountID == source { txn.toAccountID = target }
         try Txn.upsert { Txn.Draft(txn) }.execute(db)
+        try Self.trace(txn: id, batch: batchID, from: source, to: target, at: date, db)
       }
 
       // The batch follows its rows once none of its own is left on the old account.
@@ -101,6 +103,20 @@ extension SQLiteImportStore {
         try Self.rememberTarget(after: batch, from: source, to: target, currency: sourceAccount.currency, db)
       }
       return ImportMoveResult(batchID: batchID, from: source, to: target, txnIDs: ids.sorted { $0.uuidString < $1.uuidString }, batchMoved: batchMoved)
+    }
+  }
+
+  /// C48: records "moved from `from`" on the transaction. Moving it back to the account its latest
+  /// trace says it came from drops that trace instead, so Undo move (and moving back by hand) leaves
+  /// the transaction as if it had never moved.
+  static func trace(txn: Txn.ID, batch: ImportBatch.ID, from: Account.ID, to: Account.ID, at date: Date, _ db: Database) throws {
+    let latest = try TxnMove.where { $0.txnID.eq(txn) }.fetchAll(db).max { $0.movedAt < $1.movedAt }
+    if let latest, latest.fromAccountID == to {
+      try TxnMove.find(latest.id).delete().execute(db)
+    } else {
+      try TxnMove.insert {
+        TxnMove(txnID: txn, batchID: batch, fromAccountID: from, toAccountID: to, movedAt: date)
+      }.execute(db)
     }
   }
 
@@ -185,5 +201,25 @@ extension SQLiteImportStore {
       .where { $0.source.eq(ImportSource.pko) && $0.kind.eq(MappingKind.account) && $0.externalKey.eq(key) && $0.targetID.eq(from) }
       .update { $0.targetID = #bind(to) }
       .execute(db)
+  }
+}
+
+// MARK: - Trace of moves (C48)
+
+extension SQLiteImportStore: TxnMoveReading {
+  public func moves(for txnIDs: [Txn.ID]) async throws -> [Txn.ID: TxnMove] {
+    let unique = Array(Set(txnIDs))
+    guard !unique.isEmpty else { return [:] }
+    return try await database.read { db in
+      var latest: [Txn.ID: TxnMove] = [:]
+      for chunk in unique.chunked(500) {
+        let keys = Array(chunk)
+        for move in try TxnMove.where({ $0.txnID.in(keys) }).fetchAll(db) {
+          if let known = latest[move.txnID], known.movedAt >= move.movedAt { continue }
+          latest[move.txnID] = move
+        }
+      }
+      return latest
+    }
   }
 }

@@ -177,6 +177,10 @@ struct EditorHeader: View {
         .font(.system(size: 12))
         .controlSize(.small)
       }
+      if let moved = model.movedNote {
+        // C48: the transaction came with an import batch that was moved to another account.
+        EditorHint(text: moved)
+      }
       if let hint = model.defaultsHint {
         EditorHint(text: hint)
       }

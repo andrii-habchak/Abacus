@@ -149,6 +149,24 @@ extension AbacusDatabase {
       try db.execute(
         sql: #"CREATE INDEX IF NOT EXISTS "idx_importTxnSnapshots_batchID" ON "importTxnSnapshots"("batchID")"#)
     }
+    // C48: the trace of an import batch moved to another account (`txnMoves`: where a transaction
+    // came from and when, shown as "Moved from <account> · <date>"). Append-only and CloudKit-safe: one
+    // new table, single primary key, no UNIQUE, ON DELETE CASCADE (transaction) / SET NULL (batch) only;
+    // the accounts are plain ids. Safe to run again (IF NOT EXISTS).
+    migrator.registerMigration("v17: transaction moves") { db in
+      try db.execute(
+        sql: #"""
+          CREATE TABLE IF NOT EXISTS "txnMoves" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "txnID" TEXT NOT NULL REFERENCES "txns"("id") ON DELETE CASCADE,
+            "batchID" TEXT REFERENCES "importBatches"("id") ON DELETE SET NULL,
+            "fromAccountID" TEXT NOT NULL,
+            "toAccountID" TEXT NOT NULL,
+            "movedAt" TEXT NOT NULL
+          ) STRICT
+          """#)
+      try db.execute(sql: #"CREATE INDEX IF NOT EXISTS "idx_txnMoves_txnID" ON "txnMoves"("txnID")"#)
+    }
     return migrator
   }
 

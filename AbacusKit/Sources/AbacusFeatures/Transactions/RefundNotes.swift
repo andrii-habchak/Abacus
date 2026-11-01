@@ -20,7 +20,27 @@ struct RefundNoteDates {
   }
 }
 
+/// C48: the wording of a move trace, shared by the list and the editor.
+enum TxnMoveText {
+  static func name(_ id: Account.ID, _ accounts: [Account.ID: Account]) -> String {
+    accounts[id]?.name ?? "another account"
+  }
+
+  /// "Moved from PKO private to Business · 1 Nov 2026".
+  static func note(_ move: TxnMove, accounts: [Account.ID: Account], dates: RefundNoteDates) -> String {
+    "Moved from \(name(move.fromAccountID, accounts)) to \(name(move.toAccountID, accounts)) · "
+      + dates.long.string(from: move.movedAt)
+  }
+}
+
 extension TransactionListContent.Builder {
+  /// C48: the "Moved from <account>" badge and its hover text for a transaction of a moved import batch.
+  func movedNote(_ move: TxnMove, dates: RefundNoteDates, into row: inout TransactionListContent.Row) {
+    row.badges.append(
+      .init(kind: .moved, label: "Moved from " + TxnMoveText.name(move.fromAccountID, reference.accountsByID)))
+    row.movedNote = TxnMoveText.note(move, accounts: reference.accountsByID, dates: dates)
+  }
+
   /// Fills the refund text and jump target of a row from the links of its page (C30): an expense
   /// says how much of it came back (the refunds converted to its currency at each refund's date),
   /// a linked refund names its original.
