@@ -67,3 +67,13 @@ struct TextFoldingTests {
     #expect(!hold("zus", ""))
   }
 }
+
+@Suite("Rule field input")
+struct TypedPatternTests {
+  @Test("special letters and accents become plain letters, case kept")
+  func typed() {
+    #expect(TextFolding.typedPattern("ZAKŁAD UBEZPIECZEŃ SPOŁECZNYCH") == "ZAKLAD UBEZPIECZEN SPOLECZNYCH")
+    #expect(TextFolding.typedPattern("Łódź ß") == "Lodz ss")
+    #expect(TextFolding.typedPattern("plain 123") == "plain 123")
+  }
+}

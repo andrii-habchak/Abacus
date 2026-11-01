@@ -252,6 +252,12 @@ struct RuleEditorSheet: View {
     draftBinding({ model.editor }, { model.editor = $0 }, keyPath, fallback: fallback)
   }
 
+  /// Pasted or typed special letters are replaced by their plain letters (Ł → L), as rules ignore accents.
+  private var patternBinding: Binding<String> {
+    let base = binding(\.pattern, "")
+    return Binding(get: { base.wrappedValue }, set: { base.wrappedValue = TextFolding.typedPattern($0) })
+  }
+
   private var draft: RuleDraft { model.editor ?? RuleDraft() }
 
   var body: some View {
@@ -350,15 +356,15 @@ struct RuleEditorSheet: View {
       conditionRow(isFirst: true, remove: draft.canRemoveDescription ? { model.removeDescriptionCondition() } : nil) {
         firstConditionPicker
         VStack(alignment: .leading, spacing: 3) {
-          TextField("Text", text: binding(\.pattern, ""), prompt: Text("e.g. biedronka"))
+          TextField("Text", text: patternBinding, prompt: Text("e.g. biedronka"))
             .labelsHidden()
             .textFieldStyle(.roundedBorder)
-          Text("Not case sensitive; accents ignored")
+          Text("Not case sensitive; accents and special letters (Ł, Ą…) are replaced by plain ones")
             .font(.caption)
             .foregroundStyle(.secondary)
           if TextFolding.hasUnreadable(draft.pattern) {
             Text(
-              "This text has unreadable characters (shown as a box), copied from the bank text. Each matches any one character; retype the word to replace them."
+              "This text has unreadable characters (shown as a box), copied from the bank text. Each matches any one character; retype the word (special letters are converted automatically)."
             )
             .font(.caption)
             .foregroundStyle(.orange)

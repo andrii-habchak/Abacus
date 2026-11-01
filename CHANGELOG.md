@@ -2,6 +2,13 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.6.2] — Unreleased
+
+### Changed
+
+- Rules: special letters and accents typed or pasted into the rule text are replaced by plain letters on the
+  spot (Ł → L, Ą → A…), with a hint under the field.
+
 ## [1.6.1] — Unreleased
 
 Opening this version updates the database (migration v17: the trace of moved import batches); back up

@@ -31,6 +31,21 @@ public enum TextFolding {
     return mapped.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
   }
 
+  /// Text typed or pasted into a rule's field: special letters and accents become their plain letters
+  /// (Ł→L, ą→a, ß→ss…), case kept; U+FFFD stays (nothing says which letter it was).
+  public static func typedPattern(_ text: String) -> String {
+    var out = ""
+    for character in text {
+      if character == replacement { out.append(character); continue }
+      let plain: String
+      if let ascii = special[character] { plain = ascii } else {
+        plain = String(character).folding(options: .diacriticInsensitive, locale: nil)
+      }
+      out += character.isUppercase ? plain.uppercased() : plain
+    }
+    return out
+  }
+
   /// What the UI shows for an unreadable character of the bank text (a stored U+FFFD).
   public static let placeholder: Character = "\u{25AF}"
 
