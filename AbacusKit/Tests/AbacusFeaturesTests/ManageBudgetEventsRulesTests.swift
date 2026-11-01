@@ -508,6 +508,19 @@ struct ManageRulesTests {
     #expect(match(model, "Spotify") == nil)
   }
 
+  @Test("C47: unreadable characters of a stored pattern show as a placeholder, the stored text is kept")
+  func unreadableCharacters() async throws {
+    let stored = "ZAK\u{FFFD}AD UBEZPIECZE\u{FFFD}"
+    let categoryID = try #require(ManageSample.rules.compactMap(\.categoryID).first)
+    try await store.ruleRepository.save(CategoryRule(pattern: stored, categoryID: categoryID))
+    let model = await model()
+    let rule = try #require(model.rules.first { $0.pattern == stored })
+    #expect(!model.conditionText(rule).contains("\u{FFFD}"))
+    #expect(model.conditionText(rule).contains("ZAK\u{25AF}AD UBEZPIECZE\u{25AF}"))
+    #expect(model.rows.first { $0.id == rule.id }?.pattern == "ZAK\u{25AF}AD UBEZPIECZE\u{25AF}")
+    #expect(rule.pattern == stored)
+  }
+
   @Test("R-IMP-8: the first match wins and disabled rules are skipped")
   func firstMatchWins() async throws {
     let model = await model()

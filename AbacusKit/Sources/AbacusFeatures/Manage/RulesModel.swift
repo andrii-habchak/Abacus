@@ -258,7 +258,7 @@ public final class RulesModel {
         case .startsWith: "starts with"
         case .exactly: "equals"
         }
-      parts.append("Description \(verb) “\(rule.pattern)”")
+      parts.append("Description \(verb) “\(TextFolding.displayText(rule.pattern))”")
     }
     if let comparison = rule.amountComparison, let amount = rule.amountMinor {
       let word = comparison == .biggerThan ? "bigger" : "smaller"
@@ -318,7 +318,7 @@ public final class RulesModel {
   public var rows: [RuleRow] {
     visibleRules.map { rule in
       RuleRow(
-        id: rule.id, pattern: rule.label, condition: conditionText(rule), action: actionText(rule),
+        id: rule.id, pattern: TextFolding.displayText(rule.label), condition: conditionText(rule), action: actionText(rule),
         origin: rule.origin == .imported ? "Learned from an import" : "Manual", hits: rule.hitCount,
         isEnabled: rule.isEnabled, warning: warning(rule))
     }
