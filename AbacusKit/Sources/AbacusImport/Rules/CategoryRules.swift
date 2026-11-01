@@ -58,11 +58,12 @@ public struct RuleMatcher: Sendable {
     if !pattern.isEmpty {
       let text = RulePattern.normalized(subject.description)
       guard !text.isEmpty else { return false }
-      switch rule.matchKind {
-      case .contains: guard text.contains(pattern) else { return false }
-      case .startsWith: guard text.hasPrefix(pattern) else { return false }
-      case .exactly: guard text == pattern else { return false }
+      let mode: TextFolding.Mode = switch rule.matchKind {
+      case .contains: .contains
+      case .startsWith: .prefix
+      case .exactly: .exact
       }
+      guard TextFolding.matches(text: text, pattern: pattern, mode: mode) else { return false }
     }
     if let comparison = rule.amountComparison, let limit = rule.amountMinor {
       guard let amount = subject.amountMinor.map(abs) else { return false }
@@ -127,9 +128,11 @@ public struct RuleMatcher: Sendable {
 /// Patterns learned from the user's choices (R-IMP-8).
 public enum RulePattern {
   /// Case- and diacritic-folded with runs of whitespace collapsed to one space: what patterns
-  /// and descriptions are compared as ("Żabka" matches "zabka").
+  /// and descriptions are compared as ("Żabka" matches "zabka"). Letters without a decomposition
+  /// (Ł, ø, ß, æ …) are spelled in ASCII too (`TextFolding`, C42); a U+FFFD in bank text is a
+  /// one-character wildcard when matching (`RuleMatcher.conditionsHold`).
   public static func normalized(_ text: String) -> String {
-    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    TextFolding.fold(text)
       .split(whereSeparator: \.isWhitespace).joined(separator: " ")
   }
 

@@ -123,8 +123,8 @@ struct RefundMatcher {
   }
 
   static func fold(_ text: String) -> String {
-    text.trimmingCharacters(in: .whitespacesAndNewlines)
-      .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+    TextFolding.fold(text.trimmingCharacters(in: .whitespacesAndNewlines))
+      .folding(options: [.widthInsensitive], locale: nil)
   }
 
   static func isOriginal(_ shape: TxnShape, _ row: PreviewRow) -> Bool {

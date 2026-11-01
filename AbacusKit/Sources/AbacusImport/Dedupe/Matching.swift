@@ -21,7 +21,7 @@ public enum AccountNumber {
 public enum DescriptionSimilarity {
   /// Lowercased words without diacritics, split on anything that is not a letter or digit.
   public static func words(_ text: String) -> [String] {
-    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    TextFolding.fold(text)
       .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
       .map(String.init)
   }

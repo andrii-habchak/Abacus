@@ -217,6 +217,11 @@ public struct ImportReviewItem: Identifiable, Hashable, Sendable {
   public var counterpart: ImportCounterpartItem? = nil
   /// C38: the row looks like the real figure of an estimated transfer.
   public var estimate: ImportEstimateItem? = nil
+  /// C42: "Will be saved as a rule “…” → …" once the card is resolved in a way a rule can express
+  /// (category, transfer to an own account, debt); nil when no rule can be learned from it.
+  public var ruleNote: String? = nil
+  /// With `ruleNote`: whether the rule will be saved (default yes; `setSavesRule` turns it off).
+  public var savesRule: Bool? = nil
 }
 
 // MARK: - History
@@ -791,7 +796,15 @@ extension ImportWizardModel {
       categoryOptions: [ImportCategoryOption(choice: .none, label: "No category", isChild: false)] + categoryOptions(recordKind)
         + [ImportCategoryOption(choice: .createNew, label: "+ New category…", isChild: false)],
       selectedCategory: selectedCategory, transferAccounts: transferAccounts, selectedTransferAccount: selectedTransfer,
-      debtLabel: row.debt.map(debtLabel), counterpart: counterpartItem(row), estimate: estimateItem(row))
+      debtLabel: row.debt.map(debtLabel), counterpart: counterpartItem(row), estimate: estimateItem(row),
+      ruleNote: reviewRuleNote(row), savesRule: row.learnedAction == nil ? nil : row.rulePattern != nil)
+  }
+
+  /// C42: the rule a resolved review card will save, or the note that it won't.
+  func reviewRuleNote(_ row: PreviewRow) -> String? {
+    guard let action = row.learnedAction else { return nil }
+    guard let pattern = row.rulePattern else { return "Not saved as a rule" }
+    return "Will be saved as a rule “\(pattern)” → \(ruleActionLabel(action))"
   }
 
   /// "Transfer to debt · Ann · €46.50 (new debt)".

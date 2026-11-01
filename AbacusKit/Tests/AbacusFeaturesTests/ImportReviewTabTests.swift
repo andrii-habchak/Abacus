@@ -109,7 +109,10 @@ struct ImportReviewTabTests {
     #expect(decidedExpense.selectedCategory == Self.groceries.id)
     // The cards stay selected and can be acted on again.
     #expect(model.bulk.selected == 2)
-    #expect(model.ruleSheet == nil)
+    // C42: the resolved unknown-type cards offer a rule, like category rows do.
+    let sheet = try #require(model.ruleSheet)
+    #expect(sheet.suggestions.allSatisfy { $0.categoryID != nil })
+    #expect(sheet.suggestions.flatMap(\.rowIDs).contains(expense.id))
   }
 
   @Test("C36: bulk Category works on a mixed selection of review cards and category rows")
