@@ -21,7 +21,7 @@ standing permission to commit and push without asking.
    `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`; real-data tests with
    `ABACUS_SAMPLES=$PWD/samples/private` (counts only). If the gate is red, stop and report. The
    large-data timing test can flake in a full parallel run; rerun it alone before calling it red.
-3. **Mission: the roadmap items N1–N8** (`docs/ROADMAP.md` §5), run in parallel where files do not
+3. **Mission: the roadmap items N1–N7** (N8 is deferred by the owner) (`docs/ROADMAP.md` §5), run in parallel where files do not
    overlap. Statuses in that table gate everything:
    - Do not start a lane for an item whose status is not **approved**. If items are still
      `proposed`, put **one batch of questions** to the owner (the proposed defaults, one line
@@ -31,13 +31,12 @@ standing permission to commit and push without asking.
      N2 MCP server, N3 stabilisation, N4 encryption research (document only). They own, in
      order: Backup/Settings data UI + `AbacusDatabase.open` (N1); a new `AbacusMCP` target and its
      tests (N2); the open items listed in the roadmap (N3); `docs/status/N4.md` only (N4).
-   - **Spec stream, in parallel with wave 1:** for each of N5–N8, a spec lane drafts the TA
+   - **Spec stream, in parallel with wave 1:** for each of N5–N7, a spec lane drafts the TA
      section (new `R-…` IDs, proposed defaults from the roadmap) and an HTML prototype in the
      style of `docs/design/`. Show the owner, iterate, freeze approved screens in `docs/design/`,
      bump the TA version and its change log. No UI lane starts against an unapproved screen.
    - **Wave 2 (after each item's spec is approved, up to 4 at once):** N5 recurring + forecast
-     (L, migration v18), N6 reconciliation (M, migration v19), N7 app lock (S), N8 quick actions
-     (M). N7 waits for N4's recommendation if it touches the database.
+     (L, migration v18), N6 reconciliation (M, migration v19), N7 app lock (S). N7 waits for N4's recommendation if it touches the database.
 4. Orchestrator duties you must not skip:
    - Reserve migration numbers (v18, v19 as in the roadmap; next free number for anything else) and
      land shared-file changes (`Package.swift` target skeletons, `project.yml`, entities, protocols)
@@ -47,7 +46,8 @@ standing permission to commit and push without asking.
      Pick lane model and effort by size: small and medium lanes at standard effort, large or
      migration-touching lanes (N5, N6) higher.
    - Contended UI files (the section list and sidebar, session host, dashboard layout, editor):
-     assign one owner per file per wave and merge in this order: N3, N1, N2, N6, N5, N7, N8.
+     assign one owner per file per wave and merge in this order: N3, N1, N2, N6, N5, N7. N2's write tools need N1's
+     snapshot API first.
    - Review each lane: the diff stays in owned paths, tests name their requirement IDs, the gate is
      green, migrations were exercised on a copy of real-data-shaped fixtures. Merge with
      `--no-ff`, tick `docs/ROADMAP.md` / `docs/PLAN.md`, update `docs/STATUS.md`, push `main`.

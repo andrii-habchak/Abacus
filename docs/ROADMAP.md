@@ -18,9 +18,12 @@ client call typed tools; here a local, read-only server over the app database.
   debts, events, settings that belong to the data), not only transactions.
 - **Sync experience wanted:** press one button on either device; everything then happens without
   further manual steps. Batch sync is fine, live sync is not required.
-- **MCP:** local server, read-only first (a CLI may be added later if scripting is wanted).
+- **MCP:** local server with read tools and write tools (transactions, categories, accounts, import
+  undo and move; see N2). A CLI may be added later if scripting is wanted.
+- **Visual check:** the owner checked the current app (1.6.2) visually on 2026-11-03: fine.
+- **Quick actions (N8) are skipped for the next iteration.**
 - **Order of next work:** N1 backups + N3 stabilisation, then N2 MCP, then recurring/forecast,
-  reconciliation, app lock, quick actions (run in parallel where files do not overlap).
+  reconciliation, app lock (run in parallel where files do not overlap). N8 is deferred.
 
 ## 2. Sync design notes (for when iOS starts)
 
@@ -81,10 +84,10 @@ TA currently lists investments as out of scope; the owner reopens it by approvin
 ## 4. MCP and CLI
 
 MCP and CLI are not rivals; both are thin shells over a query layer in `AbacusKit`. Build the
-query layer and the MCP server first (works in a chat client, can be strictly read-only); a CLI
+query layer and the MCP server first (works in a chat client, reads first, writes behind safeguards); a CLI
 with JSON output is a cheap by-product if scripting is wanted. Privacy: whatever a tool returns
 goes to the AI client, which touches the "no telemetry" principle, so it is opt-in, local (stdio),
-read-only and aggregate-first.
+aggregate-first for reads, and every write is confirmed and logged.
 
 ## 5. Next work items and readiness
 
@@ -94,13 +97,13 @@ Status values: `proposed` (defaults below await the owner's approval), `approved
 | Id | Item | Size | Needs | Status |
 |----|------|------|-------|--------|
 | N1 | Automatic backups and pre-migration snapshot | M | defaults below | proposed |
-| N2 | Read-only MCP server | M | defaults below | proposed |
+| N2 | Local MCP server (read tools, then write tools) | M | defaults below | proposed |
 | N3 | Stabilisation pass | M | scope below | proposed |
 | N4 | Database encryption research (document only, no code) | S | none | proposed |
 | N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | proposed |
 | N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | proposed |
-| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | proposed |
-| N8 | Quick actions: ⌘K command palette, menu-bar quick add, Shortcuts / App Intents "add expense" | M | TA text + approved prototypes | proposed |
+| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved 2026-11-03 (spec step first) |
+| N8 | Quick actions: ⌘K command palette, menu-bar quick add, Shortcuts / App Intents "add expense" | M | TA text + approved prototypes | deferred (owner, 2026-11-03) |
 
 Readiness: N1, N2, N3, N4 can start as soon as the owner approves them (nothing blocks them in the
 code). N5 to N8 first need requirements text and prototypes (design process, TA §6; no UI is built
@@ -119,18 +122,29 @@ R-SET-2) and migrations run on open (`AbacusDatabase.open`) with no copy taken.
 - Unencrypted for now; revisit after N4/N7.
 
 **N2 MCP.** Stdio server `abacus-mcp` in `AbacusKit`.
-- Opens the database read-only (default: the app database; a flag points at a scratch database).
+- Default: the app database; a flag points at a scratch database. Read tools use a read-only
+  connection.
 - Tools: net worth, spending by category and month, budget status, search transactions (filters,
   capped at 200 rows), accounts, debts, cash flow over a range, uncategorised rows, rates.
 - Amounts as decimal strings with currency. Descriptions included; IBANs and account numbers are
-  not. No write tools in v1. Tested on synthetic data only.
+  not. Tested on synthetic data only.
+- **Write tools (owner, 2026-11-03):** create/read/update/delete transactions (all types, attached
+  records, refund link, event); create/read/update/delete categories; create/read/update accounts
+  and archive (no delete of accounts); undo an import; move an import to another account. Further
+  candidates awaiting the owner: bulk re-categorise, rules create/update/apply, events and budget
+  limits, debt links and counterparts, import a file (preview first), back up now.
+- **Safeguards (proposed):** writes go through the same repositories as the app, so its rules hold
+  (for example an account with transactions is archived, not deleted); a propose-then-confirm step
+  per write; a cap on rows per call; a backup snapshot (N1) before a session's first write; every
+  write logged; no restore-from-backup and no settings changes through MCP. The lane must check how
+  the running app notices changes written by another process.
 - First task: check whether the official Swift MCP SDK fits Swift 6.2 / macOS 26; otherwise a small
   hand-written JSON-RPC over stdio. Setup snippet for an AI client goes into the README.
 
 **N3 Stabilisation.** Scope from `STATUS.md` open items: no badge for correction transactions;
 headless `abacus-import` does not link refunds or offer counterparts; undoing the batch that
 created an absorbed transaction deletes the transfer; the large-data timing test flakes in a full
-parallel run; visual check of the sheets and pickers from C36 to C47 on sample data (snapshot tool);
+parallel run; (the visual check of the current app was done by the owner on 2026-11-03: fine);
 owner questions still open (debt filter date range, per-currency caption); soak + hang watch run.
 New findings from the owner are added to this list.
 
@@ -161,10 +175,10 @@ that. Recommendation, no code.
 - Open: auto-clear on import yes or no.
 
 **N7 App lock.** System authentication (Touch ID with password fallback). Locks at launch, after
-5 minutes idle (setting), and on sleep or screen lock; content hidden while locked. **Off by
+an idle time set in Settings (default 5 minutes), and on sleep or screen lock; content hidden while locked. **Off by
 default**, switch in Settings. Database encryption is separate and decided after N4.
 
-**N8 Quick actions.** In order: ⌘K command palette (jump to a section, account or category; run New
+**N8 Quick actions (deferred to a later iteration, 2026-11-03).** In order: ⌘K command palette (jump to a section, account or category; run New
 transaction, Import file, Refresh rates, Back up now; search transactions) → menu-bar quick add
 (amount, account, category, description; reuses the editor model) → Shortcuts / App Intents
 "Add expense" and "Get balance" (check that intents work from an ad-hoc signed build).
