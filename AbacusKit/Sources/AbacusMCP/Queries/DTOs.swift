@@ -174,3 +174,14 @@ public struct CategoryDTO: Codable, Hashable, Sendable {
   public let parent: String?
   public let isArchived: Bool
 }
+
+public struct ImportBatchDTO: Codable, Hashable, Sendable {
+  public let id: String
+  public let source: String
+  public let fileName: String
+  public let importedAt: String
+  public let account: String?
+  public let summary: String
+  public let isUndone: Bool
+  public let transactions: Int
+}
