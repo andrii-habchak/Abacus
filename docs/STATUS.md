@@ -82,7 +82,9 @@ moving import mappings when a category is merged or deleted.
 ## Next
 
 1. Owner tests 1.2.2; fix what they report on a lane, rebuild the DMG, release as the next patch.
-2. Deferred, only on request: merge the "card" and "bank account" kinds (they behave the same);
+2. Roadmap (2026-11-03): items N1–N8 in `docs/ROADMAP.md`, started only when the owner marks them
+   approved (D68). iOS and sync are postponed (D66).
+3. Deferred, only on request: merge the "card" and "bank account" kinds (they behave the same);
    SQL aggregates for balances/usage counts beyond ~20k transactions (S1); combine the save
    cascade's per-screen reloads (S1).
 

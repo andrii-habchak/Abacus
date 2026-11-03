@@ -14,6 +14,7 @@ then the docs below, before touching code.
 5. `docs/DECISIONS.md` — settled decisions. Do not re-open them without the owner.
 6. `docs/import/*.md` — Saldo and PKO export formats.
 7. `docs/design/` — approved screen prototypes (build UI only against approved ones).
+8. `docs/ROADMAP.md` — next work items N1–N8, their status, sync/iOS/MCP/investment notes.
 
 ## Roles
 
