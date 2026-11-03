@@ -8,6 +8,8 @@ cd "$ROOT"
 
 # This Mac's xcode-select points at the Command Line Tools; the build needs full Xcode.
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+# Derived data defaults to build.noindex; point it at a fresh folder inside the repo when that one is stale.
+DD="${ABACUS_DERIVED_DATA:-build.noindex}"
 XCODEGEN="$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)"
 
 echo "==> Generating the Xcode project"
@@ -19,7 +21,7 @@ xcodebuild \
   -scheme Abacus \
   -configuration Release \
   -destination 'generic/platform=macOS' \
-  -derivedDataPath build.noindex \
+  -derivedDataPath "$DD" \
   -skipMacroValidation \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="-" \
@@ -27,7 +29,7 @@ xcodebuild \
   -quiet \
   build
 
-APP="build.noindex/Build/Products/Release/Abacus.app"
+APP="$DD/Build/Products/Release/Abacus.app"
 test -d "$APP" || { echo "error: $APP not found" >&2; exit 1; }
 codesign --verify --deep --strict "$APP"
 

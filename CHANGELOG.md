@@ -2,6 +2,31 @@
 
 All notable changes to Abacus. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.7.0] — Unreleased
+
+Opening this version updates the database (migration v19: cleared flags and finished reconciliations); back up
+`abacus.sqlite` first. The app now also keeps its own snapshots, see below.
+
+### Added
+
+- Reconciliation: each transaction side can be cleared; imported bank and Saldo rows start cleared. Account
+  window → Reconcile compares a statement's closing balance with the cleared balance and lets you tick rows,
+  add, edit or delete transactions, mark holds settled, or book a correction. Cleared column and filter in the
+  list, "Cleared" checkbox in the editor.
+- Import checks: pending card holds that the bank file no longer lists are raised for a decision (keep, mark
+  settled, delete, edit); a balance gap between statement rows is flagged.
+- Automatic snapshots of the database on launch and before migrations, with retention, an optional second
+  folder, and a list with Restore and Back up now in Settings › Data.
+- A local MCP server (`abacus-mcp`) with read tools and confirmed write tools; see the README.
+- Debt total shows a per-currency caption when debts exist in more than one currency.
+- Balance-correction rows carry a Correction badge.
+
+### Changed
+
+- Headless `abacus-import` links refunds and completes estimated transfers; a balance correction from it is
+  flagged as such.
+- Undoing an import whose transactions a later import used is refused until that later import is undone.
+
 ## [1.6.2] — Unreleased
 
 ### Changed
