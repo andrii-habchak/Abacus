@@ -216,13 +216,13 @@ struct ImportNeedsReviewTab: View {
             .padding(.horizontal, ImportMetrics.horizontalPadding)
             .padding(.vertical, 16)
         }
-        if model.reviewFilter != .categories {
+        if model.reviewFilter != .categories, !isChecks {
           decisions(cards)
             .frame(maxWidth: 900, alignment: .leading)
             .padding(.horizontal, ImportMetrics.horizontalPadding)
             .padding(.vertical, 16)
         }
-        if model.reviewFilter != .decisions {
+        if model.reviewFilter != .decisions, !isChecks {
           if model.reviewFilter == .all, !rows.isEmpty {
             Text("Rows that need a category")
               .font(.system(size: 13, weight: .semibold))

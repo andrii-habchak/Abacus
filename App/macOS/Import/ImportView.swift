@@ -137,6 +137,28 @@ struct ImportView: View {
           }
           if UserDefaults.standard.bool(forKey: "AbacusImportResolveReview") { resolveReviewForSnapshot() }
           await openDebugDemo()
+          // `-AbacusImportReviewFilter pending|gaps|decisions|categories`: the Needs review sub-tab;
+          // `-AbacusImportCard <status>` presses a summary card; `-AbacusImportCommit YES` imports
+          // (the Done step).
+          let defaults = UserDefaults.standard
+          if let card = defaults.string(forKey: "AbacusImportCard"), let status = RowStatus(rawValue: card) {
+            model.selectFilter(status)
+          }
+          if let name = defaults.string(forKey: "AbacusImportReviewFilter") {
+            model.tab = .review
+            switch name {
+            case "pending": model.reviewFilter = .pending
+            case "gaps": model.reviewFilter = .gaps
+            case "decisions": model.reviewFilter = .decisions
+            case "categories": model.reviewFilter = .categories
+            default: break
+            }
+          }
+          // `-AbacusImportStale keep|markSettled|delete`: decides every stale pending hold.
+          if let choice = defaults.string(forKey: "AbacusImportStale").flatMap(ImportStaleChoice.init(rawValue:)) {
+            model.setStale(choice, ids: model.staleItems.compactMap { UUID(uuidString: $0.id) })
+          }
+          if defaults.bool(forKey: "AbacusImportCommit") { await model.commit() }
         }
       #endif
     }

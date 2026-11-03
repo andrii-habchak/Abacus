@@ -74,14 +74,23 @@ public struct AccountsView: View {
 
   #if DEBUG
     /// UI checks (in-app snapshot): `-AbacusOpenSheet newAccount|editAccount|newGroup|editGroup|
-    /// groupPrompt` opens that sheet once the page has loaded.
+    /// groupPrompt` opens that sheet once the page has loaded; `reconcile` opens Reconcile.
     private func openDebugSheet() async {
       guard let which = UserDefaults.standard.string(forKey: "AbacusOpenSheet") else { return }
       for _ in 0..<50 where model.phase != .loaded || model.rows.isEmpty { try? await Task.sleep(for: .milliseconds(100)) }
       let accounts = model.rows.filter { !$0.isGroup }
       switch which {
       case "newAccount": model.newAccount(currency: displayCurrency)
-      case "editAccount": if let row = accounts.first { model.edit(row.id) }
+      case "editAccount":
+        let name = UserDefaults.standard.string(forKey: "AbacusReconcileAccount")
+        if let row = accounts.first(where: { $0.name == name }) ?? accounts.first { model.edit(row.id) }
+      case "reconcile":
+        // `-AbacusReconcileAccount <name>` (default: the first account) opens its Reconcile screen.
+        let name = UserDefaults.standard.string(forKey: "AbacusReconcileAccount")
+        if let row = accounts.first(where: { $0.name == name }) ?? accounts.first {
+          model.edit(row.id)
+          model.reconcileSelected()
+        }
       case "newGroup": model.newGroup()
       case "editGroup": if let row = model.rows.first(where: \.isGroup) { model.edit(row.id) }
       case "groupPrompt":
