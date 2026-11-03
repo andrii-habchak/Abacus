@@ -95,37 +95,74 @@ absorbed/completed rows), `importFingerprints` (id, txnID, batchID), `ImportBatc
     (or "Never reconciled") and a **Reconcile…** button; the Transactions toolbar has the same button
     when exactly one account is filtered.
   - Footer totals gain "Uncleared" for a single account (balance minus cleared balance).
+  - **Mark settled** (button and context menu) on a selected pending hold: the payment went through, so
+    it stops being pending (`isPendingAtBank = 0`) and stays uncleared until a bank row confirms it.
+    It is a separate action from editing the row; it also works in bulk on several selected holds.
   - Clicking the indicator does **not** toggle it (too easy to hit while scrolling); see Q9.
 
 ### 2.3 Reconcile mode — `R-CLR-5`, `R-CLR-6`
 
-- `R-CLR-5` **Reconcile (bank, card, savings, investment and liability accounts).** One screen per
-  account, opened from the inspector or the Transactions toolbar:
-  - Inputs: **statement date** (default: the last reconciliation's date + the account's last booked
-    day, else today) and **closing balance** in the account currency, typed as the account's balance
-    appears in Abacus (a credit card in debt is negative; the field's hint says so; Q12).
-  - Three figures: statement balance, **cleared balance** = opening balance + Σ effects of rows with
-    cleared side and statement day ≤ statement date, **difference** = statement − cleared (red until 0,
-    green at 0, with a one-line reason by sign: lower → "a payment is missing from the cleared rows,
-    or a row is ticked that the bank did not book"; higher → "income or a refund is missing").
+- `R-CLR-5` **Reconcile (bank, card, savings, investment and liability accounts).**
+  *What it is for.* The owner compares Abacus with the bank's statement and settles every
+  difference, so that the cleared part of the account is known to be right. Two numbers come from the
+  bank statement and are typed in once per run:
+  - **Statement date** = the last day the statement covers (the "balance as of" date printed on the
+    PDF or shown in the bank's app). Abacus only looks at rows booked up to that day; later rows are
+    shown dimmed and are not part of the check.
+  - **Closing balance** = the balance the bank shows at the end of that day, in the account's
+    currency. Abacus compares it with its **cleared balance** (opening balance + cleared rows up to
+    that day). The two must agree.
+  *How it is opened (entry points).* (1) Accounts → the account's inspector → **Reconcile…** (also in
+  the account row's context menu); (2) Transactions toolbar → **Reconcile…** when exactly one account
+  is filtered; (3) the import's Done step: "Reconcile <account>…" with the date and closing balance
+  already filled from the file's last running balance (PKO); (4) a soft **"Not reconciled"** badge on
+  the account row and inspector when the account has cleared rows booked after the last reconciliation
+  (or was never reconciled). The badge is a hint only: no pop-up, no notification, nothing blocks.
+  Besides a new import, then, reconciliation appears when the owner opens it (1, 2) or sees the badge
+  (4).
+  *The request.* Opening Reconcile first shows a short setup step (no data is changed): an
+  explanation in two lines, the two fields with the help above, a note where the values came from
+  ("Filled from the file you just imported" or "Last reconciled 21 Oct 2026"), and **Start
+  reconciling**. The statement date defaults to the last reconciliation's date or, failing that, the
+  account's last booked day; the closing balance is typed as the account's balance appears in
+  Abacus (a credit card in debt is negative; the hint says so, Q12). The working screen then shows
+  the two values as an editable header ("Change").
+  *Working screen.*
+  - Three figures: statement balance, **cleared balance**, **difference** = statement − cleared (red
+    until 0, green at 0, with a one-line reason by sign: lower → "a payment is missing from the cleared
+    rows, or a row is ticked that the bank did not book"; higher → "income or a refund is missing").
   - List: **To check** (uncleared rows with statement day ≤ the date, newest first) with a checkbox
-    each and "Tick all"; **Already cleared** (collapsed; shown read-only, to see what makes up the
-    balance; a bank-file row can be unticked here only after a confirmation); **After the statement
-    date** (dimmed, not part of the check). Pending holds appear unticked, disabled, labelled "Pending
-    — not on a statement". Ticks are held in memory; the difference follows them live.
+    each and "Tick all"; **Already cleared** (collapsed; read-only unless the owner confirms
+    unticking a bank-file row); **After the statement date** (dimmed). Pending holds are listed
+    unticked and disabled, labelled "Pending — not on a statement", with the row action **Mark
+    settled** (`R-CLR-4`). Holds older than the stale threshold (`R-CLR-8`) carry "Pending for N
+    days".
+  - **Ways to make the difference zero** (a help box under the figures names them; none is forced):
+    1. **Tick** a row that is on the statement and in Abacus but not yet cleared (the common case:
+       a hand-typed payment the bank has booked).
+    2. **Add transaction…** for a payment the statement has and Abacus does not: a small form (day,
+       description, amount with its sign, category; the type follows the sign; a transfer is added in
+       the normal editor) creates the row **already cleared** (it is on the statement) and it counts
+       at once. The owner can add several during one run.
+    3. **Edit** an uncleared row whose amount or day differs from the statement (inline amount and
+       day), then tick it.
+    4. **Delete** an uncleared hand-typed row the bank never booked (confirmation; a bank-file row is
+       never deleted here).
+    5. **Mark settled / delete a pending hold** that is not on the statement (the hold is not part of
+       the cleared balance either way).
+    6. **Balance correction** as the last resort ("Add correction X and finish", below).
+  - All staged changes (ticks, added rows, edits, deletions) live in memory and change the figures
+    live; **Cancel** discards them, leaving the screen with staged changes asks first, and **Finish**
+    writes them in one database transaction.
   - **Finish reconciliation** is enabled only at difference 0: it sets the ticked sides cleared,
-    stores a `reconciliations` row, and shows "Reconciled … N rows marked cleared". With a non-zero
-    difference the owner may instead "Add correction X and finish": one `Balance correction` row
-    (`isBalanceCorrection`, cleared, dated the statement day, same mechanism as D34, not income or
-    expense) then finishes. Cancel discards all ticks; leaving the screen with ticks asks first.
+    applies the staged additions, edits and deletions, stores a `reconciliations` row, and says
+    "Reconciled … N rows marked cleared". With a non-zero difference the owner may instead "Add
+    correction X and finish": one `Balance correction` row (`isBalanceCorrection`, cleared, dated the
+    statement day, same mechanism as D34, not income or expense).
   - **Drift.** Every time the screen opens, the last reconciliation is recomputed (cleared balance at
     its `statementDay` now vs its `closingMinor`). If they differ a red note says "The last
     reconciliation no longer adds up: … A cleared row was edited or removed since." Nothing is locked.
-  - **Pending holds list.** Holds older than the stale threshold (`R-CLR-8`) at the statement date are
-    listed under "To check" with the badge "Pending for N days", so an unmatched hold is visible even
-    when no later import raises it.
-  - After an import the Done step offers "Reconcile <account>…" prefilled with the file's last
-    running balance and booked day (`R-CLR-9`), when the file has running balances (PKO).
+
 - `R-CLR-6` **Cash accounts (kind `cash`).** There is no bank, so the statement is a **counted
   amount** ("Count date", "Counted cash"). The compared figure is the **whole balance at the count
   date** (every row, cleared or not, with day ≤ the date), because every cash row is hand-typed; "Tick
@@ -180,23 +217,32 @@ pending forever and the owner must find and delete it.
   - no row of the file settled it (`PendingSettlement` found no match), no row links to it
     (`FuzzyDuplicate`), and the file does not contain the same hold again (its fingerprint is not among
     the file's rows).
-  Each stale hold appears in the preview as **"Pending payment not in the bank file"**: a card
-  "Pending not in file (N)", a "Checks" tab section with merchant, amount, value day, the file's last
-  booked day and the distance in days, and one decision:
+  *Where it appears.* In the existing **Needs review** tab, which gets sub-tabs: **Decisions** (the
+  current cards), **Pending payments (N)** and **Balance gaps (N)** (`R-CLR-9`). The summary cards
+  "Pending not in file" and "Balance gaps" open the matching sub-tab; the tab label counts all open
+  items. Each stale hold is listed as **"Pending payment not in the bank file"** with merchant, amount,
+  value day, the file's last booked day and the distance in days, and one decision:
   - **Keep pending** — no change; raised again at the next import while it still qualifies (Q4);
+  - **Mark settled** — the payment did go through: the hold stops being pending (amount, day and
+    category stay) and stays **uncleared**, because no bank row confirms it; Reconcile will show it
+    under "To check" until a statement does;
   - **Delete** — the transaction is removed when the import is committed;
   - **Edit…** — inline amount, purchase day and a "Still pending" checkbox; saving keeps it
-    **uncleared** (the file does not show it) and, when "Still pending" is unticked, no longer pending.
+    **uncleared** (the file does not show it).
+  *Bulk actions.* Each item has a checkbox; "Select all"; a bulk bar applies **Keep pending**, **Mark
+  settled** or **Delete** to the selected items (Edit is per item). The bulk bar also exists on
+  Transactions for pending rows (`R-CLR-4`).
   - Decisions start **undecided**; Import is disabled until every stale hold has one ("N pending
     payments not in the file still need a decision"); **Keep all** decides them in one click. This
     follows D38 (only fully decided previews commit).
-  - All decisions commit with the batch in one database transaction (`R-IMP-6`). Delete and Edit are
-    snapshotted in `importTxnSnapshots` (the snapshot stores the whole transaction; Undo re-inserts a
-    deleted one and restores an edited one), so **Undo import** brings them back.
-  - **How the owner learns whether this happens at all:** the card shows its count on every PKO
-    import, including 0 ("none found"); the import history line records "N stale holds: a kept, b
-    deleted, c edited"; `abacus-import` prints the count. A few months of history answers the question
-    without a separate report. Only accounts that were imported by PKO files can have holds.
+  - All decisions commit with the batch in one database transaction (`R-IMP-6`). Mark settled, Delete
+    and Edit are snapshotted in `importTxnSnapshots` (the snapshot stores the whole transaction; Undo
+    re-inserts a deleted one and restores an edited or settled one), so **Undo import** brings them
+    back.
+  - **How the owner learns whether this happens at all:** the "Pending payments" sub-tab and card
+    show their count on every PKO import, including 0 ("none found"); the import history line records
+    "N stale holds: a kept, b settled, c deleted, d edited"; `abacus-import` prints the count. A few
+    months of history answers the question without a separate report.
   - A held transaction on a **different** account than the target, or from Saldo, is never raised.
 
 ### 2.6 Balance continuity — `R-CLR-9`
@@ -224,10 +270,13 @@ PKO's `Saldo po transakcji` is the balance after each booked row; Saldo files ha
      a match is shown quietly ("File start matches PKO Personal"). Skipped on a first import.
   4. **File end** (no warning): the newest row's balance and booked day are kept for the "Reconcile…
      prefilled" offer (`R-CLR-5`).
-  - Presentation: card "Balance gaps (N)" and a section in the Checks tab with a small table (the two
-    rows around the gap: amount, balance after, "starts from"), the missing amount, and a one-line
-    advice. **A warning only**: it never blocks the import and needs no decision; the warning text is
-    kept on the import record (history shows "1 balance gap"). Several gaps are listed oldest first.
+  - *Where and what can be done.* The **Balance gaps (N)** sub-tab of Needs review lists each gap
+    (oldest first) with a small table of the two rows around it (amount, balance after, "starts
+    from"), the missing amount and a one-line advice. Each of the two rows has an action:
+    **Leave** (default: it is imported as the file says) or **Remove** (the row is not imported, e.g.
+    to export a corrected period and import again; it counts as skipped). "Leave all" is one click.
+    A gap is a warning: it never blocks the import and needs no decision; the warning and the choice
+    are kept on the import record (history shows "1 balance gap, 0 rows removed").
   - Threshold: a gap of 0.00 is not a gap; no tolerance (money is exact, `R-CUR-2`). A foreign-currency
     PKO account is checked in its own currency; the file is single-currency, so no conversion.
 
@@ -264,7 +313,7 @@ PKO's `Saldo po transakcji` is the balance after each booked row; Saldo files ha
 - `R-CLR-4`: list filter over cleared/uncleared/combined with account and category filters; indicator
   state per row kind (pure view-model function); Mark cleared on a hold is refused; transfer
   half-state; editor save keeps the flag; the warning appears for amount/date edits of a cleared row.
-- `R-CLR-5`: difference arithmetic (including opening balance, statement-day filtering, ticks live);
+- `R-CLR-5`: entry points open the setup step prefilled (import Done: file's last balance and day); the "Not reconciled" badge rule; adding a transaction during a run creates a cleared row at Finish and moves the difference live; edit/delete of uncleared rows, bank-file rows refuse deletion; Cancel discards every staged change; difference arithmetic (including opening balance, statement-day filtering, ticks live);
   Finish at 0 sets ticked rows and stores the reconciliation; Finish disabled at ≠ 0; correction path
   creates one cleared `isBalanceCorrection` row dated the statement day and excluded from reports;
   drift after editing a cleared row; unticking a bank-file row needs confirmation; stale holds listed.
@@ -275,7 +324,7 @@ PKO's `Saldo po transakcji` is the balance after each booked row; Saldo files ha
   with the fingerprint and `bookedDay` set, other fields untouched; Skip leaves it uncleared; an
   existing cleared row keeps the Skip default; re-import of the same file changes nothing; undo restores
   every changed row and removes created ones; headless run equals the wizard run with defaults.
-- `R-CLR-8`: boundary table for `staleHoldDays` (4 days no, 5 days yes), the coverage window (before
+- `R-CLR-8`: bulk Keep/Mark settled/Delete over selected items; Mark settled keeps the row uncleared and not pending, undo restores it; boundary table for `staleHoldDays` (4 days no, 5 days yes), the coverage window (before
   first booked day − 3 no), a settled hold is not raised, a re-listed hold is not raised, another
   account or Saldo row is not raised; Import disabled until decided, Keep all; Delete commits and Undo
   re-inserts; Edit keeps it uncleared and honours "Still pending"; history line counts; 0 holds shows
@@ -283,7 +332,7 @@ PKO's `Saldo po transakcji` is the balance after each booked row; Saldo files ha
 - `R-CLR-9`: a synthetic statement whose balances chain → no gap; one day removed → one gap with the
   right signed amount; two gaps; unordered rows within a day; repeated equal balances and zero amounts;
   holds ignored; a one-row file; file start equals / differs from the account's cleared balance;
-  Saldo file → no check; warning does not block `commit`.
+  Saldo file → no check; warning does not block `commit`; Remove skips the chosen row and the history line counts it; Leave all.
 
 ## 4. Work-package split (proposal)
 
@@ -295,11 +344,11 @@ Migration v19 and `Schema.swift` are shared files (orchestrator). Three WPs, in 
    tests for `R-CLR-1/2/3/7`. Owned paths: `AbacusDomain/Model`, `AbacusStore` (repositories, new
    migration entry by the orchestrator), `AbacusImport/Pipeline` + `Dedupe`, `abacus-import`.
 2. **N6b — Reconcile UI** (M, after N6a): list indicator, filter, mark actions, editor checkbox,
-   account inspector, Reconcile screen incl. cash and drift, Done-step offer; `R-CLR-4/5/6`.
+   account inspector with the "Not reconciled" badge, Reconcile setup step and working screen (tick, add, edit, delete, mark settled, correction) incl. cash and drift, Done-step offer, Mark settled on Transactions; `R-CLR-4/5/6`.
    Owned paths: `AbacusFeatures/…` new `Reconcile/`, `App/macOS` list and inspector hooks.
 3. **N6c — import checks** (M, can start with N6a's detector code in parallel): pure detectors
-   `StaleHolds` and `BalanceContinuity` in `AbacusImport` (testable without UI), then preview cards,
-   Checks tab, decisions, history line; `R-CLR-8/9`. The delete/edit decisions need N6a's snapshots.
+   `StaleHolds` and `BalanceContinuity` in `AbacusImport` (testable without UI), then preview cards, the Needs review sub-tabs (Decisions, Pending payments with bulk actions, Balance gaps),
+   history line; `R-CLR-8/9`. The delete/edit decisions need N6a's snapshots.
    Owned paths: `AbacusImport/Pipeline`, `AbacusFeatures/Import`, `App/macOS/Import`.
 
 N6c's wizard changes and N6b's list changes touch different files; the only shared one is the
@@ -323,6 +372,9 @@ Transactions row view (N6b). Run N6a first, N6b and N6c in parallel afterwards.
 | Q12 | Sign of the typed balance for liability accounts (credit card)? | The Abacus sign (a card in debt is negative), with a hint under the field; the owner can flip it later if the statement convention is confusing. |
 | Q13 | Settled holds are not tagged with their batch today, so Undo does not revert them. Close that gap as part of N6a (snapshot) for the cleared/pending state? | Yes, snapshot only; no change to how settling works. |
 | Q14 | Per-side flags (`isToCleared`) instead of one flag per transaction? | Yes: a transfer is cleared on one account when only that statement was imported. One flag would mark both sides cleared falsely. |
+| Q15 | Balance gap "Remove": which rows? | The two rows around the gap, each Leave (default) or Remove (not imported). Say if "remove" should mean something else (for example remove everything after the gap). |
+| Q16 | Does "Mark settled" on a hold also clear it? | No: it stays uncleared until a bank row or a statement confirms it. |
+| Q17 | When does the "Not reconciled" badge show? | Cleared rows booked after the last reconciliation (or never reconciled), hint only, no notification. |
 
 ## 6. What is not in N6
 
