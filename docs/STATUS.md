@@ -4,6 +4,26 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-03 23:55 CET (orchestrator, **paused**)._ Execution is paused until the weekly limit resets
+(Wed 2026-11-04 02:00 CET); nothing runs before 01:59 CET. State: `main` is green (`swift test` with real samples passes,
+Release build + DMG build 16 done), no lane is running, every lane worktree is clean (the N2 branch commits are duplicates of
+work already on `main`). Next stage, in order: (1) owner review of the N5 (recurring, forecast) and N7 (app lock) specs and
+prototypes, then wave 2 lanes for them; (2) the QA-170 open differences from the N6 prototype listed below; (3) the two open
+N3 owner questions in `docs/status/N3.md`; (4) tidy: remove merged lane worktrees and branches, drop the untracked N9
+screenshots; (5) N8 stays deferred.
+
+_Updated 2026-11-03 (orchestrator, earlier)._ Merged: QA-170 (Reconcile screen had no ideal size and rendered blank; import
+Pending payments / Balance gaps sub-tabs showed the Decisions text) and N9 (event editor as a sheet, Archive/Delete icons on
+event rows, separate "New event" / "New category" toolbar pills). Gate green (1,221 tests with real samples, app build).
+1.7.0 is rebuilt as build 16 (the first 1.7.0 DMG predated the Reconcile fix). Open (from `docs/status/QA-170.md`, differences
+from the N6 prototype): filter menu label reads "Cleared" while All, Mark cleared/uncleared buttons and legend, footer
+Balance·Cleared·Uncleared, duplicate Reconcile title, date style on the Done step. Not checked by anyone: hover highlight and
+real clicks (no Accessibility permission for synthetic events).
+DEBUG-only launch options added by QA-170 (scratch databases only): `-AbacusOpenSheet reconcile`, `-AbacusReconcileAccount`,
+`-AbacusReconcileStart`, `-AbacusReconcileDay`, `-AbacusReconcileClosing`, `-AbacusReconcileTickAll`,
+`-AbacusReconcileShowCleared`, `-AbacusImportCard`, `-AbacusImportReviewFilter pending|gaps|decisions|categories`,
+`-AbacusImportStale keep|markSettled|delete`, `-AbacusImportCommit YES`.
+
 _Updated 2026-11-03 (orchestrator, newest)._ **N6 reconciliation is on `main`** (cleared flag per transaction side, migration **v19**
 `reconciliations` table, Reconcile screen, cleared column and filter, stale pending holds and balance-gap checks at import) plus
 the QA wave fixes (`abacus-import` correction flag, MCP opens idle WAL databases). Gate green (1,217 tests with real samples, app

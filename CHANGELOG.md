@@ -20,6 +20,8 @@ Opening this version updates the database (migration v19: cleared flags and fini
 - A local MCP server (`abacus-mcp`) with read tools and confirmed write tools; see the README.
 - Debt total shows a per-currency caption when debts exist in more than one currency.
 - Balance-correction rows carry a Correction badge.
+- Events: edit in a sheet like accounts and categories; Archive and Delete icons on every event row; "New event"
+  and "New category" are their own toolbar buttons next to "New transaction".
 
 ### Changed
 

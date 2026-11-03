@@ -10,7 +10,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.7.0"
-    CURRENT_PROJECT_VERSION: "15"
+    CURRENT_PROJECT_VERSION: "16"
     # Ad-hoc "Sign to Run Locally" — no Apple Developer team required (v1).
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "-"
