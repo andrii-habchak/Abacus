@@ -169,3 +169,19 @@ extension AbacusQueries {
     return try await searchTransactions(filter)
   }
 }
+
+extension AbacusQueries {
+  /// Import history, newest first, with how many transactions each batch still owns.
+  public func imports() async throws -> [ImportBatchDTO] {
+    let store = SQLiteImportStore(database: database, calendar: calendar)
+    let directory = try await directory()
+    let counts = try await store.transactionCounts()
+    return try await store.batches().sorted { $0.importedAt > $1.importedAt }.map {
+      ImportBatchDTO(
+        id: $0.id.uuidString, source: $0.source.rawValue, fileName: $0.fileName,
+        importedAt: ISO8601DateFormatter().string(from: $0.importedAt),
+        account: $0.accountID.map { directory.accountName($0) }, summary: $0.summary, isUndone: $0.isUndone,
+        transactions: counts[$0.id] ?? 0)
+    }
+  }
+}

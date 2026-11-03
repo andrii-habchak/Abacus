@@ -108,6 +108,13 @@ public enum ReadTools {
         try .encoding(await queries.debts(currency: Arguments(args).string("currency")))
       },
       MCPTool(
+        name: "list_imports",
+        description: "Import history (Saldo and PKO files), newest first, with the number of transactions each import still owns. Needed for undo_import and move_import.",
+        inputSchema: Schema.object()
+      ) { _ in
+        try .encoding(await queries.imports())
+      },
+      MCPTool(
         name: "exchange_rates",
         description: "The latest known exchange rates into a currency (1 unit of the other currency = rate units of it), with the day they are from.",
         inputSchema: Schema.object(["currency": currency])
