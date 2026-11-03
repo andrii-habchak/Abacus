@@ -4,6 +4,12 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-03 (orchestrator, newest)._ **N6 reconciliation is on `main`** (cleared flag per transaction side, migration **v19**
+`reconciliations` table, Reconcile screen, cleared column and filter, stale pending holds and balance-gap checks at import) plus
+the QA wave fixes (`abacus-import` correction flag, MCP opens idle WAL databases). Gate green (1,217 tests with real samples, app
+build). **The owner backs up `abacus.sqlite` before running a build with v19** (N1's pre-migration snapshot also covers it). New N6
+screens not yet checked visually by the owner. N5 (v18) and N7 are specs awaiting owner review.
+
 _Updated 2026-11-03 (orchestrator, later)._ Merged since: N1 backups (snapshot store, retention, pre-migration and launch
 snapshots, Settings › Data list/Back up now/second folder), N3b (per-currency debt caption, D73), `AbacusMCP` → `AbacusFX`
 dependency. Gate green (1,170 tests, app build). No migration added. N2 is finishing (live rates, N1 snapshot wiring, README

@@ -191,7 +191,7 @@ Wave 1: N1 backups, N2 MCP, N3 stabilisation, N4 encryption research. Spec strea
 Merge order: N3, N1, N2, N6, N5, N7. Migrations reserved: v18 (N5), v19 (N6).
 - [x] **N3 Stabilisation** (merged 2026-11-03).
 - [x] **N4 Encryption research** (merged 2026-11-03; document only).
-- [x] **N1 Backups** (merged 2026-11-03) · [ ] **N2 MCP server** (built, finishing) · [ ] N5 · [ ] N6 · [ ] N7 (each after its spec is approved).
+- [x] **N1 Backups** (merged 2026-11-03) · [ ] **N2 MCP server** (built, finishing) · [ ] N5 · [x] N6 (merged 2026-11-03, migration v19) · [ ] N7 (each after its spec is approved).
 
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
