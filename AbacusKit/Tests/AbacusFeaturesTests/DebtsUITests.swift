@@ -129,6 +129,20 @@ struct DebtsUITests {
     #expect(DebtSign.caption([Money(minorUnits: 5_00, currency: .EUR)], magnitude: { "\($0.minorUnits)" }) == nil)
   }
 
+  @Test("D73 / R-DEBT-21: the widget total has a per-currency caption only when debts span several currencies")
+  func totalCaption() async throws {
+    let (model, _) = try await Self.loadedModel(.UAH)
+    let format = DashboardFormat(locale: Locale(identifier: "en_US"))
+    let widget = DashboardDebts.make(book: model.book, currency: .UAH, converter: Self.rates, format: format)
+    let caption = try #require(widget.totalCaption)
+    #expect(caption.contains(" · ") && !caption.contains("lent") && !caption.contains("borrowed"))
+    // One currency left: no caption.
+    var book = model.book
+    book.debts = book.debts.filter { $0.id == DebtSample.maria.id }
+    let single = DashboardDebts.make(book: book, currency: .UAH, converter: Self.rates, format: format)
+    #expect(single.totalCaption == nil)
+  }
+
   @Test("R-DEBT-21: the Edit debt dialog lists the linked accounts and every free account; accounts of another debt stay disabled")
   func dialogAccountLists() async throws {
     let (model, _) = try await Self.loadedModel()
