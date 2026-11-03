@@ -10,6 +10,37 @@ public protocol BackupService: Sendable {
   func restore(from url: URL) async throws
 }
 
+/// One automatic or manual snapshot, as the Settings list shows it (N1).
+public struct BackupEntry: Identifiable, Sendable, Equatable {
+  public var url: URL
+  public var date: Date
+  /// "Automatic", "Manual", "Before migration", "Before AI write", "Before restore".
+  public var reason: String
+  public var id: String { url.lastPathComponent }
+
+  public init(url: URL, date: Date, reason: String) {
+    self.url = url
+    self.date = date
+    self.reason = reason
+  }
+}
+
+/// Automatic snapshots in a backup folder (N1; the store's `BackupStore`). Restoring one goes
+/// through `BackupService.restore(from:)`.
+public protocol SnapshotService: Sendable {
+  func list() async -> [BackupEntry]
+  /// "Back up now".
+  func backUpNow() async throws -> BackupEntry
+  /// Safety copy before a restore replaces everything; failures are ignored by callers.
+  func backUpBeforeRestore() async throws
+  func folder() async -> URL
+  /// The second folder, if one is chosen.
+  func mirrorFolder() async -> URL?
+  /// The snapshots currently in the second folder.
+  func mirrorCount() async -> Int
+  func setMirrorFolder(_ folder: URL?) async
+}
+
 /// Where the database file lives (R-SET-1, "Data folder").
 public protocol DataLocationService: Sendable {
   func databaseURL() async -> URL
@@ -118,6 +149,37 @@ public actor PreviewDataLocationService: DataLocationService {
     moves.append(folder)
     url = folder.appending(path: url.lastPathComponent)
   }
+}
+
+/// In-memory snapshots (previews, tests).
+public actor PreviewSnapshotService: SnapshotService {
+  private var entries: [BackupEntry]
+  private var mirror: URL?
+  private let now: Date
+
+  public init(entries: [BackupEntry]? = nil, mirror: URL? = nil, now: Date = Date()) {
+    self.now = now
+    self.mirror = mirror
+    self.entries =
+      entries ?? [
+        BackupEntry(url: URL(filePath: "/tmp/abacus-20261103T080000Z-auto.abacus"), date: now.addingTimeInterval(-3600), reason: "Automatic"),
+        BackupEntry(url: URL(filePath: "/tmp/abacus-20261102T080000Z-premigration.abacus"), date: now.addingTimeInterval(-90_000), reason: "Before migration"),
+      ]
+  }
+
+  public func list() async -> [BackupEntry] { entries }
+
+  public func backUpNow() async throws -> BackupEntry {
+    let entry = BackupEntry(url: URL(filePath: "/tmp/abacus-\(entries.count)-manual.abacus"), date: now, reason: "Manual")
+    entries.insert(entry, at: 0)
+    return entry
+  }
+
+  public func backUpBeforeRestore() async throws {}
+  public func folder() async -> URL { URL(filePath: "/tmp/Backups") }
+  public func mirrorFolder() async -> URL? { mirror }
+  public func mirrorCount() async -> Int { mirror == nil ? 0 : entries.count }
+  public func setMirrorFolder(_ folder: URL?) async { mirror = folder }
 }
 
 /// `SettingsRepository` over a dictionary (previews, tests).

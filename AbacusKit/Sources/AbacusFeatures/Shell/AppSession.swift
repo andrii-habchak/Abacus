@@ -37,6 +37,8 @@ public final class AppSession {
   @ObservationIgnored private var started = false
   @ObservationIgnored private var ratesStartup: Task<Void, Never>?
   /// Builds a session like this one on another database (data folder moved, R-SET-1).
+  /// The launch snapshot (N1); nil for tests and demo databases.
+  @ObservationIgnored var launchSnapshots: LiveSnapshots?
   @ObservationIgnored var rebuild: (@MainActor (any DatabaseWriter) -> AppSession)?
   /// Set by the app (`AppSessionHost`): shows `next` instead of this session.
   @ObservationIgnored public var onReplace: (@MainActor (AppSession) -> Void)?
@@ -135,7 +137,7 @@ public final class AppSession {
     database: any DatabaseWriter, source: any OfficialRateSource = FallbackRateSource.standard(),
     calendar: Calendar = .current, now: @escaping @Sendable () -> Date = { Date() },
     formats: Formats = Formats(), legacyLastExport: LegacyLastExport = .none,
-    locationDefaults: UserDefaults? = nil
+    locationDefaults: UserDefaults? = nil, backupDefaults: UserDefaults? = nil
   ) -> AppSession {
     let rateStore = SQLiteRateStore(database: database)
     let relay = SessionRelay()
@@ -149,11 +151,14 @@ public final class AppSession {
     }
     let location = LiveDataLocation(database: database, remember: remember, switchTo: switchTo)
     let refresher = RateRefresher(store: rateStore, source: source, calendar: calendar, now: now)
-    let environment = AppEnvironment(
+    var environment = AppEnvironment(
       settings: SQLiteSettingsRepository(database: database), rateStore: rateStore,
       rates: RefresherRatesService(refresher: refresher), backup: SQLiteBackup(database: database),
       dataLocation: location, legacyLastExport: legacyLastExport,
       today: { Day(now(), calendar: calendar) }, now: now, formats: formats)
+    // Snapshots only for the app's own database (never tests or demo files).
+    let liveSnapshots = backupDefaults.map(DefaultsBox.init).map { LiveSnapshots(database: database, defaults: $0) }
+    environment.snapshots = liveSnapshots
     // Refunds in another currency than their expense compare at the refund's date rate (C30).
     let currentRates: @Sendable () async -> (any CurrencyConverter)? = { await refresher.table }
     let refunds = SQLiteRefundRepository(database: database, calendar: calendar, converter: currentRates)
@@ -186,11 +191,12 @@ public final class AppSession {
       transactions: transactions, editorDependencies: editor,
       manage: .live(database: database, refresher: refresher, now: now),
       debts: .live(database: database, refresher: refresher), database: database, refresher: refresher)
+    session.launchSnapshots = liveSnapshots
     relay.session = session
     session.rebuild = { moved in
       live(
         database: moved, source: source, calendar: calendar, now: now, formats: formats,
-        locationDefaults: defaultsBox?.defaults)
+        locationDefaults: defaultsBox?.defaults, backupDefaults: backupDefaults)
     }
     return session
   }
@@ -201,7 +207,9 @@ public final class AppSession {
   public static func live(databasePath path: String? = nil) throws -> AppSession {
     @Dependency(\.defaultDatabase) var database
     guard let path else {
-      return live(database: database, legacyLastExport: .userDefaults(), locationDefaults: .standard)
+      return live(
+        database: database, legacyLastExport: .userDefaults(), locationDefaults: .standard,
+        backupDefaults: .standard)
     }
     let url = URL(filePath: path)
     if url.standardizedFileURL.path == URL(filePath: database.path).standardizedFileURL.path {
@@ -227,6 +235,8 @@ public final class AppSession {
   public func start() async {
     guard !started else { return }
     started = true
+    // N1: a snapshot when the newest is older than a day; before anything else changes data.
+    await launchSnapshots?.snapshotIfDue()
     // First launch: an empty database gets the editable default categories (R-CAT-4).
     if let database { _ = try? await DefaultCategories.seedIfEmpty(database) }
     await app.load()
