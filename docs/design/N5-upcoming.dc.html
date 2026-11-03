@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abacus — Upcoming (N5 prototype)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13px;color:#1D1D1F}
+.win{width:100%;max-width:1232px;margin:24px auto;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.12),0 16px 48px rgba(0,0,0,.18);overflow:hidden;display:flex;flex-wrap:wrap;align-items:stretch;position:relative;min-height:860px}
+nav{flex:1 1 220px;max-width:240px;background:#EDEDF0;border-right:1px solid #D6D6DB;padding:14px 10px 16px;display:flex;flex-direction:column;gap:2px}
+.lights{display:flex;gap:8px;padding:2px 8px 18px}.lights span{width:12px;height:12px;border-radius:6px}
+.grp{font-size:11px;font-weight:600;color:#6E6E73;padding:6px 10px 4px}
+.nav{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:transparent;padding:6px 10px;border-radius:6px;font-size:13px;min-height:30px;color:#1D1D1F}
+.nav.on{background:#D4D4DA;font-weight:500}
+.badge-n{margin-left:auto;background:#D70015;color:#fff;font-size:11px;font-weight:600;border-radius:9px;padding:1px 7px}
+main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;background:#F5F5F7}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 20px;background:#fff;border-bottom:1px solid #E0E0E5}
+.bar h1{margin:0;font-size:17px;font-weight:600;flex-grow:1}
+.muted{color:#6E6E73}.small{font-size:12px}
+.seg{display:flex;background:#E8E8ED;border-radius:7px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;font-size:12px;padding:4px 10px;border-radius:5px;color:#1D1D1F;min-height:24px}
+.seg button.on{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);font-weight:600}
+.btn{border:1px solid #D2D2D7;background:#fff;font-size:13px;padding:5px 12px;border-radius:6px;min-height:28px}
+.btn.pri{background:#0A66D9;border-color:#0A66D9;color:#fff;font-weight:500}
+.btn.sm{font-size:12px;padding:3px 9px;min-height:24px}
+.btn.danger{color:#B3261E}
+.btn:disabled{opacity:.45;cursor:default}
+.body{padding:20px;display:flex;flex-direction:column;gap:16px}
+.card{background:#fff;border-radius:10px;border:1px solid #E3E3E8;padding:16px 18px}
+.card h2{margin:0;font-size:13px;font-weight:600;color:#6E6E73}
+.sum{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-end}
+.sum .k{font-size:12px;color:#6E6E73}.sum .v{font-size:20px;font-weight:600}
+.dayhead{font-size:12px;font-weight:600;color:#6E6E73;padding:12px 4px 6px;display:flex;gap:8px}
+.dayhead.over{color:#B3261E}
+.rows{background:#fff;border:1px solid #E3E3E8;border-radius:10px;overflow:hidden}
+.row{display:grid;grid-template-columns:34px minmax(0,2.2fr) minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,1.3fr) auto;gap:12px;align-items:center;padding:9px 14px;border-bottom:1px solid #F0F0F3;font-size:13px}
+.row:last-child{border-bottom:0}
+.tile{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600}
+.ttl{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub{font-size:12px;color:#6E6E73}
+.amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+.amt.in{color:#1B6B3A}
+.chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.chip.over{background:#FDE7EA;color:#B3001B}.chip.today{background:#EAF2FD;color:#0A66D9}.chip.paid{background:#E3F4EA;color:#1B6B3A}
+.chip.skip{background:#EEEEF2;color:#6E6E73}.chip.paused{background:#FFF1D6;color:#8A4B00}.chip.est{background:#EEEEF2;color:#6E6E73}
+.acts{display:flex;gap:6px;justify-content:flex-end;position:relative}
+.menu{position:absolute;right:0;top:28px;background:#fff;border:1px solid #D2D2D7;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:5;min-width:170px;padding:4px}
+.menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:6px 10px;border-radius:5px;font-size:13px}
+.menu button:hover{background:#EAF2FD}
+.strip{display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:#FFF8E1;border:1px dashed #E5C458;border-radius:8px;padding:8px 12px;font-size:12px;color:#5C4A00}
+.sugg{display:flex;flex-direction:column;gap:10px}
+.sg{border:1px solid #E3E3E8;border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.sg .head{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.ev{display:flex;flex-wrap:wrap;gap:6px}.ev span{font-size:11px;background:#F2F2F5;border-radius:6px;padding:2px 7px;color:#3A3A3C;font-variant-numeric:tabular-nums}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#1D1D1F;color:#fff;font-size:13px;padding:9px 14px;border-radius:8px;z-index:30;max-width:560px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;z-index:20;padding:20px}
+.sheet{background:#fff;border-radius:12px;width:100%;max-width:560px;max-height:calc(100% - 20px);overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);display:flex;flex-direction:column}
+.sheet h3{margin:0;padding:16px 20px 4px;font-size:15px}
+.sheet .in{padding:8px 20px 12px;display:flex;flex-direction:column;gap:12px}
+.f{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center}
+.f label{font-size:12px;color:#6E6E73;text-align:right}
+.f input,.f select,.f textarea{border:1px solid #D2D2D7;border-radius:6px;padding:5px 8px;min-height:28px;background:#fff;width:100%}
+.inl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.inl input,.inl select{width:auto}
+.foot{display:flex;gap:8px;padding:12px 20px;border-top:1px solid #E8E8ED;align-items:center}
+.foot .sp{flex:1}
+.prev{background:#F5F5F7;border-radius:8px;padding:8px 12px;font-size:12px;color:#3A3A3C;display:flex;flex-wrap:wrap;gap:6px 14px}
+.empty{padding:28px;text-align:center;color:#6E6E73;font-size:13px}
+.tbl .row{grid-template-columns:34px minmax(0,2fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,1.2fr) auto}
+.hdr{display:grid;grid-template-columns:34px minmax(0,2fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,1.2fr) 70px;gap:12px;padding:8px 14px;font-size:11px;font-weight:600;color:#6E6E73;border-bottom:1px solid #E8E8ED;background:#FAFAFC}
+</style>
+</head>
+<body>
+<div class="win" id="win">
+<nav aria-label="Sections">
+<div class="lights" aria-hidden="true"><span style="background:#FF5F57"></span><span style="background:#FEBC2E"></span><span style="background:#28C840"></span></div>
+<div class="grp">Overview</div>
+<div id="nav1"></div>
+<div class="grp" style="padding-top:14px">Manage</div>
+<div id="nav2"></div>
+<div style="flex-grow:1;min-height:24px"></div>
+<button class="nav" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><span>Settings</span></button>
+</nav>
+<main>
+<div class="bar">
+<h1>Upcoming</h1>
+<div class="seg" role="group" aria-label="Upcoming tabs" id="tabs"></div>
+<span class="small muted" id="ratesNote"></span>
+<div class="seg" role="group" aria-label="Display currency" id="cur"></div>
+<button class="btn pri" type="button" id="newItem">+ New scheduled item</button>
+</div>
+<div class="body" id="body"></div>
+</main>
+<div id="layer"></div>
+</div>
+
+<script>
+(function () {
+  // ---- synthetic data (invented accounts, merchants and amounts) -------------------------
+  var TODAY = '2026-11-03';
+  var RATE = { PLN: 1, EUR: 4.25, USD: 3.65, UAH: 0.0877 };
+  var SYM = { PLN: 'zł', EUR: '€', USD: '$', UAH: '₴' };
+  var ACC = {
+    main: { name: 'Main account', cur: 'PLN' }, sav: { name: 'Savings', cur: 'PLN' },
+    eur: { name: 'Euro account', cur: 'EUR' }, usd: { name: 'Dollar account', cur: 'USD' }
+  };
+  var CAT = {
+    home: ['Home', '#7A5AF8'], salary: ['Salary', '#2E9E5B'], fun: ['Entertainment', '#E5484D'],
+    health: ['Health', '#F29D0A'], util: ['Utilities', '#0EA5A5'], fin: ['Savings', '#0A66D9'],
+    biz: ['Services', '#6E6E73'], car: ['Transport', '#C2410C']
+  };
+  var seq = 100;
+  var items = [
+    it(1, 'Rent', 'expense', 'main', 320000, 'home', 'month', 1, '2026-01-05', 'Rent'),
+    it(2, 'Salary', 'income', 'main', 980000, 'salary', 'month', 1, '2026-01-10', 'Employer payroll'),
+    it(3, 'Streaming service', 'expense', 'main', 4900, 'fun', 'month', 1, '2026-01-14', 'Streaming'),
+    it(4, 'Gym membership', 'expense', 'main', 12900, 'health', 'month', 1, '2026-01-20', 'Gym'),
+    it(5, 'Phone plan', 'expense', 'main', 5999, 'util', 'month', 1, '2026-01-22', 'Mobile'),
+    it(6, 'Internet', 'expense', 'main', 7000, 'util', 'month', 1, '2026-01-03', 'Internet provider'),
+    it(7, 'Savings top-up', 'transfer', 'main', 100000, 'fin', 'month', 1, '2026-01-28', 'To Savings', 'sav'),
+    it(8, 'Accountant', 'expense', 'main', 25000, 'biz', 'month', 1, '2026-01-31', 'Accountant', null, true),
+    it(9, 'Car insurance', 'expense', 'main', 124000, 'car', 'year', 1, '2025-12-18', 'Insurer'),
+    it(10, 'Cloud storage', 'expense', 'usd', 999, 'biz', 'month', 1, '2026-01-08', 'Cloud storage'),
+    it(11, 'Building service charge', 'expense', 'eur', 8500, 'home', 'month', 3, '2026-02-15', 'Building service'),
+    it(12, 'Water utility', 'expense', 'main', 14000, 'util', 'month', 2, '2026-02-26', 'Water company')
+  ];
+  items[11].open = '2026-10-26';   // 26 Oct expected, not paid yet -> overdue (inside the 14-day grace)
+  items[5].tol = 5; items[10].tol = 8;
+  var resolved = {};               // "itemId|day" -> {status, text}
+  var suggestions = [
+    { id: 's1', desc: 'Language app', acc: 'main', cat: 'fun', amount: 2999, unit: 'month', every: 1, start: '2026-11-06', conf: 'High',
+      ev: ['6 Jul · 29.99', '6 Aug · 29.99', '6 Sep · 29.99', '6 Oct · 29.99'] },
+    { id: 's2', desc: 'Bike share pass', acc: 'main', cat: 'car', amount: 3900, unit: 'month', every: 1, start: '2026-11-12', conf: 'Medium',
+      ev: ['12 Aug · 39.00', '11 Sep · 39.00', '12 Oct · 39.00'] },
+    { id: 's3', desc: 'Market box', acc: 'main', cat: 'home', amount: 8900, unit: 'week', every: 1, start: '2026-11-03', conf: 'Medium',
+      ev: ['13 Oct · 89.00', '20 Oct · 89.00', '27 Oct · 89.00'] }
+  ];
+  function it(id, payee, type, acc, amt, cat, unit, every, start, desc, to, last) {
+    return { id: id, payee: payee, type: type, acc: acc, to: to || null, amount: amt, cat: cat, unit: unit, every: every,
+      start: start, desc: desc, last: !!last, end: 'never', endDay: '', endCount: 12, tol: 5, status: 'active', open: TODAY, note: '' };
+  }
+
+  // ---- day arithmetic on strings (no time zones, no DST) ---------------------------------
+  function ymd(s) { var p = s.split('-'); return [+p[0], +p[1], +p[2]]; }
+  function str(y, m, d) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d; }
+  function dim(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+  function num(s) { var p = ymd(s); return Date.UTC(p[0], p[1] - 1, p[2]) / 86400000; }
+  function fromNum(n) { var d = new Date(n * 86400000); return str(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+  function diff(a, b) { return num(a) - num(b); }
+  function nth(item, k) {
+    var s = ymd(item.start), n = k * item.every;
+    if (item.unit === 'day') return fromNum(num(item.start) + n);
+    if (item.unit === 'week') return fromNum(num(item.start) + 7 * n);
+    if (item.unit === 'month') {
+      var t = s[1] - 1 + n, y = s[0] + Math.floor(t / 12), m = t % 12 + 1;
+      return str(y, m, item.last ? dim(y, m) : Math.min(s[2], dim(y, m)));
+    }
+    var yy = s[0] + n; return str(yy, s[1], Math.min(s[2], dim(yy, s[1])));
+  }
+  function occurrences(item, from, to) {
+    var out = [];
+    for (var k = 0; k < 4000; k++) {
+      var d = nth(item, k);
+      if (d > to) break;
+      if (item.end === 'onDay' && item.endDay && d > item.endDay) break;
+      if (item.end === 'afterCount' && k >= item.endCount) break;
+      if (d >= from) out.push(d);
+    }
+    return out;
+  }
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  function dlabel(s) { var p = ymd(s); return p[2] + ' ' + MON[p[1] - 1]; }
+  function dlong(s) { var p = ymd(s); return WD[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()] + ' ' + p[2] + ' ' + MON[p[1] - 1]; }
+  function rel(s) {
+    var d = diff(s, TODAY);
+    if (d === 0) return 'today'; if (d === 1) return 'tomorrow'; if (d === -1) return 'yesterday';
+    return d > 0 ? 'in ' + d + ' days' : (-d) + ' days ago';
+  }
+
+  // ---- state ----------------------------------------------------------------------------------
+  var st = { tab: 'bills', view: 'upcoming', range: 30, cur: 'PLN', menu: null, edit: null, toast: '', showSugg: true, q: '', nav: 'Upcoming' };
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function money(minor, cur, sign) {
+    var v = minor / 100;
+    var s = new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2 }).format(Math.abs(v));
+    if (cur === 'PLN') s = s.replace(/^zł\s?(.*)$/, '$1 zł').replace(/^PLN\s?(.*)$/, '$1 zł');
+    return (sign === false ? '' : (v < 0 ? '−' : '')) + s;
+  }
+  function conv(minor, from) { return Math.round(minor * RATE[from] / RATE[st.cur]); }
+  function effect(item) { return item.type === 'income' ? item.amount : -item.amount; }
+  function repeatLabel(i) {
+    var u = { day: 'day', week: 'week', month: 'month', year: 'year' }[i.unit];
+    if (i.unit === 'month' && i.last && i.every === 1) return 'Monthly, last day';
+    if (i.every === 1) return { day: 'Daily', week: 'Weekly', month: 'Monthly', year: 'Yearly' }[i.unit];
+    return 'Every ' + i.every + ' ' + u + 's';
+  }
+  function toast(t) { st.toast = t; render(); clearTimeout(toast.t); toast.t = setTimeout(function () { st.toast = ''; render(); }, 3600); }
+
+  // ---- derived lists --------------------------------------------------------------------------
+  function expected(range) {
+    var to = fromNum(num(TODAY) + range), list = [];
+    items.forEach(function (i) {
+      if (i.status !== 'active') return;
+      occurrences(i, i.open, to).forEach(function (d) {
+        var r = resolved[i.id + '|' + d];
+        list.push({ item: i, day: d, res: r || null });
+      });
+    });
+    list.sort(function (a, b) { return a.day < b.day ? -1 : a.day > b.day ? 1 : a.item.id - b.item.id; });
+    return list;
+  }
+  function badgeCount() {
+    return expected(7).filter(function (o) { return !o.res; }).length;
+  }
+
+  // ---- views ----------------------------------------------------------------------------------
+  var ICON = {
+    home: 'M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H10v-4H6v4H3a.5.5 0 0 1-.5-.5z', list: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01',
+    events: 'M3 3.5h10v10H3zM3 6.5h10M5.5 2v3M10.5 2v3', up: 'M8 2.5v5l3 2M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12z',
+    accounts: 'M2 4.5h12v8H2zM2 7h12M4.5 10h2', categories: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+    budget: 'M8 2a6 6 0 1 0 6 6H8z M9.5 1.5a5 5 0 0 1 5 5h-5z', imp: 'M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12v1.5h11V12',
+    rates: 'M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5', rules: 'M3 4h10M3 8h6M3 12h8'
+  };
+  function navBtn(label, icon, on, badge) {
+    return '<button class="nav' + (on ? ' on' : '') + '" type="button"' + (on ? ' aria-current="page"' : '') + '><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + icon + '"/></svg><span>' + label + '</span>' + (badge ? '<span class="badge-n" aria-label="' + badge + ' due soon">' + badge + '</span>' : '') + '</button>';
+  }
+  function tile(item) { return '<div class="tile" style="background:' + CAT[item.cat][1] + '" aria-hidden="true">' + esc(item.payee.charAt(0)) + '</div>'; }
+  function amountCell(item) {
+    var native = item.type === 'income' ? item.amount : -item.amount, cur = ACC[item.acc].cur;
+    var main = money(native, cur), extra = '';
+    if (item.type === 'transfer') main = money(item.amount, cur, false);
+    if (cur !== st.cur) extra = '<div class="sub">≈ ' + money(item.type === 'income' ? conv(item.amount, cur) : -conv(item.amount, cur), st.cur) + '</div>';
+    return '<div class="amt' + (item.type === 'income' ? ' in' : '') + '">' + (item.type === 'income' ? '+' : '') + main + extra + '</div>';
+  }
+  function occRow(o) {
+    var i = o.item, ov = !o.res && o.day < TODAY, chip = '';
+    if (o.res) chip = '<span class="chip ' + (o.res.status === 'paid' ? 'paid' : 'skip') + '">' + (o.res.status === 'paid' ? 'Paid' : 'Skipped') + '</span>';
+    else if (ov) chip = '<span class="chip over">Overdue</span>';
+    else if (o.day === TODAY) chip = '<span class="chip today">Today</span>';
+    var acts = '';
+    if (!o.res) {
+      var key = i.id + '|' + o.day;
+      acts = '<button class="btn sm pri" type="button" data-act="paid" data-k="' + key + '">Mark paid</button>' +
+        '<button class="btn sm" type="button" data-act="menu" data-k="' + key + '" aria-label="More actions for ' + esc(i.payee) + '">⋯</button>' +
+        (st.menu === key ? '<div class="menu" role="menu"><button type="button" data-act="link" data-k="' + key + '">Link existing transaction…</button><button type="button" data-act="skip" data-k="' + key + '">Skip this one</button><button type="button" data-act="edit" data-id="' + i.id + '">Edit item…</button></div>' : '');
+    } else if (o.res.status === 'paid') acts = '<span class="sub">' + esc(o.res.text) + '</span>';
+    var acc = ACC[i.acc].name + (i.type === 'transfer' ? ' → ' + ACC[i.to].name : '');
+    return '<div class="row" style="' + (o.res ? 'opacity:.62' : '') + '">' + tile(i) +
+      '<div><div class="ttl">' + esc(i.payee) + ' ' + chip + '</div><div class="sub">' + esc(CAT[i.cat][0]) + ' · ' + repeatLabel(i) + '</div></div>' +
+      '<div class="sub">' + esc(acc) + '</div>' +
+      '<div><div>' + dlong(o.day) + '</div><div class="sub" style="' + (ov ? 'color:#B3261E' : '') + '">' + rel(o.day) + '</div></div>' +
+      amountCell(i) + '<div class="acts">' + acts + '</div></div>';
+  }
+  function group(title, cls, list) {
+    if (!list.length) return '';
+    return '<div class="dayhead ' + cls + '">' + title + '<span class="muted" style="font-weight:400">' + list.length + '</span></div><div class="rows">' + list.map(occRow).join('') + '</div>';
+  }
+  function billsView() {
+    var list = expected(st.range);
+    var open = list.filter(function (o) { return !o.res; });
+    var out = 0, inn = 0, miss = {};
+    open.forEach(function (o) {
+      var c = ACC[o.item.acc].cur;
+      if (o.item.type === 'expense') out += conv(o.item.amount, c);
+      else if (o.item.type === 'income') inn += conv(o.item.amount, c);
+    });
+    var over = list.filter(function (o) { return !o.res && o.day < TODAY; });
+    var today = list.filter(function (o) { return o.day === TODAY; });
+    var week = list.filter(function (o) { return o.day > TODAY && diff(o.day, TODAY) <= 7; });
+    var later = list.filter(function (o) { return diff(o.day, TODAY) > 7; });
+    var h = '';
+    h += '<div class="strip"><b>Prototype:</b> simulate an import that contains a bank row for the rent. In the real app the match is shown in the import preview first (badge “Matches scheduled: Rent · 5 Nov”) and recorded on commit. <button class="btn sm" type="button" data-act="sim">Simulate import</button></div>';
+    h += suggCard();
+    h += '<div class="card"><div class="inl" style="justify-content:space-between"><h2>Next ' + st.range + ' days</h2><div class="seg" role="group" aria-label="Range" id="rng">' +
+      [7, 30, 90].map(function (r) { return '<button type="button" class="' + (st.range === r ? 'on' : '') + '" data-act="range" data-v="' + r + '">' + r + ' days</button>'; }).join('') + '</div></div>' +
+      '<div class="sum" style="margin-top:10px"><div><div class="k">Money out</div><div class="v" style="color:#B3261E">−' + money(out, st.cur, false) + '</div></div>' +
+      '<div><div class="k">Money in</div><div class="v" style="color:#1B6B3A">+' + money(inn, st.cur, false) + '</div></div>' +
+      '<div><div class="k">Net</div><div class="v">' + (inn - out < 0 ? '−' : '+') + money(Math.abs(inn - out), st.cur, false) + '</div></div>' +
+      '<div class="small muted" style="margin-left:auto">Converted at the latest rates · NBU rates 3 Nov 2026. Transfers are not counted.</div></div></div>';
+    h += group('Overdue', 'over', over) + group('Today', '', today) + group('This week', '', week) + group('Later', '', later);
+    if (!list.length) h += '<div class="rows"><div class="empty">Nothing scheduled in this range.</div></div>';
+    return h;
+  }
+  function suggCard() {
+    if (!suggestions.length) return '';
+    var h = '<div class="card"><div class="inl" style="justify-content:space-between"><h2>Suggestions (' + suggestions.length + ')</h2><button class="btn sm" type="button" data-act="toggleSugg">' + (st.showSugg ? 'Hide' : 'Show') + '</button></div>';
+    if (st.showSugg) {
+      h += '<div class="small muted" style="margin:4px 0 10px">Found in your transactions: three or more with the same description, a similar amount and a regular interval. Nothing is created until you accept.</div><div class="sugg">';
+      suggestions.forEach(function (s) {
+        h += '<div class="sg"><div class="head"><div class="tile" style="background:' + CAT[s.cat][1] + '" aria-hidden="true">' + esc(s.desc.charAt(0)) + '</div>' +
+          '<div style="flex:1;min-width:160px"><div class="ttl">' + esc(s.desc) + ' <span class="chip ' + (s.conf === 'High' ? 'paid' : 'est') + '">' + s.conf + ' confidence</span></div>' +
+          '<div class="sub">' + (s.unit === 'week' ? 'Weekly' : 'Monthly') + ' · next ' + dlabel(s.start) + ' · ' + ACC[s.acc].name + '</div></div>' +
+          '<div class="amt">' + money(-s.amount, ACC[s.acc].cur) + '</div>' +
+          '<button class="btn sm pri" type="button" data-act="accept" data-id="' + s.id + '">Accept…</button>' +
+          '<button class="btn sm" type="button" data-act="notnow" data-id="' + s.id + '">Not now</button>' +
+          '<button class="btn sm danger" type="button" data-act="dismiss" data-id="' + s.id + '">Dismiss</button></div>' +
+          '<div class="ev" aria-label="Evidence">' + s.ev.map(function (e) { return '<span>' + e + '</span>'; }).join('') + '</div></div>';
+      });
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
+  function allView() {
+    var q = st.q.toLowerCase();
+    var list = items.filter(function (i) { return !q || i.payee.toLowerCase().indexOf(q) >= 0; });
+    var monthly = 0;
+    list.forEach(function (i) {
+      if (i.status !== 'active' || i.type === 'transfer') return;
+      var f = { day: 30.4, week: 4.35, month: 1, year: 1 / 12 }[i.unit] / i.every;
+      monthly += (i.type === 'income' ? 1 : -1) * conv(i.amount, ACC[i.acc].cur) * f;
+    });
+    var h = suggCard();
+    h += '<div class="inl"><input type="search" id="q" placeholder="Search scheduled items" value="' + esc(st.q) + '" style="flex:1;min-width:200px;border:1px solid #D2D2D7;border-radius:6px;padding:6px 10px">' +
+      '<span class="small muted">Average per month (display currency, excluding transfers): <b style="color:#1D1D1F">' + (monthly < 0 ? '−' : '+') + money(Math.round(Math.abs(monthly)), st.cur, false) + '</b></span></div>';
+    h += '<div class="rows tbl"><div class="hdr"><span></span><span>Item</span><span>Account</span><span>Repeat</span><span style="text-align:right">Amount</span><span></span></div>';
+    list.forEach(function (i) {
+      var nx = occurrences(i, TODAY, fromNum(num(TODAY) + 800))[0];
+      var chip = i.status === 'paused' ? '<span class="chip paused">Paused</span>' : '';
+      h += '<div class="row" data-act="edit" data-id="' + i.id + '" style="cursor:pointer;' + (i.status === 'paused' ? 'opacity:.6' : '') + '">' + tile(i) +
+        '<div><div class="ttl">' + esc(i.payee) + ' ' + chip + '</div><div class="sub">' + esc(CAT[i.cat][0]) + ' · ' + (i.type === 'transfer' ? 'Transfer' : i.type === 'income' ? 'Income' : 'Expense') + '</div></div>' +
+        '<div class="sub">' + esc(ACC[i.acc].name) + (i.type === 'transfer' ? ' → ' + esc(ACC[i.to].name) : '') + '</div>' +
+        '<div><div>' + repeatLabel(i) + '</div><div class="sub">Next ' + (nx ? dlabel(nx) : '—') + '</div></div>' + amountCell(i) +
+        '<div class="acts"><button class="btn sm" type="button" data-act="edit" data-id="' + i.id + '">Edit</button></div></div>';
+    });
+    return h + '</div>';
+  }
+  function forecastStub() {
+    return '<div class="card"><h2>Forecast</h2><p style="font-size:13px;line-height:1.5;margin:8px 0 0">The Forecast tab (90-day balances and net worth, comparison with a past forecast, accuracy panel) is in the second prototype, <b>N5-forecast.dc.html</b>.</p></div>';
+  }
+
+  // ---- editor sheet ---------------------------------------------------------------------------
+  function editor() {
+    var e = st.edit; if (!e) return '';
+    var d = e.draft, isNew = !e.id, cur = ACC[d.acc].cur, sym = SYM[cur];
+    var accOpts = Object.keys(ACC).map(function (k) { return '<option value="' + k + '"' + (d.acc === k ? ' selected' : '') + '>' + ACC[k].name + ' (' + ACC[k].cur + ')</option>'; }).join('');
+    var toOpts = Object.keys(ACC).filter(function (k) { return k !== d.acc; }).map(function (k) { return '<option value="' + k + '"' + (d.to === k ? ' selected' : '') + '>' + ACC[k].name + ' (' + ACC[k].cur + ')</option>'; }).join('');
+    var catOpts = Object.keys(CAT).map(function (k) { return '<option value="' + k + '"' + (d.cat === k ? ' selected' : '') + '>' + CAT[k][0] + '</option>'; }).join('');
+    var tmp = JSON.parse(JSON.stringify(d)); tmp.start = d.start || TODAY;
+    var next = occurrences(tmp, TODAY, fromNum(num(TODAY) + 3000)).slice(0, 5);
+    var valid = d.payee.trim() && d.amount > 0 && d.every >= 1 && (d.type !== 'transfer' || d.to) && !(d.end === 'onDay' && d.endDay && d.endDay < d.start);
+    var h = '<div class="scrim" id="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="' + (isNew ? 'New scheduled item' : 'Edit scheduled item') + '">';
+    h += '<h3>' + (isNew ? 'New scheduled item' : 'Edit scheduled item') + (e.fromSugg ? ' <span class="chip paid">From a suggestion</span>' : '') + '</h3><div class="in">';
+    if (e.fromSugg) h += '<div class="small muted">Based on: ' + esc(e.fromSugg.ev.join('  ·  ')) + '</div>';
+    h += '<div class="seg" role="group" aria-label="Type" style="align-self:flex-start">' + ['expense', 'income', 'transfer'].map(function (t) { return '<button type="button" class="' + (d.type === t ? 'on' : '') + '" data-f="type" data-v="' + t + '">' + t.charAt(0).toUpperCase() + t.slice(1) + '</button>'; }).join('') + '</div>';
+    h += '<div class="f"><label for="f-payee">Description</label><input id="f-payee" data-f="payee" value="' + esc(d.payee) + '" placeholder="Merchant or payee"></div>';
+    h += '<div class="f"><label for="f-amount">Amount</label><div class="inl"><span style="font-size:15px;font-weight:600">' + sym + '</span><input id="f-amount" data-f="amount" type="number" step="0.01" min="0" value="' + (d.amount / 100) + '" style="width:130px"><span class="small muted">' + cur + ' · currency of the account</span></div></div>';
+    h += '<div class="f"><label for="f-acc">' + (d.type === 'transfer' ? 'From' : 'Account') + '</label><select id="f-acc" data-f="acc">' + accOpts + '</select></div>';
+    if (d.type === 'transfer') h += '<div class="f"><label for="f-to">To</label><select id="f-to" data-f="to"><option value="">Choose…</option>' + toOpts + '</select></div>';
+    else h += '<div class="f"><label for="f-cat">Category</label><select id="f-cat" data-f="cat">' + catOpts + '</select></div>';
+    h += '<hr style="border:0;border-top:1px solid #EEEEF2;width:100%;margin:2px 0">';
+    h += '<div class="f"><label for="f-every">Repeat</label><div class="inl">Every <input id="f-every" data-f="every" type="number" min="1" value="' + d.every + '" style="width:64px"><select data-f="unit" aria-label="Unit">' +
+      ['day', 'week', 'month', 'year'].map(function (u) { return '<option value="' + u + '"' + (d.unit === u ? ' selected' : '') + '>' + u + (d.every > 1 ? 's' : '') + '</option>'; }).join('') + '</select></div></div>';
+    h += '<div class="f"><label for="f-start">Starts</label><div class="inl"><input id="f-start" data-f="start" type="date" value="' + d.start + '">' +
+      (d.unit === 'month' ? '<label class="inl small" style="text-align:left;color:#1D1D1F"><input type="checkbox" data-f="last"' + (d.last ? ' checked' : '') + ' style="width:auto"> Last day of the month</label>' : '') + '</div></div>';
+    h += '<div class="f"><label for="f-end">Ends</label><div class="inl"><select id="f-end" data-f="end"><option value="never"' + (d.end === 'never' ? ' selected' : '') + '>Never</option><option value="onDay"' + (d.end === 'onDay' ? ' selected' : '') + '>On a day</option><option value="afterCount"' + (d.end === 'afterCount' ? ' selected' : '') + '>After a number of times</option></select>' +
+      (d.end === 'onDay' ? '<input type="date" data-f="endDay" value="' + d.endDay + '">' : '') + (d.end === 'afterCount' ? '<input type="number" min="1" data-f="endCount" value="' + d.endCount + '" style="width:70px"> times' : '') + '</div></div>';
+    h += '<div class="prev" aria-label="Next dates"><b>Next dates</b>' + (next.length ? next.map(function (x) { return '<span>' + dlong(x) + '</span>'; }).join('') : '<span>None</span>') + '</div>';
+    if (d.unit === 'month' && !d.last && ymd(d.start)[2] > 28) h += '<div class="small" style="color:#8A4B00">Months without a ' + ymd(d.start)[2] + 'th use their last day.</div>';
+    h += '<hr style="border:0;border-top:1px solid #EEEEF2;width:100%;margin:2px 0">';
+    h += '<div class="f"><label for="f-tol">Match tolerance</label><div class="inl"><input id="f-tol" data-f="tol" type="number" min="0" max="50" value="' + d.tol + '" style="width:70px"> % <span class="small muted">a bank row within ±3 days and this amount tolerance marks it paid</span></div></div>';
+    h += '<div class="f"><label>Mode</label><div class="small">Remind me · the app never creates transactions by itself</div></div>';
+    h += '<div class="f"><label for="f-note">Note</label><input id="f-note" data-f="note" value="' + esc(d.note) + '"></div>';
+    h += '</div><div class="foot">' + (!isNew ? '<button class="btn danger" type="button" data-act="del">Delete…</button><button class="btn" type="button" data-act="pause">' + (d.status === 'paused' ? 'Resume' : 'Pause') + '</button>' : '') +
+      '<span class="sp"></span><button class="btn" type="button" data-act="cancel">Cancel</button><button class="btn pri" type="button" data-act="save"' + (valid ? '' : ' disabled') + '>Save</button></div></div></div>';
+    return h;
+  }
+  function openEdit(id, sugg) {
+    var base;
+    if (id) { var f = items.filter(function (x) { return x.id == id; })[0]; base = JSON.parse(JSON.stringify(f)); st.edit = { id: f.id, draft: base }; }
+    else if (sugg) { base = { id: 0, payee: sugg.desc, type: 'expense', acc: sugg.acc, to: null, amount: sugg.amount, cat: sugg.cat, unit: sugg.unit, every: sugg.every, start: sugg.start, last: false, end: 'never', endDay: '', endCount: 12, tol: 5, status: 'active', open: sugg.start, note: '' }; st.edit = { id: 0, draft: base, fromSugg: sugg }; }
+    else { base = { id: 0, payee: '', type: 'expense', acc: 'main', to: null, amount: 0, cat: 'home', unit: 'month', every: 1, start: TODAY, last: false, end: 'never', endDay: '', endCount: 12, tol: 5, status: 'active', open: TODAY, note: '' }; st.edit = { id: 0, draft: base }; }
+    st.menu = null; render();
+  }
+
+  // ---- render + events ------------------------------------------------------------------------
+  function render() {
+    $('nav1').innerHTML = navBtn('Dashboard', ICON.home, false) + navBtn('Transactions', ICON.list, false) + navBtn('Events', ICON.events, false) + navBtn('Upcoming', ICON.up, true, badgeCount());
+    $('nav2').innerHTML = [['Accounts', 'accounts'], ['Categories', 'categories'], ['Budget', 'budget'], ['Import', 'imp'], ['Exchange rates', 'rates'], ['Rules', 'rules']].map(function (n) { return navBtn(n[0], ICON[n[1]], false); }).join('');
+    $('tabs').innerHTML = ['bills', 'forecast'].map(function (t) { return '<button type="button" class="' + (st.tab === t ? 'on' : '') + '" data-act="tab" data-v="' + t + '">' + (t === 'bills' ? 'Bills' : 'Forecast') + '</button>'; }).join('');
+    $('ratesNote').textContent = 'NBU rates · 3 Nov 2026';
+    $('cur').innerHTML = ['UAH', 'PLN', 'EUR', 'USD'].map(function (c) { return '<button type="button" class="' + (st.cur === c ? 'on' : '') + '" aria-pressed="' + (st.cur === c) + '" data-act="cur" data-v="' + c + '">' + c + '</button>'; }).join('');
+    var body;
+    if (st.tab === 'forecast') body = forecastStub();
+    else {
+      body = '<div class="inl"><div class="seg" role="group" aria-label="View">' + [['upcoming', 'Upcoming'], ['all', 'All items (' + items.length + ')']].map(function (v) { return '<button type="button" class="' + (st.view === v[0] ? 'on' : '') + '" data-act="view" data-v="' + v[0] + '">' + v[1] + '</button>'; }).join('') + '</div></div>' +
+        (st.view === 'upcoming' ? billsView() : allView());
+    }
+    var q = document.activeElement && document.activeElement.id === 'q';
+    $('body').innerHTML = body;
+    if (q && $('q')) { var el = $('q'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    $('layer').innerHTML = editor() + (st.toast ? '<div class="toast" role="status">' + esc(st.toast) + '</div>' : '');
+  }
+  function find(k) { var p = k.split('|'); return { item: items.filter(function (x) { return x.id == p[0]; })[0], day: p[1], key: k }; }
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest('[data-act]'); var f = ev.target.closest('[data-f]');
+    if (ev.target.id === 'scrim') { st.edit = null; render(); return; }
+    if (f && !t) {
+      if (f.tagName === 'BUTTON') { st.edit.draft[f.dataset.f] = f.dataset.v; if (f.dataset.f === 'type') { st.edit.draft.cat = f.dataset.v === 'income' ? 'salary' : st.edit.draft.cat; } render(); }
+      return;
+    }
+    if (!t) { if (st.menu) { st.menu = null; render(); } return; }
+    var a = t.dataset.act, d = t.dataset;
+    if (a === 'tab') { st.tab = d.v; }
+    else if (a === 'view') { st.view = d.v; }
+    else if (a === 'range') { st.range = +d.v; }
+    else if (a === 'cur') { st.cur = d.v; }
+    else if (a === 'menu') { st.menu = st.menu === d.k ? null : d.k; ev.stopPropagation(); }
+    else if (a === 'paid') { var o = find(d.k); resolved[d.k] = { status: 'paid', text: 'Marked paid · new transaction' }; st.menu = null; toast('New transaction opens pre-filled: ' + o.item.payee + ' · ' + money(-o.item.amount, ACC[o.item.acc].cur) + ' · ' + ACC[o.item.acc].name + '. Saving it marks this occurrence paid.'); return; }
+    else if (a === 'link') { st.menu = null; toast('A picker lists transactions on ' + ACC[find(d.k).item.acc].name + ' within ±3 days of ' + dlabel(find(d.k).day) + '.'); return; }
+    else if (a === 'skip') { resolved[d.k] = { status: 'skipped', text: '' }; st.menu = null; toast('Skipped ' + find(d.k).item.payee + ' · ' + dlabel(find(d.k).day) + '. It leaves the forecast.'); return; }
+    else if (a === 'edit') { openEdit(d.id); return; }
+    else if (a === 'sim') { var rent = items[0], day = nextRent(); resolved[rent.id + '|' + day] = { status: 'paid', text: 'Matched to a bank row on ' + dlabel(fromNum(num(day) - 1)) + ' (1 day early)' }; toast('Import preview: “Matches scheduled: Rent · ' + dlabel(day) + '”. After Import, the occurrence shows as Paid.'); return; }
+    else if (a === 'toggleSugg') { st.showSugg = !st.showSugg; }
+    else if (a === 'accept') { openEdit(null, suggestions.filter(function (s) { return s.id === d.id; })[0]); return; }
+    else if (a === 'notnow') { suggestions = suggestions.filter(function (s) { return s.id !== d.id; }); toast('Hidden until a new matching transaction arrives.'); return; }
+    else if (a === 'dismiss') { suggestions = suggestions.filter(function (s) { return s.id !== d.id; }); toast('Dismissed for good. “Show dismissed” in the suggestions card brings it back.'); return; }
+    else if (a === 'cancel') { st.edit = null; }
+    else if (a === 'pause') { st.edit.draft.status = st.edit.draft.status === 'paused' ? 'active' : 'paused'; }
+    else if (a === 'del') { if (confirm('Delete “' + st.edit.draft.payee + '”? Transactions that were matched to it are not touched.')) { items = items.filter(function (x) { return x.id !== st.edit.id; }); st.edit = null; } }
+    else if (a === 'save') {
+      var dr = st.edit.draft;
+      if (!st.edit.id) { dr.id = ++seq; items.push(dr); if (st.edit.fromSugg) suggestions = suggestions.filter(function (s) { return s !== st.edit.fromSugg; }); toast('Scheduled item added. It appears in Upcoming from ' + dlabel(dr.start) + '.'); }
+      else { items = items.map(function (x) { return x.id === st.edit.id ? dr : x; }); toast('Saved. Changes apply to future occurrences only.'); }
+      st.edit = null; return;
+    }
+    render();
+  });
+  function nextRent() { return occurrences(items[0], TODAY, fromNum(num(TODAY) + 40))[0]; }
+  document.addEventListener('input', function (ev) {
+    var f = ev.target.closest('[data-f]'); if (!f || f.tagName === 'BUTTON') return;
+    if (ev.target.id === 'q') { st.q = ev.target.value; render(); return; }
+    var d = st.edit && st.edit.draft; if (!d) return;
+    var k = f.dataset.f, v = f.type === 'checkbox' ? f.checked : f.value;
+    if (k === 'amount') d.amount = Math.round((parseFloat(v) || 0) * 100);
+    else if (k === 'every' || k === 'tol' || k === 'endCount') d[k] = parseInt(v, 10) || 0;
+    else d[k] = v;
+    if (f.tagName === 'SELECT' || f.type === 'checkbox' || f.type === 'date') { render(); }
+    else { var s = f.selectionStart, id = f.id; renderKeep(id, s); }
+  });
+  function renderKeep(id, s) { render(); var e = id && $(id); if (e) { e.focus(); try { e.setSelectionRange(s, s); } catch (x) {} } }
+  $('newItem').addEventListener('click', function () { openEdit(null); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && st.edit) { st.edit = null; render(); } });
+  render();
+})();
+</script>
+</body>
+</html>
