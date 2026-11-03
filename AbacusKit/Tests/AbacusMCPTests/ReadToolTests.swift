@@ -129,6 +129,20 @@ struct ReadToolTests {
     #expect(try MCPDatabase.schemaState(database) == .current)
   }
 
+  @Test("The read connection opens a WAL database nobody has open, and still cannot write")
+  func readOnlyWithoutWALFiles() async throws {
+    let scratch = try await Scratch.make()
+    defer { scratch.remove() }
+    for suffix in ["-wal", "-shm"] {
+      try? FileManager.default.removeItem(at: URL(filePath: scratch.url.path + suffix))
+    }
+    let database = try MCPDatabase.openReadOnly(at: scratch.url)
+    #expect(try MCPDatabase.schemaState(database) == .current)
+    await #expect(throws: (any Error).self) {
+      try await database.write { try $0.execute(sql: #"DELETE FROM "txns""#) }
+    }
+  }
+
   @Test("A missing database is a clear error, not a created file")
   func missing() {
     let url = FileManager.default.temporaryDirectory.appending(path: "abacus-mcp-missing-\(UUID().uuidString).sqlite")
