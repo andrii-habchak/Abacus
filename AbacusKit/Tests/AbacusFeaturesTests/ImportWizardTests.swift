@@ -290,11 +290,14 @@ struct ImportWizardTests {
     await model.open(data: ImportSamples.pko, fileName: ImportSamples.pkoFileName)
     #expect(model.preview?.counts.possibleDuplicate == 1)
     let rent = try #require(model.rowItems.first { $0.status == .possibleDuplicate })
-    #expect(rent.duplicateAction == .skip)
-    #expect(rent.isDimmed)
-    #expect(rent.category == .none)
+    // N6: the existing row is hand-typed and uncleared, so the bank row confirms it: Link by default.
+    #expect(rent.duplicateAction == .link)
     #expect(rent.detail.hasPrefix("Looks like “Rent October” of 2026-10-12, same amount"))
     let base = try #require(model.preview?.transactionsToCreate)
+    model.setDuplicateAction(.skip, forRow: rent.id)
+    let skipped = try #require(model.rowItems.first { $0.id == rent.id })
+    #expect(skipped.isDimmed)
+    #expect(skipped.category == .none)
 
     model.setDuplicateAction(.importAnyway, forRow: rent.id)
     let anyway = try #require(model.rowItems.first { $0.id == rent.id })

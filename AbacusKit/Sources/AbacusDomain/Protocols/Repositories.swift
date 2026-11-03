@@ -391,13 +391,23 @@ public struct ImportCommit: Sendable {
   /// C38: existing transfers with an estimated amount that the import completes (in `updatedTxns`
   /// with the real amount; these are as they were, restored by undo).
   public var completedOriginals: [Txn]
+  /// N6: existing transactions whose cleared flags, pending mark or booking day the import changes
+  /// (a link, a settled hold; they are in `updatedTxns` changed; these are as they were). Undo
+  /// restores only those fields (`ImportTxnSnapshot.Kind.flags`).
+  public var flagOriginals: [Txn]
+  /// N6: stale pending holds the owner chose to delete in the preview (R-CLR-8). Undo inserts them
+  /// again (`ImportTxnSnapshot.Kind.deleted`).
+  public var deletedTxns: [Txn]
 
   public init(
     batch: ImportBatch, newAccounts: [Account] = [], newCategories: [Category] = [],
     newEvents: [Event] = [], txns: [TxnWithLines] = [], fingerprints: [ImportFingerprint] = [],
     updatedTxns: [Txn] = [], mappings: [ImportMapping] = [], rules: [CategoryRule] = [],
-    debtLinks: [ImportDebtLink] = [], absorbedOriginals: [Txn] = [], completedOriginals: [Txn] = []
+    debtLinks: [ImportDebtLink] = [], absorbedOriginals: [Txn] = [], completedOriginals: [Txn] = [],
+    flagOriginals: [Txn] = [], deletedTxns: [Txn] = []
   ) {
+    self.flagOriginals = flagOriginals
+    self.deletedTxns = deletedTxns
     self.batch = batch
     self.newAccounts = newAccounts
     self.newCategories = newCategories

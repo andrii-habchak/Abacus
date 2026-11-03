@@ -752,7 +752,13 @@ private struct Resolver {
     row.detail = detail(source, found) ?? transferRuleDetail ?? row.detail
 
     if let existing = found.duplicate {
-      let action = decisions.duplicates[source.id] ?? .skip
+      // N6: a hand-typed, uncleared transaction the bank row confirms is linked (and cleared) by
+      // default; anything else (a Saldo row, one already cleared) stays skipped.
+      var fallback = DuplicateAction.skip
+      if case .existing(let accountID) = account, existing.source == .manual, !existing.isCleared(on: accountID) {
+        fallback = .link
+      }
+      let action = decisions.duplicates[source.id] ?? fallback
       row.status = .possibleDuplicate
       row.duplicate = DuplicateInfo(existing: existing, action: action)
       row.detail = "Looks like “\(existing.payee)” of \(dayText(existing.occurredAt)), same amount"

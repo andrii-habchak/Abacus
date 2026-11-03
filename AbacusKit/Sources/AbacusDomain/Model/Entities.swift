@@ -230,6 +230,12 @@ public struct Txn: Hashable, Identifiable, Sendable, Codable {
   /// that matches it completes the transfer with the real figure and clears the flag. Always false
   /// for anything but a transfer.
   public var isEstimatedTransferAmount: Bool
+  /// N6: a bank file (or the owner's Saldo book) has confirmed this transaction's side on
+  /// `accountID`. Bookkeeping only: it never changes balances or reports. Pending holds are never
+  /// cleared. See `Txn.isCleared(on:)`.
+  public var isCleared: Bool
+  /// N6: transfers only: the same for the side on `toAccountID`; always false otherwise.
+  public var isToCleared: Bool
 
   public init(
     id: UUID = UUID(), type: TxnType, occurredAt: Date, accountID: Account.ID,
@@ -239,7 +245,7 @@ public struct Txn: Hashable, Identifiable, Sendable, Codable {
     eventID: Event.ID? = nil, source: TxnSource = .manual, importBatchID: ImportBatch.ID? = nil,
     isPendingAtBank: Bool = false, createdAt: Date = Date(), bookedDay: String? = nil,
     debtRecordID: DebtRecord.ID? = nil, isBalanceCorrection: Bool = false, refundOfID: UUID? = nil,
-    isEstimatedTransferAmount: Bool = false
+    isEstimatedTransferAmount: Bool = false, isCleared: Bool = false, isToCleared: Bool = false
   ) {
     self.id = id
     self.type = type
@@ -264,6 +270,8 @@ public struct Txn: Hashable, Identifiable, Sendable, Codable {
     self.isBalanceCorrection = isBalanceCorrection
     self.refundOfID = refundOfID
     self.isEstimatedTransferAmount = isEstimatedTransferAmount
+    self.isCleared = isCleared
+    self.isToCleared = isToCleared
   }
 
   /// A refund linked to the expense it returns (R-TX-4, C30).
