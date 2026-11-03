@@ -63,6 +63,12 @@ struct BackupTests {
     transfer.categoryID = nil
     try await f.imports.commit(
       ImportCommit(batch: ImportBatch(source: .pko, fileName: "c38.csv"), updatedTxns: [transfer], absorbedOriginals: [income]))
+    // N6 (v19): a finished reconciliation.
+    try await f.database.write { db in
+      try Reconciliation.insert {
+        Reconciliation(accountID: F.bank.id, statementDay: "2026-04-01", closingMinor: 1_000_00, finishedAt: F.at("2026-04-02"))
+      }.execute(db)
+    }
     // C48 (v17): the trace of a transaction moved to another account.
     try await f.database.write { db in
       try TxnMove.insert {

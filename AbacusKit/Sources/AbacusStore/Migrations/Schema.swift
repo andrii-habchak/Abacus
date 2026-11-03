@@ -167,6 +167,39 @@ extension AbacusDatabase {
           """#)
       try db.execute(sql: #"CREATE INDEX IF NOT EXISTS "idx_txnMoves_txnID" ON "txnMoves"("txnID")"#)
     }
+    // N6 (R-CLR): the cleared flag per transaction side, the finished reconciliations and a kind on
+    // import snapshots (undo restores only what clearing changed, or re-inserts a deleted stale
+    // hold). Append-only and CloudKit-safe: columns with a default (`ON CONFLICT REPLACE DEFAULT 0`
+    // / 'full'), one new table with a single primary key and ON DELETE CASCADE only, no UNIQUE. Safe
+    // to run again (columns checked, IF NOT EXISTS; the backfill only ever sets flags to 1).
+    // v18 is reserved for N5 (recurring transactions); the migrator applies by name, so order
+    // between them does not matter.
+    migrator.registerMigration("v19: cleared flag and reconciliations") { db in
+      for column in ["isCleared", "isToCleared"] {
+        if try !db.columns(in: "txns").contains(where: { $0.name == column }) {
+          try db.execute(
+            sql: #"ALTER TABLE "txns" ADD COLUMN "\#(column)" INTEGER NOT NULL ON CONFLICT REPLACE DEFAULT 0"#)
+        }
+      }
+      if try !db.columns(in: "importTxnSnapshots").contains(where: { $0.name == "kind" }) {
+        try db.execute(
+          sql: #"ALTER TABLE "importTxnSnapshots" ADD COLUMN "kind" TEXT NOT NULL ON CONFLICT REPLACE DEFAULT 'full'"#)
+      }
+      try db.execute(
+        sql: #"""
+          CREATE TABLE IF NOT EXISTS "reconciliations" (
+            "id" TEXT PRIMARY KEY NOT NULL,
+            "accountID" TEXT NOT NULL REFERENCES "accounts"("id") ON DELETE CASCADE,
+            "statementDay" TEXT NOT NULL,
+            "closingMinor" INTEGER NOT NULL,
+            "correctionMinor" INTEGER NOT NULL DEFAULT 0,
+            "finishedAt" TEXT NOT NULL
+          ) STRICT
+          """#)
+      try db.execute(
+        sql: #"CREATE INDEX IF NOT EXISTS "idx_reconciliations_accountID" ON "reconciliations"("accountID")"#)
+      try ClearedBackfill.run(db)
+    }
     return migrator
   }
 

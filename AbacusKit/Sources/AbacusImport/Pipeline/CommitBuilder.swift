@@ -38,6 +38,16 @@ public struct ImportSummary: Hashable, Sendable {
   public var openingBalancesSet = 0
   /// Imported rows that carry a warning from the parser.
   public var warningsKept = 0
+  /// N6: hand-typed transactions a bank row confirmed (linked and marked cleared).
+  public var confirmed = 0
+  /// N6: stale pending holds the owner kept / marked settled / deleted / edited in the preview.
+  public var staleKept = 0
+  public var staleSettled = 0
+  public var staleDeleted = 0
+  public var staleEdited = 0
+  /// N6: balance gaps found in the file and the rows next to them the owner removed.
+  public var balanceGaps = 0
+  public var gapRowsRemoved = 0
 
   /// One line per fact, for the done screen.
   public var lines: [String] {
@@ -60,6 +70,25 @@ public struct ImportSummary: Hashable, Sendable {
       matched.append("\(debtRecordsMatched) matched debt transfer\(debtRecordsMatched == 1 ? "" : "s")")
     }
     if !matched.isEmpty { lines.append(matched.joined(separator: " · ")) }
+    if confirmed > 0 {
+      lines.append(
+        confirmed == 1 ? "1 hand-typed transaction confirmed by the bank and marked cleared"
+          : "\(confirmed) hand-typed transactions confirmed by the bank and marked cleared")
+    }
+    let stale = staleKept + staleSettled + staleDeleted + staleEdited
+    if stale > 0 {
+      var parts: [String] = []
+      if staleKept > 0 { parts.append("\(staleKept) kept") }
+      if staleSettled > 0 { parts.append("\(staleSettled) settled") }
+      if staleDeleted > 0 { parts.append("\(staleDeleted) deleted") }
+      if staleEdited > 0 { parts.append("\(staleEdited) edited") }
+      lines.append("\(stale) pending payment\(stale == 1 ? "" : "s") not in the file: " + parts.joined(separator: ", "))
+    }
+    if balanceGaps > 0 {
+      lines.append(
+        "\(balanceGaps) balance gap\(balanceGaps == 1 ? "" : "s")"
+          + (gapRowsRemoved > 0 ? ", \(gapRowsRemoved) row\(gapRowsRemoved == 1 ? "" : "s") removed" : ""))
+    }
     if estimatesCompleted > 0 {
       lines.append(
         estimatesCompleted == 1
@@ -90,6 +119,15 @@ struct CommitBuilder {
   let now: Date
 
   private var context: ImportContext { preview.context }
+
+  /// N6: whether this import's file confirms the side on `ref`: every account for Saldo (the owner's
+  /// book), the target account for a PKO statement.
+  private func isFileSide(_ ref: AccountRef?) -> Bool {
+    guard let ref else { return false }
+    if preview.source == .saldo { return true }
+    if case .existing(let id) = ref { return id == preview.targetAccountID }
+    return false
+  }
 
   func build() -> (commit: ImportCommit, summary: ImportSummary) {
     let batchID = preview.batchID
@@ -206,6 +244,7 @@ struct CommitBuilder {
     var updated: [Txn] = []
     var absorbedOriginals: [Txn] = []
     var completedOriginals: [Txn] = []
+    var flagOriginals: [Txn] = []
     var debtLinks: [ImportDebtLink] = []
     var ruleHits: [CategoryRule.ID: Int] = [:]
     // C35: ids first, so a refund can point at an expense of the same file whatever the row order.
@@ -232,7 +271,9 @@ struct CommitBuilder {
           originalCurrencyCode: shape.original?.currencyCode, payee: shape.payee, note: shape.note,
           eventID: shape.tag.flatMap { eventIDs[$0] }, source: source, isPendingAtBank: shape.isPending,
           createdAt: now, bookedDay: shape.bookedDay?.string, refundOfID: refundOfID,
-          isEstimatedTransferAmount: shape.type == .transfer && shape.isEstimated)
+          isEstimatedTransferAmount: shape.type == .transfer && shape.isEstimated,
+          isCleared: !shape.isPending && isFileSide(shape.from),
+          isToCleared: shape.type == .transfer && !shape.isPending && isFileSide(shape.to))
         if refundOfID != nil { summary.refundsLinked += 1 }
         let lines = shape.lines.enumerated().map { index, line in
           AttachedRecord(
@@ -260,8 +301,10 @@ struct CommitBuilder {
         if row.status == .possibleDuplicate { summary.duplicatesImported += 1 }
       case .settle(var hold, let settled):
         // R-IMP-PKO-2: the settled amount wins, the purchase day stays, the booking day is kept.
+        flagOriginals.append(hold)
         hold.amountMinor = settled.amountMinor
         hold.isPendingAtBank = false
+        hold.isCleared = true
         // The settled payment is money out (C16: older builds could store a hold as a refund).
         hold.isRefund = false
         if let booked = settled.bookedDay, booked != Day(hold.occurredAt, calendar: calendar) {
@@ -277,8 +320,22 @@ struct CommitBuilder {
       case .link(let existing, let keys):
         fingerprints += keys.map { ImportFingerprint(id: $0, txnID: existing.id) }
         summary.linked += 1
+        // N6: the bank row confirms the existing transaction's side on the row's account.
+        if case .existing(let sideAccount) = row.account, existing.accountID == sideAccount || existing.toAccountID == sideAccount,
+          !existing.isPendingAtBank, !existing.isCleared(on: sideAccount)
+        {
+          var cleared = existing
+          cleared.setCleared(true, on: sideAccount)
+          if cleared.bookedDay == nil, let booked = row.source.bookedDay, booked != Day(existing.occurredAt, calendar: calendar) {
+            cleared.bookedDay = booked.string
+          }
+          flagOriginals.append(existing)
+          updated.append(cleared)
+          if existing.source == .manual { summary.confirmed += 1 }
+        }
         if DebtLegMatch.debt(of: existing, in: preview.debtBook) != nil { summary.debtRecordsMatched += 1 }
       case .convert(var existing, let shape):
+        let original = existing
         if shape.absorbs {
           // C38: the row's transfer takes over this transaction. The row is the sending side when
           // the transaction is on the receiving account: then the transfer has the row's date and
@@ -302,6 +359,12 @@ struct CommitBuilder {
         existing.isRefund = false
         existing.originalAmountMinor = nil
         existing.originalCurrencyCode = nil
+        // N6: each side is cleared when this file confirms it or it already was (an absorbed
+        // transaction keeps the confirmation of its own account).
+        let newFrom = shape.from, newTo = shape.to
+        existing.isCleared = isFileSide(newFrom) || (original.isCleared(on: accountID(newFrom)) && !original.isPendingAtBank)
+        existing.isToCleared =
+          newTo.map { isFileSide($0) || (original.isCleared(on: accountID($0)) && !original.isPendingAtBank) } ?? false
         updated.append(existing)
         fingerprints += shape.fingerprints.map { ImportFingerprint(id: $0, txnID: existing.id) }
         summary.transfersCompleted += 1
@@ -312,6 +375,10 @@ struct CommitBuilder {
         case .to: transfer.toAmountMinor = amount
         }
         transfer.isEstimatedTransferAmount = false
+        switch side {
+        case .from: transfer.isCleared = true
+        case .to: transfer.isToCleared = true
+        }
         updated.append(transfer)
         fingerprints += keys.map { ImportFingerprint(id: $0, txnID: transfer.id) }
         summary.linked += 1
@@ -324,6 +391,34 @@ struct CommitBuilder {
     }
     summary.alreadyImported = preview.counts.alreadyImported
     summary.skipped = preview.counts.skipped
+
+    // N6 (R-CLR-8): what the owner decided for each stale pending hold; kept ones change nothing.
+    var deletedHolds: [Txn] = []
+    for hold in preview.staleHolds {
+      switch preview.staleHoldDecision(hold.id) ?? .keep {
+      case .keep:
+        summary.staleKept += 1
+      case .markSettled:
+        var settled = hold.txn
+        settled.isPendingAtBank = false
+        flagOriginals.append(hold.txn)
+        updated.append(settled)
+        summary.staleSettled += 1
+      case .delete:
+        deletedHolds.append(hold.txn)
+        summary.staleDeleted += 1
+      case .edit(let edit):
+        var edited = hold.txn
+        edited.amountMinor = edit.amountMinor
+        edited.occurredAt = edit.day.date(calendar: calendar)
+        edited.isPendingAtBank = edit.stillPending
+        flagOriginals.append(hold.txn)
+        updated.append(edited)
+        summary.staleEdited += 1
+      }
+    }
+    summary.balanceGaps = preview.continuity.gaps.count
+    summary.gapRowsRemoved = preview.gapRowsRemoved
 
     // Remembered mappings (R-IMP-2, R-IMP-PKO-1).
     var mappings: [ImportMapping] = []
@@ -384,7 +479,8 @@ struct CommitBuilder {
     let commit = ImportCommit(
       batch: summary.batch, newAccounts: newAccounts, newCategories: newCategories, newEvents: newEvents,
       txns: txns, fingerprints: fingerprints, updatedTxns: updated, mappings: mappings, rules: rules,
-      debtLinks: debtLinks, absorbedOriginals: absorbedOriginals, completedOriginals: completedOriginals)
+      debtLinks: debtLinks, absorbedOriginals: absorbedOriginals, completedOriginals: completedOriginals,
+      flagOriginals: flagOriginals, deletedTxns: deletedHolds)
     return (commit, summary)
   }
 
@@ -410,6 +506,12 @@ struct CommitBuilder {
     parts.append("\(s.created) new")
     if s.settled > 0 { parts.append("\(s.settled) settled") }
     if s.linked > 0 { parts.append("\(s.linked) linked") }
+    if s.confirmed > 0 { parts.append("\(s.confirmed) confirmed") }
+    if preview.source == .pko {
+      let stale = s.staleKept + s.staleSettled + s.staleDeleted + s.staleEdited
+      parts.append(stale == 1 ? "1 stale hold" : "\(stale) stale holds")
+      parts.append(s.balanceGaps == 1 ? "1 balance gap" : "\(s.balanceGaps) balance gaps")
+    }
     if s.debtRecords > 0 { parts.append(s.debtRecords == 1 ? "1 to a debt account" : "\(s.debtRecords) to debt accounts") }
     if s.alreadyImported > 0 { parts.append("\(s.alreadyImported) skipped") }
     if s.duplicatesSkipped > 0 {

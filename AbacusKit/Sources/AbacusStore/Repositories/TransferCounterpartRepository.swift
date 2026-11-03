@@ -88,4 +88,20 @@ enum TransferAbsorb {
       try ImportTxnSnapshot.insert { snapshot }.execute(db)
     }
   }
+
+  /// N6: keeps the existing transactions an import changes only in their cleared state or deletes
+  /// (stale holds), as they are now, so undo of the batch can put that back.
+  static func keepClearingOriginals(of commit: ImportCommit, batchID: ImportBatch.ID, _ db: Database) throws {
+    for original in commit.flagOriginals {
+      guard let current = try Txn.find(original.id).fetchOne(db) else { throw RepositoryError.notFound }
+      let snapshot = try ImportTxnSnapshot(batchID: batchID, txn: current, kind: .flags)
+      try ImportTxnSnapshot.insert { snapshot }.execute(db)
+    }
+    for deleted in commit.deletedTxns {
+      guard let current = try Txn.find(deleted.id).fetchOne(db) else { throw RepositoryError.notFound }
+      let snapshot = try ImportTxnSnapshot(batchID: batchID, txn: current, kind: .deleted)
+      try ImportTxnSnapshot.insert { snapshot }.execute(db)
+      try Txn.find(deleted.id).delete().execute(db)
+    }
+  }
 }

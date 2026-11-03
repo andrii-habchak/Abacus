@@ -137,6 +137,11 @@ public struct NormalizedRow: Hashable, Sendable, Identifiable {
   /// of the statement's currency and then moved (`ImportFingerprint.movedID`). Looked up only,
   /// never stored; set by the pipeline.
   public var movedFingerprints: [String] = []
+  /// N6 (PKO): the statement's own signed amount (money out negative) and the running balance after
+  /// the row (`Saldo po transakcji`); nil for a hold, which has no balance. Used only to check
+  /// that the file's balances chain (R-CLR-9).
+  public var statementAmountMinor: Int64?
+  public var balanceAfterMinor: Int64?
 
   public var id: String { fingerprints[0] }
 

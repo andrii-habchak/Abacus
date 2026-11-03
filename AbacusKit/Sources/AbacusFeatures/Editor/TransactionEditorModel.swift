@@ -687,6 +687,10 @@ public final class TransactionEditorModel {
     txn.payee = draft.payee.trimmingCharacters(in: .whitespacesAndNewlines)
     txn.note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
     txn.eventID = effectiveEventID
+    // N6: a side stays cleared only for the same account and while the payment is not pending; a
+    // new transaction or a moved side starts uncleared.
+    txn.isCleared = (draft.stored?.accountID == account.id) && draft.isCleared && !txn.isPendingAtBank
+    txn.isToCleared = false
     switch draft.type {
     case .transfer:
       // C38: an estimated amount stays flagged until the user changes an amount or an account.
@@ -698,6 +702,7 @@ public final class TransactionEditorModel {
       txn.amountMinor = amountMinor
       txn.toAccountID = toAccount?.id
       txn.toAmountMinor = toAmountMinor
+      txn.isToCleared = toAccount != nil && draft.stored?.toAccountID == toAccount?.id && draft.isToCleared && !txn.isPendingAtBank
       txn.categoryID = nil
       txn.isRefund = false
       txn.originalAmountMinor = nil
@@ -804,6 +809,35 @@ public final class TransactionEditorModel {
 
   /// "Duplicate" (R-TX-7): the form becomes a new transaction with the same values, dated now,
   /// entered manually.
+  // MARK: Cleared (N6)
+
+  /// "Cleared (confirmed by the bank)" for the stored transaction's own side.
+  public var isCleared: Bool {
+    get { draft.isCleared }
+    set { draft.isCleared = newValue }
+  }
+
+  /// Transfers: the same for the receiving account's side.
+  public var isToCleared: Bool {
+    get { draft.isToCleared }
+    set { draft.isToCleared = newValue }
+  }
+
+  /// The checkboxes show when editing a stored transaction that is not a pending hold.
+  public var showsCleared: Bool {
+    guard case .edit = mode, let stored = draft.stored else { return false }
+    return !stored.isPendingAtBank
+  }
+
+  /// The warning under the amount when a bank-confirmed row's amount, day or account is changed.
+  public var clearedWarning: String? {
+    guard case .edit = mode, let stored = draft.stored, stored.isCleared || stored.isToCleared else { return nil }
+    let changed = (amountMinor.map { $0 != stored.amountMinor && !isForeign } ?? false)
+      || draft.occurredAt != stored.occurredAt || account.map { $0.id != stored.accountID } ?? false
+    return changed
+      ? "This row is confirmed by the bank statement. Changing it will make the reconciled balance differ." : nil
+  }
+
   public func duplicate() {
     guard case .edit = mode else { return }
     mode = .new

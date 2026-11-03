@@ -72,6 +72,20 @@ public struct SQLiteImportStore: ImportStore {
     }
   }
 
+  /// N6: the account's cleared balance at the end of the day before `day`, and whether it has any
+  /// cleared row booked before `day`.
+  public func clearedBalance(accountID: Account.ID, before day: Day) async throws -> (balanceMinor: Int64, hasClearedRows: Bool)? {
+    guard let account = try await database.read({ try Account.find(accountID).fetchOne($0) }) else { return nil }
+    let txns = try await SQLiteTxnRepository(database: database, calendar: calendar)
+      .transactions(matching: TxnQuery(accountIDs: [accountID]))
+    let rows = Reconcile.rows(account: account, txns: txns, calendar: calendar)
+    let before = day.adding(days: -1, calendar: calendar)
+    return (
+      Reconcile.clearedBalance(account: account, rows: rows, through: before),
+      rows.contains { $0.isCleared && !$0.isPending && $0.statementDay < day }
+    )
+  }
+
   /// R-IMP-2: remembered mappings of a source.
   public func mappings(source: ImportSource) async throws -> [ImportMapping] {
     try await database.read { db in
@@ -141,6 +155,7 @@ public struct SQLiteImportStore: ImportStore {
       // completed by a row must still be estimated. The transaction as it is now is kept, so undo
       // of the batch restores it.
       try TransferAbsorb.keepOriginals(of: commit, batchID: batchID, db)
+      try TransferAbsorb.keepClearingOriginals(of: commit, batchID: batchID, db)
       for txn in commit.updatedTxns {
         guard try Txn.find(txn.id).fetchCount(db) > 0 else { throw RepositoryError.notFound }
         try Txn.upsert { Txn.Draft(txn) }.execute(db)
@@ -229,8 +244,30 @@ public struct SQLiteImportStore: ImportStore {
       try ImportFingerprint.where { $0.batchID.eq(batchID) }.delete().execute(db)
       // C38: transactions the batch turned into transfers (or completed) come back as they were.
       for snapshot in try ImportTxnSnapshot.where({ $0.batchID.eq(batchID) }).fetchAll(db) {
-        if let original = try? snapshot.txn(), try Txn.find(original.id).fetchCount(db) > 0 {
-          try Txn.upsert { Txn.Draft(original) }.execute(db)
+        guard let original = try? snapshot.txn() else { continue }
+        let exists = try Txn.find(original.id).fetchCount(db) > 0
+        switch snapshot.kind {
+        case .full:
+          if exists { try Txn.upsert { Txn.Draft(original) }.execute(db) }
+        case .flags:
+          // N6: only what clearing, a link or a settle changed; later edits stay.
+          if var current = try Txn.find(original.id).fetchOne(db) {
+            current.isCleared = original.isCleared
+            current.isToCleared = original.isToCleared
+            current.isPendingAtBank = original.isPendingAtBank
+            current.bookedDay = original.bookedDay
+            current.amountMinor = original.amountMinor
+            current.isRefund = original.isRefund
+            current.occurredAt = original.occurredAt
+            current.originalAmountMinor = original.originalAmountMinor
+            current.originalCurrencyCode = original.originalCurrencyCode
+            try Txn.upsert { Txn.Draft(current) }.execute(db)
+          }
+        case .deleted:
+          // N6: a stale hold the batch deleted comes back (its account must still exist).
+          if !exists, try Account.find(original.accountID).fetchCount(db) > 0 {
+            try Txn.insert { original }.execute(db)
+          }
         }
       }
       try ImportTxnSnapshot.where { $0.batchID.eq(batchID) }.delete().execute(db)

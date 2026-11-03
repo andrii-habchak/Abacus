@@ -37,7 +37,56 @@ public struct ImportPreview: Sendable {
   /// New transactions the commit creates ("Import N transactions").
   public private(set) var transactionsToCreate = 0
 
-  public var canCommit: Bool { unresolvedReviewCount == 0 && issues.isEmpty }
+  public var canCommit: Bool { unresolvedReviewCount == 0 && issues.isEmpty && undecidedStaleHolds.isEmpty }
+
+  // MARK: N6: stale holds and balance gaps (R-CLR-8, R-CLR-9)
+
+  /// Pending PKO holds the file should have settled and did not; each needs a decision.
+  public internal(set) var staleHolds: [StaleHold] = []
+  /// Where the file's balances do not chain (PKO); warnings only.
+  public internal(set) var continuity = BalanceContinuity.empty
+  /// "The file starts at X but the account has Y": the account's cleared balance at the end of the
+  /// day before the file starts, when the account has cleared rows before it.
+  public internal(set) var startCheck: StartBalanceCheck?
+
+  public func staleHoldDecision(_ id: Txn.ID) -> StaleHoldDecision? { decisions.staleHolds[id] }
+
+  public var undecidedStaleHolds: [StaleHold] { staleHolds.filter { decisions.staleHolds[$0.id] == nil } }
+
+  /// Decides one or several stale holds at once (bulk actions); nil clears the decision.
+  public mutating func setStaleHold(_ decision: StaleHoldDecision?, for ids: [Txn.ID]) {
+    for id in ids where staleHolds.contains(where: { $0.id == id }) { decisions.staleHolds[id] = decision }
+  }
+
+  /// A gap row is not imported ("Remove") or imported as the file says ("Leave", the default).
+  public mutating func setGapRow(_ id: String, removed: Bool) {
+    if removed { decisions.excluded.insert(id) } else { decisions.excluded.remove(id) }
+    recompute()
+  }
+
+  public func isGapRowRemoved(_ id: String) -> Bool { decisions.excluded.contains(id) }
+
+  /// Rows next to a gap that the owner removed.
+  public var gapRowsRemoved: Int {
+    Set(continuity.gaps.flatMap { [$0.before.id, $0.after.id] }).filter { decisions.excluded.contains($0) }.count
+  }
+
+  /// Existing transactions a row of the file settles, links to, completes or lists again: not stale.
+  var claimedExistingIDs: Set<Txn.ID> {
+    var ids = Set(analysis.flatMap { [$0.exactTxnID, $0.settles?.id, $0.duplicate?.id, $0.sameTransfer?.id, $0.debtLeg?.id] }.compactMap { $0 })
+    for plan in plans {
+      switch plan {
+      case .settle(let txn, _), .link(let txn, _), .convert(let txn, _), .completeEstimate(let txn, _, _, _): ids.insert(txn.id)
+      case .nothing, .openingBalance, .create: break
+      }
+    }
+    return ids
+  }
+
+  /// Keep every undecided stale hold.
+  public mutating func keepUndecidedStaleHolds() {
+    for hold in undecidedStaleHolds { decisions.staleHolds[hold.id] = .keep }
+  }
 
   // Inputs.
   let parsedRows: [NormalizedRow]
@@ -90,6 +139,8 @@ public struct ImportPreview: Sendable {
     /// C40: the other account of a transfer the file itself gives (Saldo transfers, own accounts
     /// recognised by their number), chosen by the user.
     var counterAccounts: [String: Account.ID] = [:]
+    /// N6: what the owner decided for each stale pending hold.
+    var staleHolds: [Txn.ID: StaleHoldDecision] = [:]
   }
 
   init(
@@ -316,6 +367,7 @@ public struct ImportPreview: Sendable {
   ///   amount) are recorded by their sign, without a category.
   /// Choices already made are kept.
   public mutating func acceptDefaults() {
+    keepUndecidedStaleHolds()
     for candidate in eventCandidates { decisions.events[candidate.tag] = false }
     for row in rows {
       guard let review = row.review, decisions.reviews[row.id] == nil else { continue }
@@ -752,7 +804,13 @@ private struct Resolver {
     row.detail = detail(source, found) ?? transferRuleDetail ?? row.detail
 
     if let existing = found.duplicate {
-      let action = decisions.duplicates[source.id] ?? .skip
+      // N6: a hand-typed, uncleared transaction the bank row confirms is linked (and cleared) by
+      // default; anything else (a Saldo row, one already cleared) stays skipped.
+      var fallback = DuplicateAction.skip
+      if case .existing(let accountID) = account, existing.source == .manual, !existing.isCleared(on: accountID) {
+        fallback = .link
+      }
+      let action = decisions.duplicates[source.id] ?? fallback
       row.status = .possibleDuplicate
       row.duplicate = DuplicateInfo(existing: existing, action: action)
       row.detail = "Looks like “\(existing.payee)” of \(dayText(existing.occurredAt)), same amount"

@@ -93,6 +93,20 @@ public struct CategoryReassignImpact: Hashable, Sendable {
 }
 
 /// Filters of the transaction list (R-LIST-2…6). Empty sets mean "any".
+/// N6: the Transactions list's cleared filter. A transaction is *cleared* when every side is cleared
+/// and it is not a pending hold; *uncleared* is everything else.
+public enum ClearedFilter: String, CaseIterable, Hashable, Sendable {
+  case all, cleared, uncleared
+
+  public var title: String {
+    switch self {
+    case .all: "All"
+    case .cleared: "Cleared"
+    case .uncleared: "Uncleared"
+    }
+  }
+}
+
 public struct TxnQuery: Hashable, Sendable {
   public var fromDay: Day?
   public var toDay: Day?
@@ -112,13 +126,17 @@ public struct TxnQuery: Hashable, Sendable {
   /// "Uncategorised" also matches transfers (they never have a category). Set while a debt is
   /// filtered: its rows are transfers, so the Categories menu can offer Uncategorised (C28).
   public var uncategorisedIncludesTransfers: Bool
+  /// N6: only cleared or only uncleared transactions.
+  public var cleared: ClearedFilter
 
   public init(
     fromDay: Day? = nil, toDay: Day? = nil, categoryIDs: Set<Category.ID> = [],
     accountIDs: Set<Account.ID> = [], types: Set<TxnType> = [], eventIDs: Set<Event.ID> = [],
     search: String = "", newestFirst: Bool = true, includeUncategorised: Bool = false,
-    importBatchIDs: Set<ImportBatch.ID> = [], uncategorisedIncludesTransfers: Bool = false
+    importBatchIDs: Set<ImportBatch.ID> = [], uncategorisedIncludesTransfers: Bool = false,
+    cleared: ClearedFilter = .all
   ) {
+    self.cleared = cleared
     self.fromDay = fromDay
     self.toDay = toDay
     self.categoryIDs = categoryIDs
@@ -391,13 +409,23 @@ public struct ImportCommit: Sendable {
   /// C38: existing transfers with an estimated amount that the import completes (in `updatedTxns`
   /// with the real amount; these are as they were, restored by undo).
   public var completedOriginals: [Txn]
+  /// N6: existing transactions whose cleared flags, pending mark or booking day the import changes
+  /// (a link, a settled hold; they are in `updatedTxns` changed; these are as they were). Undo
+  /// restores only those fields (`ImportTxnSnapshot.Kind.flags`).
+  public var flagOriginals: [Txn]
+  /// N6: stale pending holds the owner chose to delete in the preview (R-CLR-8). Undo inserts them
+  /// again (`ImportTxnSnapshot.Kind.deleted`).
+  public var deletedTxns: [Txn]
 
   public init(
     batch: ImportBatch, newAccounts: [Account] = [], newCategories: [Category] = [],
     newEvents: [Event] = [], txns: [TxnWithLines] = [], fingerprints: [ImportFingerprint] = [],
     updatedTxns: [Txn] = [], mappings: [ImportMapping] = [], rules: [CategoryRule] = [],
-    debtLinks: [ImportDebtLink] = [], absorbedOriginals: [Txn] = [], completedOriginals: [Txn] = []
+    debtLinks: [ImportDebtLink] = [], absorbedOriginals: [Txn] = [], completedOriginals: [Txn] = [],
+    flagOriginals: [Txn] = [], deletedTxns: [Txn] = []
   ) {
+    self.flagOriginals = flagOriginals
+    self.deletedTxns = deletedTxns
     self.batch = batch
     self.newAccounts = newAccounts
     self.newCategories = newCategories
@@ -430,9 +458,14 @@ public protocol ImportStore: Sendable {
   /// C44: stored fingerprints among `ids` with their transaction and the accounts it is on now
   /// (moved PKO keys are matched to the account the transaction was moved to).
   func fingerprintOwners(_ ids: [String]) async throws -> [String: FingerprintOwner]
+  /// N6: see the extension below.
+  func clearedBalance(accountID: Account.ID, before day: Day) async throws -> (balanceMinor: Int64, hasClearedRows: Bool)?
 }
 
 extension ImportStore {
+  /// N6: the account's cleared balance at the end of the day before `day` and whether it has any
+  /// cleared row before it (the import's "file starts at X" check); nil for fakes.
+  public func clearedBalance(accountID: Account.ID, before day: Day) async throws -> (balanceMinor: Int64, hasClearedRows: Bool)? { nil }
   /// Fakes without debts.
   public func debtBook() async throws -> DebtBook { .empty }
   /// Fakes without moved batches.

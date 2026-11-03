@@ -31,6 +31,10 @@ public final class ImportWizardModel {
 
   /// C36: the sub-filters of the Needs review tab.
   public enum ReviewFilter: Hashable, Sendable {
+    /// N6: pending payments the file does not mention (PKO): each needs a decision.
+    case pending
+    /// N6: balance gaps in the file (PKO): warnings with a Leave / Remove choice per row.
+    case gaps
     /// Decisions and categories together (the default).
     case all
     /// Rows the importer could not place (the review cards).
@@ -79,6 +83,10 @@ public final class ImportWizardModel {
   public private(set) var filter: RowStatus? {
     didSet { if filter != oldValue { clearSelection() } }
   }
+  /// N6: the inline "Edit" values of each stale pending hold (kept while the file is open).
+  public internal(set) var staleEditDrafts: [Txn.ID: ImportStaleEditDraft] = [:]
+  /// N6: after a PKO import, the account and the statement's closing balance to reconcile with.
+  public internal(set) var reconcileOfferStore: ImportReconcileOffer?
   /// C31: the rows selected in the list (row ids); bulk actions work on them.
   public internal(set) var selection: Set<String> = []
   @ObservationIgnored var selectionAnchor: String?
@@ -535,6 +543,15 @@ public final class ImportWizardModel {
     defer { activity = .idle }
     do {
       summary = try await pipeline.commit(preview)
+      reconcileOfferStore = nil
+      if preview.source == .pko, let id = preview.targetAccountID, let account = accounts.first(where: { $0.id == id }),
+        let day = preview.continuity.endDay, let closing = preview.continuity.endMinor
+      {
+        reconcileOfferStore = ImportReconcileOffer(
+          accountID: id, accountName: account.name, day: day, closingMinor: closing,
+          closingText: format.amount(abs(closing), account.currency.rawValue, inflow: closing >= 0),
+          dayText: format.day(day.date(calendar: format.calendar)))
+      }
       step = .done
       onDataChanged?()
     } catch {

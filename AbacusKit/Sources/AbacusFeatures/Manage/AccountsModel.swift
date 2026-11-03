@@ -146,6 +146,11 @@ public final class AccountsModel {
   /// R-DEBT-17: the debts (for the editor's "Debt" section) and which one each account is in.
   public private(set) var debts: [Debt] = []
   public private(set) var debtLinks: [Account.ID: DebtAccountLink] = [:]
+  /// N6: the cleared balance of each account, its last reconciliation, and whether cleared rows
+  /// were booked after it ("Not reconciled", only a hint).
+  public private(set) var reconcileInfo: [Account.ID: AccountReconcileInfo] = [:]
+  /// N6: opens Reconcile for an account (set by the shell).
+  @ObservationIgnored public var onReconcile: ((Account.ID) -> Void)?
   /// R-ACC-4: archived accounts are listed only on request.
   public var showArchived = false
   /// The page search: account and group names (R-MGMT-11).
@@ -221,6 +226,7 @@ public final class AccountsModel {
         if let to = item.txn.toAccountID, to != item.txn.accountID { counts[to, default: 0] += 1 }
       }
       txnCounts = counts
+      reconcileInfo = await Self.reconcileInfo(txns: txns, accounts: accounts, repository: dependencies.reconcile, calendar: format.calendar)
       if !sortLoaded {
         sortLoaded = true
         let stored = try? await dependencies.settings.value(.accountSort)
@@ -707,6 +713,51 @@ public final class AccountsModel {
 
   public var balanceText: String? {
     selectedAccount.map { format.money(balance($0)) }
+  }
+
+  /// N6: "Cleared balance" of the open account.
+  public var clearedBalanceText: String? {
+    guard let account = selectedAccount, let info = reconcileInfo[account.id] else { return nil }
+    return format.money(Money(minorUnits: info.clearedMinor, currency: account.currency))
+  }
+
+  /// N6: "21 Oct 2026 · 3,569.55 zł" or "Never".
+  public var lastReconciledText: String {
+    guard let account = selectedAccount, let last = reconcileInfo[account.id]?.last else { return "Never" }
+    let day = Day(last.statementDay).map { format.day($0) } ?? last.statementDay
+    return "\(day) · " + format.money(Money(minorUnits: last.closingMinor, currency: account.currency))
+  }
+
+  /// N6: the "Not reconciled" hint for the open account.
+  public var isNotReconciled: Bool {
+    selectedAccount.flatMap { reconcileInfo[$0.id]?.isNotReconciled } ?? false
+  }
+
+  /// N6: "Reconcile" in the account window.
+  public func reconcileSelected() {
+    guard let account = selectedAccount else { return }
+    onReconcile?(account.id)
+  }
+
+  /// One pass over the transactions: cleared balances and whether cleared rows came after the last
+  /// reconciliation.
+  static func reconcileInfo(
+    txns: [TxnWithLines], accounts: [Account], repository: (any ReconcileRepository)?, calendar: Calendar
+  ) async -> [Account.ID: AccountReconcileInfo] {
+    let last = (try? await repository?.lastReconciliations()) ?? [:]
+    var cleared: [Account.ID: Int64] = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.openingBalanceMinor) })
+    var after: [Account.ID: Bool] = [:]
+    for item in txns where !item.txn.isPendingAtBank {
+      for effect in Calc.effects(of: item) where item.txn.isCleared(on: effect.accountID) {
+        cleared[effect.accountID, default: 0] += effect.amountMinor
+        let since = last[effect.accountID].flatMap { Day($0.statementDay) }
+        if since.map({ Reconcile.statementDay(of: item.txn, calendar: calendar) > $0 }) ?? true { after[effect.accountID] = true }
+      }
+    }
+    return Dictionary(
+      uniqueKeysWithValues: accounts.map {
+        ($0.id, AccountReconcileInfo(clearedMinor: cleared[$0.id] ?? 0, last: last[$0.id], isNotReconciled: after[$0.id] ?? false))
+      })
   }
 
   public var isBalanceNegative: Bool {
@@ -1371,4 +1422,12 @@ public final class AccountsModel {
       errorMessage = ManageFailure.message(error, doing: archived ? "archive the account" : "unarchive the account")
     }
   }
+}
+
+
+/// N6: what the account window shows about reconciliation.
+public struct AccountReconcileInfo: Hashable, Sendable {
+  public var clearedMinor: Int64
+  public var last: Reconciliation?
+  public var isNotReconciled: Bool
 }

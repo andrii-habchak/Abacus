@@ -97,6 +97,9 @@ public struct EditorDraft: Hashable, Sendable {
   /// The stored transaction when editing (keeps source, import batch, pending flag, booking
   /// day and creation time); nil for a new one.
   public var stored: Txn?
+  /// N6: the cleared marks of the stored transaction's two sides (edit mode only).
+  public var isCleared = false
+  public var isToCleared = false
 
   public init(
     id: Txn.ID = UUID(), type: TxnType = .expense, amountText: String = "", currencyCode: String = "UAH",
@@ -137,6 +140,8 @@ public struct EditorDraft: Hashable, Sendable {
     let accountCode = account?.currency.rawValue ?? "UAH"
     self.init(id: txn.id, type: txn.type, occurredAt: txn.occurredAt)
     stored = txn
+    isCleared = txn.isCleared
+    isToCleared = txn.isToCleared
     payee = txn.payee
     note = txn.note
     eventID = txn.eventID

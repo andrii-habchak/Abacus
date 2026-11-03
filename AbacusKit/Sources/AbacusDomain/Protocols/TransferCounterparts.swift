@@ -18,21 +18,34 @@ public struct ImportTxnSnapshot: Hashable, Identifiable, Sendable {
   public var batchID: ImportBatch.ID
   public var txnID: Txn.ID
   public var json: String
+  /// N6 (v19): what undo does with it. `full` (C38, the default): put the whole transaction back.
+  /// `flags`: only the fields an import's clearing, link or settle changed (cleared flags, pending
+  /// mark, booking day, amount of a settled hold), so edits made since stay. `deleted`: the import
+  /// deleted the transaction (a stale hold the owner chose to delete); undo inserts it again.
+  public var kind: Kind
 
-  public init(id: UUID = UUID(), batchID: ImportBatch.ID, txnID: Txn.ID, json: String) {
+  public enum Kind: String, Codable, Hashable, Sendable, QueryBindable {
+    case full, flags, deleted
+  }
+
+  public init(id: UUID = UUID(), batchID: ImportBatch.ID, txnID: Txn.ID, json: String, kind: Kind = .full) {
     self.id = id
     self.batchID = batchID
     self.txnID = txnID
     self.json = json
+    self.kind = kind
   }
 
-  public init(batchID: ImportBatch.ID, txn: Txn) throws {
+  public init(batchID: ImportBatch.ID, txn: Txn, kind: Kind = .full) throws {
     let data = try JSONEncoder().encode(txn)
-    self.init(batchID: batchID, txnID: txn.id, json: String(decoding: data, as: UTF8.self))
+    self.init(batchID: batchID, txnID: txn.id, json: String(decoding: data, as: UTF8.self), kind: kind)
   }
 
+  /// Snapshots written before v19 lack the cleared flags; they decode as not cleared.
   public func txn() throws -> Txn {
-    try JSONDecoder().decode(Txn.self, from: Data(json.utf8))
+    var object = (try JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] ?? [:]
+    for key in ["isCleared", "isToCleared"] where object[key] == nil { object[key] = false }
+    return try JSONDecoder().decode(Txn.self, from: JSONSerialization.data(withJSONObject: object))
   }
 }
 

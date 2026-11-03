@@ -6,6 +6,7 @@ import SwiftUI
 struct TransactionColumnHeader: View {
   var body: some View {
     HStack(spacing: TxnMetrics.gap) {
+      Text("✓").frame(width: 18).help("Cleared")
       Color.clear.frame(width: TxnMetrics.tile, height: 1)
       TxnColumnsLayout {
         Text("Description")
@@ -51,6 +52,7 @@ struct TransactionRowView: View {
 
   var body: some View {
     HStack(spacing: TxnMetrics.gap) {
+      ClearedMarkView(mark: row.cleared, help: row.clearedHelp)
       tile
       TxnColumnsLayout {
         description
@@ -179,5 +181,31 @@ struct TransactionBadge: View {
       .padding(.vertical, 1)
       .background(Capsule().fill(colors.fill))
       .fixedSize()
+  }
+}
+
+
+/// N6: the cleared indicator of a transaction row.
+struct ClearedMarkView: View {
+  let mark: TransactionListContent.ClearedMark
+  let help: String
+
+  var body: some View {
+    Group {
+      switch mark {
+      case .cleared:
+        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+      case .uncleared:
+        Image(systemName: "circle").foregroundStyle(.secondary)
+      case .pending:
+        Image(systemName: "clock").foregroundStyle(.orange)
+      case .partial:
+        Image(systemName: "circle.lefthalf.filled").foregroundStyle(.green)
+      }
+    }
+    .font(.system(size: 15))
+    .frame(width: 18)
+    .help(help)
+    .accessibilityLabel(help)
   }
 }

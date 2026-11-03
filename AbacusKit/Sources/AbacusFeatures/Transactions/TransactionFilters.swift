@@ -98,6 +98,8 @@ public struct TransactionFilters: Hashable, Sendable {
   public var search: String
   /// R-LIST-3: newest first by default.
   public var newestFirst: Bool
+  /// N6: All / Cleared / Uncleared.
+  public var cleared: ClearedFilter = .all
 
   public init(
     dateRange: DateRange = .preset(.last30Days), categoryIDs: Set<AbacusDomain.Category.ID> = [],
@@ -312,6 +314,6 @@ public struct TransactionFilters: Hashable, Sendable {
       search: search.trimmingCharacters(in: .whitespacesAndNewlines), newestFirst: newestFirst,
       includeUncategorised: includeUncategorised, importBatchIDs: importBatch.map { [$0.id] } ?? [],
       // A debt's rows are transfers, which never have a category: "Uncategorised" covers them.
-      uncategorisedIncludesTransfers: isDebtFiltered)
+      uncategorisedIncludesTransfers: isDebtFiltered, cleared: cleared)
   }
 }

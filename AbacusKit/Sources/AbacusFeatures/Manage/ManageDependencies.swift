@@ -23,6 +23,8 @@ public struct ManageDependencies: Sendable {
   public var format: ManageFormat
   /// People with debts for the rule editor's debt action (R-DEBT-12); nil = none offered.
   public var debts: (any DebtRepository)?
+  /// N6: last reconciliations for the account window; nil = none shown.
+  public var reconcile: (any ReconcileRepository)?
 
   public init(
     accounts: any AccountRepository, categories: any CategoryRepository, txns: any TxnRepository,
@@ -71,7 +73,14 @@ extension ManageDependencies {
       settings: SQLiteSettingsRepository(database: database),
       converter: { await refresher.snapshot.table },
       today: { Day(now(), calendar: calendar) }, format: format,
-      debts: SQLiteDebtRepository(database: database, calendar: calendar))
+      debts: SQLiteDebtRepository(database: database, calendar: calendar)
+    ).with(reconcile: SQLiteReconcileRepository(database: database, calendar: calendar))
+  }
+
+  func with(reconcile: any ReconcileRepository) -> ManageDependencies {
+    var copy = self
+    copy.reconcile = reconcile
+    return copy
   }
 
   /// In-memory fakes over `store` (default: `ManagePreviewStore.sample()`, i.e. `PreviewData`

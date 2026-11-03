@@ -237,12 +237,16 @@ public struct PKOParser: ImportParser {
         parts: [operationDateText, valueDateText, amountText, balanceText] + details.columns)
     }
 
-    let row = NormalizedRow(
+    var row = NormalizedRow(
       fingerprints: [fingerprint], kind: kind, occurredAt: day.date(calendar: calendar),
       valueDay: valueDay, bookedDay: operationDay, account: rowAccount, amountMinor: magnitude,
       counterAccount: counterAccount, counterAmountMinor: counterAmount, isRefund: isRefund,
       original: original, payee: payee, note: note, isPending: type == .hold,
       transferHalf: transferHalf, counterpartyIBAN: details.counterpartyAccount, warnings: warnings)
+    if type != .hold, let balance = PKOAmount.minorUnits(balanceText) {
+      row.statementAmountMinor = signed
+      row.balanceAfterMinor = balance
+    }
     return .success(ParsedRow(value: row, fileCurrency: field(.currency)))
   }
 

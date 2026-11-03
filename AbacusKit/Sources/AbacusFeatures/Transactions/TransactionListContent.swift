@@ -95,7 +95,14 @@ public struct TransactionListContent: Equatable, Sendable {
     /// C48: "Moved from PKO private to Business · 1 Nov 2026" on a transaction of a moved import batch
     /// (the badge's hover text); nil otherwise.
     public var movedNote: String? = nil
+    /// N6: the cleared indicator and its tooltip.
+    public var cleared: ClearedMark = .uncleared
+    public var clearedHelp = ""
   }
+
+  /// N6: filled green check = cleared, hollow circle = uncleared, clock = pending hold, half = a
+  /// transfer cleared on one side.
+  public enum ClearedMark: Hashable, Sendable { case cleared, uncleared, pending, partial }
 
   public struct DaySection: Identifiable, Hashable, Sendable {
     public var id: Day { day }
@@ -313,6 +320,30 @@ public struct TransactionListContent: Equatable, Sendable {
   // MARK: Rows
 
   static func row(
+    _ item: TxnWithLines, reference: TransactionsReference, calendar: Calendar,
+    format: TransactionMoneyFormat
+  ) -> Row {
+    var row = baseRow(item, reference: reference, calendar: calendar, format: format)
+    let txn = item.txn
+    let hasTwoSides = txn.type == .transfer && txn.toAccountID != nil
+    if txn.isPendingAtBank {
+      row.cleared = .pending
+      row.clearedHelp = "Pending at the bank: uncleared until it settles"
+    } else if hasTwoSides, txn.isCleared != txn.isToCleared {
+      row.cleared = .partial
+      let name = (txn.isCleared ? Optional(txn.accountID) : txn.toAccountID).flatMap { reference.accountsByID[$0]?.name } ?? "one account"
+      row.clearedHelp = "Cleared on \(name) only"
+    } else if txn.isCleared, !hasTwoSides || txn.isToCleared {
+      row.cleared = .cleared
+      row.clearedHelp = "Cleared: confirmed by a bank file"
+    } else {
+      row.cleared = .uncleared
+      row.clearedHelp = "Uncleared: not yet seen in a bank file"
+    }
+    return row
+  }
+
+  private static func baseRow(
     _ item: TxnWithLines, reference: TransactionsReference, calendar: Calendar,
     format: TransactionMoneyFormat
   ) -> Row {
