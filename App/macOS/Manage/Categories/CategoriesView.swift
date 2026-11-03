@@ -26,7 +26,10 @@ public struct CategoriesView: View {
     }
     .navigationTitle("Categories")
     .toolbar {
-      ToolbarItemGroup(placement: .primaryAction) {
+      // A fixed spacer keeps "New category" a pill of its own next to "New transaction" (as the
+      // Accounts page's "New account" menu), not one merged glass pill.
+      ToolbarSpacer(.fixed, placement: .primaryAction)
+      ToolbarItem(placement: .primaryAction) {
         Button("New category", systemImage: "plus") { model.newCategory() }
           .labelStyle(.titleAndIcon)
       }

@@ -28,7 +28,7 @@ public struct EventCategoryBar: Identifiable, Equatable, Sendable {
 }
 
 /// The inspector form of an event (R-EVT-1). Each end of the date range is optional.
-public struct EventDraft: Equatable, Sendable {
+public struct EventDraft: Identifiable, Equatable, Sendable {
   public let id: Event.ID
   public let isNew: Bool
   public var name: String
@@ -44,7 +44,7 @@ public struct EventDraft: Equatable, Sendable {
 }
 
 /// The Events screen (approved prototype group 4, R-MGMT-4, R-EVT-1…4): the list with dates and
-/// spent against the budget, an inspector to create and edit (dates, optional budget), what the
+/// spent against the budget, an editor sheet to create and edit (dates, optional budget), what the
 /// event cost by category, "Show N transactions", archive / unarchive and delete.
 ///
 /// Amounts are in the event's budget currency when it has a budget (so spent and budget compare),
@@ -60,6 +60,11 @@ public final class EventsModel {
   public var search = ""
   public private(set) var selection: Event.ID?
   public var draft: EventDraft?
+  /// The open editor sheet's starting form (like the Categories and Accounts sheets, D55); the
+  /// sheet keeps its own copy and hands it back on Save. nil while no sheet is open.
+  public private(set) var sheet: EventDraft?
+  /// The selection before "New event", given back when the sheet is cancelled.
+  @ObservationIgnored private var selectionBeforeNew: Event.ID?
   public private(set) var dialog: ManageDialog?
   public private(set) var errorMessage: String?
   public private(set) var displayCurrency: Currency
@@ -196,20 +201,56 @@ public final class EventsModel {
   /// "New event": a name, no dates, no budget.
   public func newEvent() {
     let today = dependencies.today().date(calendar: format.calendar)
+    selectionBeforeNew = selection ?? selectionBeforeNew
     selection = nil
     errorMessage = nil
-    draft = EventDraft(
+    let draft = EventDraft(
       id: UUID(), isNew: true, name: "", hasStart: false, start: today, hasEnd: false, end: today, budget: "",
       budgetCurrency: displayCurrency, colorHex: ColorPalette.pick(avoiding: events.map(\.colorHex)))
+    self.draft = draft
+    sheet = draft
+  }
+
+  // MARK: Editor sheet
+
+  /// Opens the editor sheet on an event (double-click, Return, "Edit…").
+  public func edit(_ id: Event.ID) {
+    guard event(id) != nil else { return }
+    select(id)
+    sheet = draft
+  }
+
+  /// Cancel / Escape: closes the sheet without saving; a new event's sheet gives the previous
+  /// selection back.
+  public func dismissSheet() {
+    let wasNew = sheet?.isNew == true
+    sheet = nil
+    if wasNew {
+      let previous = selectionBeforeNew.flatMap { id in visibleEvents.contains { $0.id == id } ? id : nil }
+      selectionBeforeNew = nil
+      select(previous ?? visibleEvents.first?.id)
+    } else {
+      select(selection)
+    }
+  }
+
+  /// Saves the sheet's form; the sheet closes when the save worked.
+  public func save(_ draft: EventDraft) async {
+    self.draft = draft
+    if await save() {
+      sheet = nil
+      selectionBeforeNew = nil
+    }
   }
 
   public var selectedEvent: Event? { selection.flatMap(event) }
 
   /// An archived event's name, dates, budget and currency are read-only until it is
   /// unarchived; only its colour can still change.
-  public var isReadOnly: Bool {
-    guard let draft, !draft.isNew else { return false }
-    return event(draft.id)?.isArchived == true
+  public var isReadOnly: Bool { draft.map(isReadOnly) ?? false }
+
+  public func isReadOnly(_ draft: EventDraft) -> Bool {
+    !draft.isNew && event(draft.id)?.isArchived == true
   }
 
   public var inspectorTitle: String {
@@ -218,8 +259,10 @@ public final class EventsModel {
     return selectedEvent?.name ?? draft.name
   }
 
-  public var validationMessage: String? {
-    guard let draft else { return nil }
+  public var validationMessage: String? { draft.flatMap(validationMessage) }
+
+  /// What is wrong with a form, or nil when it can be saved.
+  public func validationMessage(_ draft: EventDraft) -> String? {
     if draft.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name." }
     if draft.hasStart, draft.hasEnd,
       Day(draft.end, calendar: format.calendar) < Day(draft.start, calendar: format.calendar)
@@ -250,17 +293,21 @@ public final class EventsModel {
     return event
   }
 
-  public var isDirty: Bool {
-    guard let draft else { return false }
+  public var isDirty: Bool { draft.map(isDirty) ?? false }
+
+  public func isDirty(_ draft: EventDraft) -> Bool {
     if draft.isNew { return true }
     guard let event = event(draft.id) else { return false }
     return built(from: draft, base: event) != event
   }
 
-  public var canSave: Bool { isDirty && validationMessage == nil }
+  public var canSave: Bool { draft.map(canSave) ?? false }
 
-  public func save() async {
-    guard let draft, canSave, let event = built(from: draft, base: draft.isNew ? nil : event(draft.id)) else { return }
+  public func canSave(_ draft: EventDraft) -> Bool { isDirty(draft) && validationMessage(draft) == nil }
+
+  @discardableResult
+  public func save() async -> Bool {
+    guard let draft, canSave, let event = built(from: draft, base: draft.isNew ? nil : event(draft.id)) else { return false }
     do {
       try await dependencies.events.save(event)
       await onDataChange?()
@@ -268,8 +315,10 @@ public final class EventsModel {
       self.draft = nil
       await load()
       select(event.id)
+      return true
     } catch {
       errorMessage = ManageFailure.message(error, doing: "save the event")
+      return false
     }
   }
 
@@ -331,12 +380,24 @@ public final class EventsModel {
 
   // MARK: Archive and delete
 
-  public var archiveTitle: String { selectedEvent?.isArchived == true ? "Unarchive" : "Archive" }
+  public var archiveTitle: String { archiveTitle(for: selection) }
+
+  /// "Archive" / "Unarchive" for an event (the row buttons and the sheet).
+  public func archiveTitle(for id: Event.ID?) -> String {
+    id.flatMap(event)?.isArchived == true ? "Unarchive" : "Archive"
+  }
 
   public func archiveOrUnarchive() async {
-    guard let event = selectedEvent else { return }
+    guard let selection else { return }
+    await archiveOrUnarchive(selection)
+  }
+
+  /// Archives or unarchives one event; works on the row it was asked for, not on the selection.
+  public func archiveOrUnarchive(_ id: Event.ID) async {
+    guard let event = event(id) else { return }
     do {
       try await dependencies.events.setArchived(event.id, !event.isArchived)
+      sheet = nil
       await onDataChange?()
       if !event.isArchived { showArchived = true }
       await load()
@@ -346,7 +407,13 @@ public final class EventsModel {
   }
 
   public func requestDelete() {
-    guard let event = selectedEvent else { return }
+    guard let selection else { return }
+    requestDelete(selection)
+  }
+
+  /// Asks to delete one event; works on the row it was asked for, not on the selection.
+  public func requestDelete(_ id: Event.ID) {
+    guard let event = event(id) else { return }
     let count = totals[event.id]?.txnCount ?? 0
     dialog = ManageDialog(
       action: .deleteEvent(event.id), title: "Delete “\(event.name)”?",
@@ -363,9 +430,12 @@ public final class EventsModel {
     self.dialog = nil
     do {
       try await dependencies.events.delete(id)
+      sheet = nil
       await onDataChange?()
-      selection = nil
-      draft = nil
+      if selection == id {
+        selection = nil
+        draft = nil
+      }
       await load()
     } catch {
       errorMessage = ManageFailure.message(error, doing: "delete the event")

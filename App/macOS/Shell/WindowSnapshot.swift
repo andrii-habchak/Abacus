@@ -122,11 +122,15 @@ enum WindowSnapshot {
       print("WindowSnapshot: no shareable content: \(error.localizedDescription)")
       shareable = nil
     }
-    for window in NSApp.windows where window.isVisible && window.frame.width > 100 {
+    // An open editor sheet is a child of its window: it gets its own file, `<prefix>-sheet`.
+    var windows = NSApp.windows.filter { $0.isVisible && $0.frame.width > 100 }
+    for window in windows { for sheet in window.sheets where !windows.contains(sheet) { windows.append(sheet) } }
+    for window in windows {
       guard let root = window.contentView?.superview ?? window.contentView else { continue }
       window.displayIfNeeded()
       let isMain = window.identifier?.rawValue.hasPrefix("main") == true
-      let file = folder.appending(path: "\(prefix)\(isMain ? "" : "-settings").png")
+      let suffix = isMain ? "" : window.sheetParent != nil ? "-sheet" : "-settings"
+      let file = folder.appending(path: "\(prefix)\(suffix).png")
       let data: Data?
       if let shot = await screenCapture(window, in: shareable) {
         data = NSBitmapImageRep(cgImage: shot).representation(using: .png, properties: [:])
