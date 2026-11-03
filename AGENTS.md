@@ -43,6 +43,10 @@ then the docs below, before touching code.
 - **Private data:** real exports live only in git-ignored `samples/private/` (main checkout).
   Never commit them, never copy real names/amounts into docs, fixtures or tests — fixtures are
   synthetic. From a worktree, point `ABACUS_SAMPLES` at the main checkout's `samples/private/`.
+- **Everything stays inside the repo.** Build outputs and artifacts go under `build.noindex/` or
+  `dist/` (both git-ignored), scratch files under the session's scratch folder. Never write
+  binaries, copies or config into `~/Library` or any other place outside the repo, and never edit
+  another application's configuration, unless the owner asks for that install explicitly.
 - Do not invent requirements. Anything unclear → a new "Open" row in TA §9, ask the owner.
 
 ## Build facts (this Mac)
