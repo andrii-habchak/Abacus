@@ -13,7 +13,11 @@ public enum AbacusDatabase {
   }
 
   /// A migrated database at `url`, or in memory when `url` is nil (tests, previews).
-  public static func open(at url: URL?) throws -> any DatabaseWriter {
+  ///
+  /// With `backups` (the app passes its own store for its own file only), an existing database
+  /// that has migrations pending is snapshotted first (`.preMigration`, kept separately). The
+  /// snapshot is best effort: when it cannot be written, the migration still runs.
+  public static func open(at url: URL?, backups: BackupStore? = nil, now: Date = Date()) throws -> any DatabaseWriter {
     var configuration = Configuration()
     configuration.foreignKeysEnabled = true
     let database: any DatabaseWriter
@@ -22,7 +26,20 @@ public enum AbacusDatabase {
     } else {
       database = try DatabaseQueue(configuration: configuration)
     }
-    try migrator().migrate(database)
+    let migrator = migrator()
+    if let backups, try database.read({ try migrator.hasPendingMigrationsOnExistingData($0) }) {
+      _ = try? backups.snapshotNow(of: database, reason: .preMigration, now: now)
+    }
+    try migrator.migrate(database)
     return database
+  }
+}
+
+extension DatabaseMigrator {
+  /// True when the database already holds data from an earlier schema version and a newer
+  /// migration has not run yet (a brand-new file has nothing to protect).
+  func hasPendingMigrationsOnExistingData(_ db: Database) throws -> Bool {
+    let completed = try completedMigrations(db)
+    return !completed.isEmpty && completed.count < migrations.count
   }
 }

@@ -13,6 +13,11 @@ public struct SQLiteBackup: Sendable {
 
   /// Writes a consistent copy of every table to `url` (replacing an existing file).
   public func export(to url: URL) async throws {
+    try exportNow(to: url)
+  }
+
+  /// `export(to:)` for synchronous callers (the pre-migration snapshot in `AbacusDatabase.open`).
+  func exportNow(to url: URL) throws {
     let fileManager = FileManager.default
     let temporary = url.deletingLastPathComponent()
       .appending(path: ".\(url.lastPathComponent).\(UUID().uuidString).partial")
