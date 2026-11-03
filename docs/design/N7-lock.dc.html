@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abacus — App lock (N7)</title>
+<style>
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+button,input,select{font-family:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #0A66D9;outline-offset:2px}
+.btn{border:1px solid #D2D2D7;background:#FFFFFF;font-size:13px;padding:5px 12px;border-radius:6px;min-height:30px;color:#1D1D1F}
+.btn-sm{border:1px solid #D2D2D7;background:#FFFFFF;font-size:12px;padding:4px 10px;border-radius:6px;min-height:28px;color:#1D1D1F}
+.btn-primary{border:0;background:#0A66D9;color:#FFFFFF;font-size:13px;font-weight:500;padding:6px 16px;border-radius:6px;min-height:30px}
+.hint{font-size:11px;color:#6E6E73;line-height:1.4}
+.nav{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:transparent;padding:6px 10px;border-radius:6px;font-size:13px;min-height:30px;color:#1D1D1F}
+.nav.on{background:#D4D4DA;font-weight:500}
+.lbl{font-size:11px;font-weight:600;color:#6E6E73;padding:6px 10px 4px}
+.row{display:grid;grid-template-columns:36px minmax(0,1fr) 130px 110px;gap:10px;align-items:center;padding:9px 20px;border-top:1px solid #EEEEF2;font-size:13px}
+.tile{width:28px;height:28px;border-radius:7px}
+.proto{box-sizing:border-box;max-width:1232px;margin:0 auto 14px;padding:12px 16px;background:#FFFFFF;border-radius:10px;box-shadow:0 0 0 1px rgba(0,0,0,.1);font-size:13px;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center}
+.proto label{display:flex;align-items:center;gap:6px}
+.proto select{font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid #D2D2D7;background:#fff}
+.seg{display:flex;background:#E3E3E8;border-radius:7px;padding:2px;gap:2px;width:fit-content}
+.seg button{border:0;font-size:12px;font-weight:500;padding:4px 10px;border-radius:5px;min-height:26px;background:transparent;color:#3A3A3C}
+.seg button[aria-pressed="true"]{background:#FFFFFF;color:#1D1D1F;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+</style>
+</head>
+<body>
+<div style="box-sizing:border-box;min-height:1000px;padding:24px">
+
+<section class="proto" aria-label="Prototype controls">
+<strong>Prototype controls</strong>
+<span style="display:flex;align-items:center;gap:8px">Scenario
+<span class="seg" role="group" aria-label="Scenario" id="scn"></span></span>
+<label>Next unlock attempt
+<select id="nextResult" aria-label="Result of the next unlock attempt">
+<option value="success">succeeds</option>
+<option value="cancel">is cancelled</option>
+<option value="fail">fails (wrong password)</option>
+<option value="unavailable">can't run (unavailable)</option>
+</select></label>
+<span style="display:flex;align-items:center;gap:8px">Simulate a trigger
+<button class="btn-sm" type="button" data-trig="idle">Idle time reached</button>
+<button class="btn-sm" type="button" data-trig="sleep">Mac goes to sleep</button>
+<button class="btn-sm" type="button" data-trig="screen">Screen locked / screensaver</button>
+</span>
+<span class="hint" style="flex-basis:100%">Synthetic data only. The white “system” sheet stands in for the dialog macOS itself draws (Touch ID / password); the app only shows the lock screen and the Settings section.</span>
+</section>
+
+<div style="position:relative;width:100%;max-width:1232px;margin:0 auto;min-height:760px;background:#FFFFFF;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.12),0 16px 48px rgba(0,0,0,.18);overflow:hidden;display:flex;flex-wrap:wrap;align-items:stretch" id="win">
+
+<nav aria-label="Sections" style="flex:1 1 220px;box-sizing:border-box;background:#EDEDF0;border-right:1px solid #D6D6DB;padding:14px 10px 16px;display:flex;flex-direction:column;gap:2px">
+<div aria-hidden="true" style="display:flex;gap:8px;padding:2px 8px 18px">
+<span style="width:12px;height:12px;border-radius:6px;background:#FF5F57"></span><span style="width:12px;height:12px;border-radius:6px;background:#FEBC2E"></span><span style="width:12px;height:12px;border-radius:6px;background:#28C840"></span></div>
+<div class="lbl">Overview</div>
+<button class="nav" type="button">Dashboard</button>
+<button class="nav on" type="button" aria-current="page">Transactions</button>
+<button class="nav" type="button">Events</button>
+<div class="lbl" style="padding-top:14px">Manage</div>
+<button class="nav" type="button">Accounts</button>
+<button class="nav" type="button">Categories</button>
+<button class="nav" type="button">Budget</button>
+<button class="nav" type="button">Import</button>
+<button class="nav" type="button">Exchange rates</button>
+<button class="nav" type="button">Rules</button>
+<div style="flex-grow:1;min-height:24px"></div>
+<button class="nav" type="button" id="openSettings">⚙ Settings… ⌘,</button>
+</nav>
+
+<main id="content" style="flex:999 1 560px;min-width:0;display:flex;flex-direction:column;background:#FFFFFF">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid #E0E0E5">
+<h1 style="margin:0;font-size:17px;font-weight:600;flex-grow:1">Transactions</h1>
+<button class="btn" type="button" id="lockToolbar">Lock Abacus ⌥⌘L</button>
+<button class="btn-primary" type="button">New transaction</button>
+</div>
+<div class="row" style="border-top:0;background:#FAFAFC;font-size:11px;font-weight:600;color:#6E6E73"><span></span><span>Description</span><span>Account</span><span style="text-align:right">Amount</span></div>
+<div class="row"><span class="tile" style="background:#7FB3F0"></span><span>Corner café</span><span>Everyday card</span><span style="text-align:right">−4.20 EUR</span></div>
+<div class="row"><span class="tile" style="background:#F0A97F"></span><span>Grocery store</span><span>Everyday card</span><span style="text-align:right">−37.85 EUR</span></div>
+<div class="row"><span class="tile" style="background:#9AD3A0"></span><span>Salary</span><span>Main account</span><span style="text-align:right;color:#1B6B3A">+2,400.00 EUR</span></div>
+<div class="row"><span class="tile" style="background:#C9A7E8"></span><span>Streaming subscription</span><span>Everyday card</span><span style="text-align:right">−9.99 EUR</span></div>
+<div class="row"><span class="tile" style="background:#F0D27F"></span><span>Transfer to savings</span><span>Main → Savings</span><span style="text-align:right">⇄ 300.00 EUR</span></div>
+</main>
+
+<!-- Settings window (Security tab, new) -->
+<div id="settings" role="dialog" aria-labelledby="set-title" hidden style="position:absolute;top:90px;left:50%;transform:translateX(-40%);width:580px;max-width:calc(100% - 32px);background:#F6F6F8;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.14),0 24px 70px rgba(0,0,0,.30);overflow:hidden;flex-direction:column">
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px 14px 0;background:#ECECEF;border-bottom:1px solid #D6D6DB">
+<div style="display:flex;width:100%;align-items:center">
+<span aria-hidden="true" style="display:flex;gap:8px"><span style="width:12px;height:12px;border-radius:6px;background:#FF5F57"></span><span style="width:12px;height:12px;border-radius:6px;background:#D0D0D4"></span><span style="width:12px;height:12px;border-radius:6px;background:#D0D0D4"></span></span>
+<h2 id="set-title" style="margin:0;font-size:13px;font-weight:600;flex-grow:1;text-align:center">Security</h2>
+<button type="button" id="closeSettings" aria-label="Close settings" style="width:28px;height:28px;border:0;background:transparent;color:#6E6E73;border-radius:5px">✕</button>
+</div>
+<div role="tablist" aria-label="Settings" style="display:flex;gap:4px;padding-bottom:6px" id="tabs"></div>
+</div>
+<div style="padding:18px 24px 22px;display:flex;flex-direction:column;gap:16px;font-size:13px" id="tabBody"></div>
+</div>
+
+<!-- Lock screen: opaque cover over the whole window, including Settings and any sheet -->
+<div id="lock" hidden style="position:absolute;inset:0;z-index:5;background:#F2F2F5;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px">
+</div>
+
+<!-- Stand-in for the dialog macOS draws -->
+<div id="sys" role="alertdialog" aria-labelledby="sys-title" hidden style="position:absolute;z-index:9;top:130px;left:50%;transform:translateX(-50%);width:320px;max-width:calc(100% - 32px);background:#FFFFFF;border-radius:14px;box-shadow:0 0 0 1px rgba(0,0,0,.14),0 24px 70px rgba(0,0,0,.35);padding:20px;flex-direction:column;align-items:center;gap:10px;text-align:center"></div>
+</div>
+
+<p class="hint" style="max-width:1232px;margin:12px auto 0">Not shown here: while locked, the window's content is covered by an opaque view, menu commands that open or change data are disabled, and any open sheet is hidden (its unsaved edits are kept). See <code>docs/status/N7-spec.md</code>.</p>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var S = {
+    scn: 'settings',          // settings | locked | cancelled | unavailable
+    enabled: false, idle: '5', settingsOpen: false,
+    locked: false, lockReason: '', lockState: 'idle', // idle | prompting | cancelled | failed | unavailable
+    pending: null,            // {kind:'enable'|'unlock'|'disable'|'idle-change', value}
+    banner: ''
+  };
+  var IDLE = [['1', '1 minute'], ['5', '5 minutes'], ['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour'], ['0', 'Never (launch, sleep and screen lock only)']];
+  var SCN = [['settings', 'Settings'], ['locked', 'Lock screen'], ['cancelled', 'Cancelled'], ['unavailable', 'Unavailable']];
+
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (attrs[k] === null) return;
+      if (k === 'style') e.setAttribute('style', attrs[k]);
+      else if (k === 'text') e.textContent = attrs[k];
+      else if (k.indexOf('on') === 0) e.addEventListener(k.slice(2), attrs[k]);
+      else e.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function idleLabel() { return (IDLE.filter(function (x) { return x[0] === S.idle; })[0] || [])[1]; }
+
+  function applyScenario(id) {
+    S.scn = id; S.pending = null; S.banner = '';
+    if (id === 'settings') { S.locked = false; S.settingsOpen = true; S.enabled = false; S.lockState = 'idle'; }
+    if (id === 'locked') { S.enabled = true; S.settingsOpen = false; lock('Locked when Abacus was opened.'); }
+    if (id === 'cancelled') { S.enabled = true; S.settingsOpen = false; lock('Locked after 5 minutes idle.'); S.lockState = 'cancelled'; }
+    if (id === 'unavailable') { S.enabled = true; S.settingsOpen = false; lock('Locked when the Mac woke from sleep.'); S.lockState = 'unavailable'; }
+    render();
+  }
+  function lock(reason) {
+    S.locked = true; S.lockReason = reason; S.lockState = 'idle'; S.pending = null;
+  }
+  function trigger(kind) {
+    if (!S.enabled) { S.banner = 'App lock is off, so nothing happens. Turn it on in Settings › Security first.'; S.settingsOpen = true; render(); return; }
+    var why = { idle: 'Locked after ' + (idleLabel() || '5 minutes') + ' idle.', sleep: 'Locked when the Mac went to sleep.', screen: 'Locked when the screen was locked.' }[kind];
+    if (kind === 'idle' && S.idle === '0') { S.banner = 'Lock after is set to Never, so idle time does not lock.'; S.settingsOpen = true; render(); return; }
+    lock(why);
+    // Auto prompt once when the lock appears.
+    render(); attempt('unlock');
+  }
+
+  // Simulated system authentication.
+  function attempt(kind, value) {
+    S.pending = { kind: kind, value: value };
+    if (kind === 'unlock') S.lockState = 'prompting';
+    var r = $('nextResult').value;
+    render();
+    if (r === 'unavailable') { finish('unavailable'); }
+  }
+  function finish(result) {
+    var p = S.pending; S.pending = null;
+    if (!p) return;
+    if (p.kind === 'unlock') {
+      if (result === 'success') { S.locked = false; S.lockState = 'idle'; }
+      else S.lockState = result === 'cancel' ? 'cancelled' : result === 'fail' ? 'failed' : 'unavailable';
+    } else {
+      if (result === 'success') {
+        if (p.kind === 'enable') S.enabled = true;
+        if (p.kind === 'disable') S.enabled = false;
+        if (p.kind === 'idle-change') S.idle = p.value;
+        S.banner = '';
+      } else if (result === 'unavailable') {
+        S.banner = "Your Mac can't authenticate right now, so the setting was not changed.";
+      } else {
+        S.banner = (p.kind === 'enable' ? 'App lock was not turned on.' : 'The setting was not changed.') + ' Authentication was ' + (result === 'cancel' ? 'cancelled.' : 'not successful.');
+      }
+    }
+    render();
+  }
+
+  function renderSys() {
+    var s = $('sys'); clear(s);
+    var p = S.pending;
+    if (!p || $('nextResult').value === 'unavailable') { s.hidden = true; s.style.display = 'none'; return; }
+    s.hidden = false; s.style.display = 'flex';
+    var why = p.kind === 'enable' ? 'turn on the app lock' : p.kind === 'disable' ? 'turn off the app lock' : p.kind === 'idle-change' ? 'change the lock time' : 'unlock Abacus';
+    s.appendChild(el('div', { 'aria-hidden': 'true', style: 'font-size:34px', text: '☝️' }));
+    s.appendChild(el('strong', { id: 'sys-title', style: 'font-size:14px', text: 'Abacus' }));
+    s.appendChild(el('span', { style: 'font-size:12px;color:#3A3A3C', text: 'Touch ID or enter your password to ' + why + '.' }));
+    s.appendChild(el('span', { class: 'hint', text: 'Drawn by macOS, not by Abacus' }));
+    var r = $('nextResult').value;
+    var row = el('div', { style: 'display:flex;gap:8px;margin-top:6px' });
+    row.appendChild(el('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: function () { finish('cancel'); } }));
+    row.appendChild(el('button', { type: 'button', class: 'btn-primary', id: 'sysGo', text: r === 'fail' ? 'Use Password… (wrong)' : 'Use Password…', onclick: function () { finish(r === 'cancel' ? 'cancel' : r === 'fail' ? 'fail' : 'success'); } }));
+    s.appendChild(row);
+    $('sysGo').focus();
+  }
+
+  function renderLock() {
+    var L = $('lock'); clear(L);
+    if (!S.locked) { L.hidden = true; L.style.display = 'none'; return; }
+    L.hidden = false; L.style.display = 'flex';
+    L.appendChild(el('div', { 'aria-hidden': 'true', style: 'width:64px;height:64px;border-radius:16px;background:#E3E3E8;display:flex;align-items:center;justify-content:center' }, [
+      (function () { var d = el('div', { style: 'font-size:30px', text: '🔒' }); return d; })()
+    ]));
+    L.appendChild(el('h2', { style: 'margin:0;font-size:20px;font-weight:600', text: 'Abacus is locked' }));
+    L.appendChild(el('span', { style: 'font-size:12px;color:#6E6E73', text: S.lockReason }));
+
+    var st = S.lockState;
+    var msgs = {
+      cancelled: ['status', 'Unlock was cancelled. Click Unlock to try again.', '#3A3A3C', '#EDEDF0', '#D6D6DB'],
+      failed: ['status', "That didn't work. Try again, or use your Mac password.", '#7A1F1F', '#FDECEC', '#F0B9B9'],
+      unavailable: ['status', "Authentication isn't available right now. Check that your Mac has a login password set, then try again. Abacus stays locked until it works.", '#6B3D00', '#FFF6E5', '#F0D9A8']
+    };
+    var live = el('div', { role: 'status', 'aria-live': 'polite', style: 'min-height:0;max-width:380px' });
+    if (msgs[st]) live.appendChild(el('div', { style: 'font-size:13px;line-height:1.4;padding:10px 12px;border-radius:8px;color:' + msgs[st][2] + ';background:' + msgs[st][3] + ';border:1px solid ' + msgs[st][4], text: msgs[st][1] }));
+    L.appendChild(live);
+
+    var row = el('div', { style: 'display:flex;gap:10px;align-items:center' });
+    row.appendChild(el('button', { type: 'button', id: 'unlockBtn', class: 'btn-primary', disabled: st === 'prompting' ? 'disabled' : null, text: st === 'prompting' ? 'Waiting for Touch ID or password…' : (st === 'unavailable' ? 'Try again' : 'Unlock'), onclick: function () { attempt('unlock'); } }));
+    row.appendChild(el('button', { type: 'button', class: 'btn', text: 'Quit Abacus', onclick: function () { S.banner = 'Prototype: this would quit the app. Quit is always available while locked.'; render(); } }));
+    L.appendChild(row);
+    if (S.banner) L.appendChild(el('span', { class: 'hint', text: S.banner }));
+    L.appendChild(el('span', { class: 'hint', style: 'max-width:380px', text: 'Touch ID or your Mac password. Abacus data stays on this Mac; the lock only hides the window.' }));
+    if (st !== 'prompting') { var b = $('unlockBtn'); if (b && document.activeElement && !L.contains(document.activeElement)) b.focus(); }
+  }
+
+  function row(label, node) {
+    return [el('span', { style: 'text-align:right;color:#3A3A3C;padding-top:4px', text: label }), node];
+  }
+
+  var TABS = [['general', 'General'], ['rates', 'Rates'], ['data', 'Data'], ['security', 'Security']];
+  function renderSettings() {
+    var W = $('settings');
+    if (!S.settingsOpen || S.locked) { W.hidden = true; W.style.display = 'none'; return; }
+    W.hidden = false; W.style.display = 'flex';
+    var tabs = $('tabs'); clear(tabs);
+    TABS.forEach(function (t) {
+      var on = t[0] === 'security';
+      tabs.appendChild(el('button', { type: 'button', role: 'tab', 'aria-selected': on ? 'true' : 'false', style: 'display:flex;flex-direction:column;align-items:center;gap:2px;border:0;font-size:11px;padding:5px 12px;border-radius:7px;min-width:70px;min-height:44px;' + (on ? 'background:#D9D9DE;color:#0A4FA8' : 'background:transparent;color:#3A3A3C'), text: (t[0] === 'general' ? '⚙ ' : t[0] === 'rates' ? '⇄ ' : t[0] === 'data' ? '🗄 ' : '🔒 ') + t[1] }));
+    });
+    var B = $('tabBody'); clear(B);
+    if (S.banner) B.appendChild(el('div', { role: 'status', style: 'display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:8px;background:#FFF6E5;border:1px solid #F0D9A8;font-size:13px;color:#6B3D00', text: S.banner }));
+    var g = el('div', { style: 'display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px 12px;align-items:start' });
+
+    var cb = el('input', { type: 'checkbox', id: 'lockSwitch' });
+    cb.checked = S.enabled;
+    cb.addEventListener('change', function () { cb.checked = S.enabled; attempt(S.enabled ? 'disable' : 'enable'); });
+    g.appendChild(el('span', { style: 'text-align:right;color:#3A3A3C', text: 'App lock' }));
+    g.appendChild(el('span', { style: 'display:flex;flex-direction:column;gap:4px' }, [
+      el('label', { style: 'display:flex;align-items:center;gap:6px' }, [cb, el('span', { text: 'Require Touch ID or password to open Abacus' })]),
+      el('span', { class: 'hint', text: S.enabled ? 'On: Abacus locks as set below. Turning it off asks you to authenticate.' : 'Off (default). Turning it on asks you to authenticate once, to prove it works.' })
+    ]));
+
+    var sel = el('select', { id: 'idleSel', 'aria-label': 'Lock after' });
+    IDLE.forEach(function (o) { var op = el('option', { value: o[0], text: o[1] }); if (o[0] === S.idle) op.selected = true; sel.appendChild(op); });
+    sel.disabled = !S.enabled;
+    sel.addEventListener('change', function () { var v = sel.value; sel.value = S.idle; attempt('idle-change', v); });
+    g.appendChild(el('span', { style: 'text-align:right;color:#3A3A3C;padding-top:4px', text: 'Lock after' }));
+    g.appendChild(el('span', { style: 'display:flex;flex-direction:column;gap:4px' }, [
+      el('span', { style: 'display:flex;align-items:center;gap:8px' }, [sel, el('span', { style: 'font-size:12px;color:#3A3A3C', text: 'without use' })]),
+      el('span', { class: 'hint', text: 'Also locks when Abacus opens, when the Mac sleeps, and when the screen locks or the screensaver starts.' })
+    ]));
+
+    g.appendChild(el('span', { style: 'text-align:right;color:#3A3A3C;padding-top:4px', text: 'Lock now' }));
+    g.appendChild(el('span', { style: 'display:flex;flex-direction:column;gap:4px' }, [
+      el('span', {}, [el('button', { type: 'button', class: 'btn-sm', disabled: S.enabled ? null : 'disabled', text: 'Lock Abacus  ⌥⌘L', onclick: function () { lock('Locked from the menu.'); render(); attempt('unlock'); } })]),
+      el('span', { class: 'hint', text: 'Also in the Abacus menu.' })
+    ]));
+
+    g.appendChild(el('span', { style: 'text-align:right;color:#3A3A3C', text: 'Uses' }));
+    g.appendChild(el('span', { style: 'display:flex;flex-direction:column;gap:2px' }, [
+      el('span', { text: 'Touch ID, Apple Watch or your Mac password' }),
+      el('span', { class: 'hint', text: 'Chosen by macOS. This device only: the setting is not part of backups or sync.' })
+    ]));
+    B.appendChild(g);
+
+    B.appendChild(el('div', { style: 'padding:12px;border-radius:10px;background:#FFFFFF;border:1px solid #E0E0E5;display:flex;flex-direction:column;gap:6px' }, [
+      el('strong', { style: 'font-weight:600', text: 'What the lock does not do' }),
+      el('span', { style: 'font-size:12px;color:#3A3A3C;line-height:1.45', text: "It hides Abacus's window; it does not encrypt your data. The database file stays readable by other apps and tools, and the MCP server and import command are not locked. FileVault protects the disk if the Mac is lost or stolen." })
+    ]));
+  }
+
+  function renderScn() {
+    var s = $('scn'); clear(s);
+    SCN.forEach(function (x) {
+      s.appendChild(el('button', { type: 'button', 'aria-pressed': S.scn === x[0] ? 'true' : 'false', text: x[1], onclick: function () { applyScenario(x[0]); } }));
+    });
+  }
+
+  function render() {
+    renderScn(); renderSettings(); renderLock(); renderSys();
+    var c = $('content'); c.setAttribute('aria-hidden', S.locked ? 'true' : 'false');
+  }
+
+  $('lockToolbar').addEventListener('click', function () { if (!S.enabled) { S.banner = 'App lock is off. Turn it on in Settings › Security first.'; S.settingsOpen = true; render(); return; } lock('Locked from the menu.'); render(); attempt('unlock'); });
+  $('openSettings').addEventListener('click', function () { S.settingsOpen = true; render(); });
+  $('closeSettings').addEventListener('click', function () { S.settingsOpen = false; S.banner = ''; render(); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-trig]'), function (b) {
+    b.addEventListener('click', function () { trigger(b.getAttribute('data-trig')); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && S.pending) finish('cancel');
+  });
+  applyScenario('settings');
+})();
+</script>
+</body>
+</html>
