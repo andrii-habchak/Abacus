@@ -141,7 +141,7 @@ absorbed/completed rows), `importFingerprints` (id, txnID, batchID), `ImportBatc
     1. **Tick** a row that is on the statement and in Abacus but not yet cleared (the common case:
        a hand-typed payment the bank has booked).
     2. **Add transaction** for a payment the statement has and Abacus does not: a small form (day,
-       description, amount with its sign, category; the type follows the sign; a transfer is added in
+       description, amount typed with a sign: "-12.50" or no sign = money out, "+5" = money in; category; the type follows the sign; a transfer is added in
        the normal editor) creates the row **already cleared** (it is on the statement) and it counts
        at once. The owner can add several during one run.
     3. **Edit** an uncleared row whose amount or day differs from the statement (inline amount and
@@ -237,7 +237,7 @@ pending forever and the owner must find and delete it.
     **uncleared** (the file does not show it).
   *Bulk actions.* Selection works like Finder: click selects one item, **⌘ click** adds or removes one,
   **⇧ click** selects everything from the last clicked item to this one; each item also has a checkbox
-  and there is "Select all" (the same on the Transactions list and in Reconcile). A bulk bar applies **Keep pending**, **Mark
+  and there is "Select all" (the same on the Transactions list). A bulk bar applies **Keep pending**, **Mark
   settled** or **Delete** to the selected items (Edit is per item). The bulk bar also exists on
   Transactions for pending rows (`R-CLR-4`).
   - Decisions start **undecided**; Import is disabled until every stale hold has one ("N pending

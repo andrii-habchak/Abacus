@@ -159,6 +159,19 @@ struct EditorHeader: View {
           .toggleStyle(.checkbox)
           .font(.system(size: 12))
       }
+      if model.showsCleared {
+        Toggle(model.isTransfer ? "Cleared on the sending account (confirmed by the bank)" : "Cleared (confirmed by the bank)", isOn: $model.isCleared)
+          .toggleStyle(.checkbox)
+          .font(.system(size: 12))
+        if model.isTransfer {
+          Toggle("Cleared on the receiving account", isOn: $model.isToCleared)
+            .toggleStyle(.checkbox)
+            .font(.system(size: 12))
+        }
+      }
+      if let warning = model.clearedWarning {
+        Text(warning).font(.system(size: 11)).foregroundStyle(.orange)
+      }
       if model.offersRefundOf {
         // R-TX-4 (C30): the expense this refund returns money for; its category follows it.
         HStack(spacing: 8) {
