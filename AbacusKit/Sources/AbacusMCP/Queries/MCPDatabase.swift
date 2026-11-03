@@ -1,5 +1,6 @@
 import AbacusStore
 import Foundation
+import Synchronization
 import SQLiteData
 
 /// How the server opens the app database: never through `AbacusDatabase.open`, because that
@@ -13,7 +14,10 @@ public enum MCPDatabase {
     case newer(unknown: Int)
   }
 
-  /// A read-only connection: any write fails inside SQLite itself.
+  /// A read-only connection: any write fails inside SQLite itself. A WAL database that no one has
+  /// open (the app is closed) has no `-wal`/`-shm` files, and a truly read-only connection cannot
+  /// create them ("unable to open database file"). Then a plain connection is kept open for the
+  /// life of the process so the files exist, and the read-only one opens beside it.
   public static func openReadOnly(at url: URL) throws -> DatabaseQueue {
     guard FileManager.default.fileExists(atPath: url.path) else {
       throw ToolError("No database at \(url.path). Start Abacus once, or pass --db <path>.")
@@ -22,8 +26,19 @@ public enum MCPDatabase {
     configuration.readonly = true
     configuration.foreignKeysEnabled = true
     configuration.busyMode = .timeout(5)
-    return try DatabaseQueue(path: url.path, configuration: configuration)
+    do {
+      return try DatabaseQueue(path: url.path, configuration: configuration)
+    } catch let error as DatabaseError where error.resultCode == .SQLITE_CANTOPEN {
+      var plain = Configuration()
+      plain.busyMode = .timeout(5)
+      let holder = try DatabaseQueue(path: url.path, configuration: plain)
+      try holder.read { _ = try Int.fetchOne($0, sql: "SELECT count(*) FROM sqlite_master") }
+      walHolders.withLock { $0.append(holder) }
+      return try DatabaseQueue(path: url.path, configuration: configuration)
+    }
   }
+
+  private static let walHolders = Mutex<[DatabaseQueue]>([])
 
   /// A read-write connection for the write tools: short transactions, a busy timeout so a write
   /// waits for the app's own transaction instead of failing. Does not migrate.
