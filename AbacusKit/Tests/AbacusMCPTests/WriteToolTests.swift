@@ -222,3 +222,47 @@ enum Importer {
     return batch.id
   }
 }
+
+@Suite("MCP · live wiring")
+struct LiveWiringTests {
+  @Test("Snapshots use the store's pre-write reason and land in the given folder")
+  func backupStoreAdapter() async throws {
+    let scratch = try await Scratch.make()
+    defer { scratch.remove() }
+    let folder = FileManager.default.temporaryDirectory.appending(path: "abacus-mcp-backups-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let name = try await BackupStoreSnapshots(store: BackupStore(folder: folder))
+      .snapshot(of: try MCPDatabase.openReadWrite(at: scratch.url), reason: "test")
+    #expect(name.contains("preWrite") || name.hasSuffix(".abacus"))
+    #expect(FileManager.default.fileExists(atPath: folder.appending(path: name).path))
+  }
+
+  @Test("A scratch database never snapshots into the app's Backups folder")
+  func scratchFolder() throws {
+    let appDatabase = URL(fileURLWithPath: "/tmp/app-home/Abacus/abacus.sqlite")
+    let scratch = URL(fileURLWithPath: "/tmp/elsewhere/copy.sqlite")
+    let appFolder = try LiveSnapshots.folder(for: scratch, defaultDatabase: appDatabase)
+    #expect(appFolder.path == "/tmp/elsewhere/MCP-Backups")
+    let real = try LiveSnapshots.folder(for: appDatabase, defaultDatabase: appDatabase)
+    #expect(real.lastPathComponent == "Backups")
+  }
+
+  @Test("R-FX-3: live rates come from the database's rate table")
+  func liveRates() async throws {
+    let scratch = try await Scratch.make()
+    defer { scratch.remove() }
+    let write = try MCPDatabase.openReadWrite(at: scratch.url)
+    try await SQLiteRateStore(database: write).save([
+      FXRate(day: "2026-03-19", base: .EUR, quote: .UAH, rateE8: RateScale.scaled(45), provider: "test"),
+      FXRate(day: "2026-03-19", base: .PLN, quote: .UAH, rateE8: RateScale.scaled(10), provider: "test"),
+    ])
+    let queries = AbacusQueries(database: try MCPDatabase.openReadOnly(at: scratch.url), calendar: scratch.calendar, rates: LiveRates.source, today: { Day(year: 2026, month: 3, day: 20) })
+    let rates = try await queries.rates(currency: "UAH")
+    #expect(rates.asOf == "2026-03-19")
+    #expect(rates.rates.contains { $0.from == "EUR" && $0.rate == "45" })
+    let worth = try await queries.netWorth(currency: "UAH")
+    #expect(worth.unconverted.count == 0)
+    // PLN 3840 + 100 at 10, EUR 100 at 45.
+    #expect(worth.total.amount == "43900.00", "\(worth.total.amount)")
+  }
+}

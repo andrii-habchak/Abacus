@@ -164,8 +164,7 @@ Rates is ⌘R, Settings is ⌘,.
 
 ## MCP server (optional)
 
-`abacus-mcp` lets an AI chat client you run yourself (Claude Desktop, Claude Code, any MCP
-client) ask questions about your finances: net worth, spending by category and month, budget
+`abacus-mcp` lets an MCP-capable AI client you run yourself ask questions about your finances: net worth, spending by category and month, budget
 status, cash flow, debts, rates, and a capped transaction search. It is **off until you set it
 up**, runs **locally over stdio** (no network, no account), and opens the database **read-only**.
 Everything a tool returns is sent to the AI client you chose, so it is aggregate-first:
@@ -179,8 +178,9 @@ swift build -c release --product abacus-mcp
 echo "$(swift build -c release --product abacus-mcp --show-bin-path)/abacus-mcp"
 ```
 
-Claude Desktop: add this to `~/Library/Application Support/Claude/claude_desktop_config.json`
-(use the path printed above), then restart the app.
+Register it in your MCP client's configuration. Where that file lives and what it is called
+depends on the client; the usual entry shape is below (use the path printed above). Clients that
+add servers from a command line take the same command and no arguments.
 
 ```json
 {
@@ -192,19 +192,12 @@ Claude Desktop: add this to `~/Library/Application Support/Claude/claude_desktop
 }
 ```
 
-Claude Code:
-
-```bash
-claude mcp add abacus -- /path/to/abacus-mcp
-```
-
 To try it on a copy instead of your real data, add `--db /path/to/copy.sqlite`.
 
 **Write tools** (add, change or delete transactions and categories, create or archive accounts,
-undo or move an import) are a separate opt-in: start the server with `--enable-writes` (refused until the backup snapshot of automatic backups
-is built in). Every
-write is two steps (the assistant proposes, you approve, it confirms), a backup snapshot is
-taken before the first write of a session, every write is appended to `MCP/write-log.jsonl`
+undo or move an import) are a separate opt-in: start the server with `--enable-writes`. Every
+write is two steps (the client proposes, you approve, it confirms), a backup snapshot is
+taken (into `Backups/`, or `MCP-Backups/` beside a `--db` copy) before the first write of a session, every write is appended to `MCP/write-log.jsonl`
 next to the database, and accounts are never deleted nor backups restored through MCP.
 
 ## Building from source

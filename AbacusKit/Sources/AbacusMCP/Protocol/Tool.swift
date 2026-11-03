@@ -1,6 +1,6 @@
 import Foundation
 
-/// A tool failure the AI client should see as the tool's own error (bad arguments, a refused
+/// A tool failure the client should see as the tool's own error (bad arguments, a refused
 /// write, a missing record), not as a protocol error.
 public struct ToolError: Error, CustomStringConvertible, Sendable {
   public let description: String

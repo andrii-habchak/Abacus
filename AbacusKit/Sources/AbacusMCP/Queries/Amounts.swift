@@ -1,7 +1,7 @@
 import AbacusDomain
 import Foundation
 
-/// An amount for the AI client: a decimal string and a currency, never a float.
+/// An amount for the client: a decimal string and a currency, never a float.
 public struct MoneyDTO: Codable, Hashable, Sendable {
   public let amount: String
   public let currency: String
