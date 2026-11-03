@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abacus — Forecast (N5 prototype)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#D9D9DE;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer}
+select,input{font-family:inherit;font-size:13px;color:#1D1D1F}
+.win{width:100%;max-width:1232px;margin:24px auto;background:#fff;border-radius:12px;box-shadow:0 0 0 1px rgba(0,0,0,.12),0 16px 48px rgba(0,0,0,.18);overflow:hidden;display:flex;flex-wrap:wrap;align-items:stretch;min-height:860px}
+nav{flex:1 1 220px;max-width:240px;background:#EDEDF0;border-right:1px solid #D6D6DB;padding:14px 10px 16px;display:flex;flex-direction:column;gap:2px}
+.lights{display:flex;gap:8px;padding:2px 8px 18px}.lights span{width:12px;height:12px;border-radius:6px}
+.grp{font-size:11px;font-weight:600;color:#6E6E73;padding:6px 10px 4px}
+.nav{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:transparent;padding:6px 10px;border-radius:6px;font-size:13px;min-height:30px;color:#1D1D1F}
+.nav.on{background:#D4D4DA;font-weight:500}
+.badge-n{margin-left:auto;background:#D70015;color:#fff;font-size:11px;font-weight:600;border-radius:9px;padding:1px 7px}
+main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;background:#F5F5F7}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 20px;background:#fff;border-bottom:1px solid #E0E0E5}
+.bar h1{margin:0;font-size:17px;font-weight:600;flex-grow:1}
+.muted{color:#6E6E73}.small{font-size:12px}
+.seg{display:flex;background:#E8E8ED;border-radius:7px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;font-size:12px;padding:4px 10px;border-radius:5px;color:#1D1D1F;min-height:24px}
+.seg button.on{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);font-weight:600}
+.btn{border:1px solid #D2D2D7;background:#fff;font-size:13px;padding:5px 12px;border-radius:6px;min-height:28px}
+.btn.pri{background:#0A66D9;border-color:#0A66D9;color:#fff;font-weight:500}
+.btn.sm{font-size:12px;padding:3px 9px;min-height:24px}
+.body{padding:20px;display:flex;flex-direction:column;gap:16px}
+.card{background:#fff;border-radius:10px;border:1px solid #E3E3E8;padding:16px 18px}
+.card h2{margin:0;font-size:13px;font-weight:600;color:#6E6E73}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.inl{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sel{border:1px solid #D2D2D7;border-radius:6px;padding:4px 8px;min-height:28px;background:#fff}
+.sum{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-end}.sum .k{font-size:12px;color:#6E6E73}.sum .v{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.lg{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:#3A3A3C;align-items:center}
+.lg i{display:inline-block;width:22px;height:0;border-top:2px solid;margin-right:6px;vertical-align:middle}
+.lg i.d{border-top-style:dashed}.lg i.sw{height:10px;width:14px;border:0;opacity:.35}
+.row{display:grid;grid-template-columns:34px minmax(0,2fr) minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:center;padding:8px 2px;border-bottom:1px solid #F2F2F5;font-size:13px}
+.tile{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:600}
+.ttl{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sub{font-size:12px;color:#6E6E73}
+.amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:500}.amt.in{color:#1B6B3A}
+.chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.chip.over{background:#FDE7EA;color:#B3001B}.chip.paid{background:#E3F4EA;color:#1B6B3A}.chip.warn{background:#FFF1D6;color:#8A4B00}.chip.est{background:#EEEEF2;color:#6E6E73}
+.warn{display:flex;gap:10px;align-items:flex-start;background:#FFF8E1;border:1px solid #F0D98A;border-radius:8px;padding:10px 12px;font-size:13px;color:#5C4A00}
+.acc{display:grid;grid-template-columns:minmax(0,2fr) repeat(4,minmax(0,1fr)) 80px;gap:10px;align-items:center;padding:9px 6px;border-bottom:1px solid #F0F0F3;font-size:13px}
+.acc.h{font-size:11px;font-weight:600;color:#6E6E73;background:#FAFAFC;border-bottom:1px solid #E8E8ED}
+.occ{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:6px 10px;font-size:12px;font-variant-numeric:tabular-nums;border-bottom:1px dashed #EEEEF2}
+.occ.h{font-weight:600;color:#6E6E73}
+.pos{color:#1B6B3A}.neg{color:#B3261E}
+svg text{font-family:inherit}
+.tip{font-size:12px;color:#3A3A3C;min-height:18px;font-variant-numeric:tabular-nums}
+.note{font-size:12px;color:#6E6E73;line-height:1.45}
+</style>
+</head>
+<body>
+<div class="win">
+<nav aria-label="Sections">
+<div class="lights" aria-hidden="true"><span style="background:#FF5F57"></span><span style="background:#FEBC2E"></span><span style="background:#28C840"></span></div>
+<div class="grp">Overview</div><div id="nav1"></div>
+<div class="grp" style="padding-top:14px">Manage</div><div id="nav2"></div>
+<div style="flex-grow:1;min-height:24px"></div>
+<button class="nav" type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg><span>Settings</span></button>
+</nav>
+<main>
+<div class="bar" id="bar"></div>
+<div class="body" id="body"></div>
+</main>
+</div>
+
+<script>
+(function () {
+  // ---- synthetic data: invented accounts and merchants, seeded pseudo-random history ----------
+  var TODAY = '2026-11-03', T = 0;
+  var RATE = { PLN: 1, EUR: 4.25, USD: 3.65, UAH: 0.0877 };
+  var ACC = { main: ['Main account', 'PLN'], sav: ['Savings', 'PLN'], eur: ['Euro account', 'EUR'], usd: ['Dollar account', 'USD'] };
+  var START = { main: 900000, sav: 3000000, eur: 7000, usd: 64000 };   // balances now, minor units
+  var COL = ['#7A5AF8', '#2E9E5B', '#E5484D', '#F29D0A', '#0EA5A5', '#0A66D9', '#6E6E73', '#C2410C'];
+  // id, name, type, account, amount, unit, every, start, last-day-of-month, colour, to-account
+  var ITEMS = [
+    [1, 'Rent', 'expense', 'main', 320000, 'month', 1, '2026-01-05', 0, 0],
+    [2, 'Salary', 'income', 'main', 980000, 'month', 1, '2026-01-10', 0, 1],
+    [3, 'Streaming service', 'expense', 'main', 4900, 'month', 1, '2026-01-14', 0, 2],
+    [4, 'Gym membership', 'expense', 'main', 12900, 'month', 1, '2026-01-20', 0, 3],
+    [5, 'Phone plan', 'expense', 'main', 5999, 'month', 1, '2026-01-22', 0, 4],
+    [6, 'Internet', 'expense', 'main', 7000, 'month', 1, '2026-01-03', 0, 4],
+    [7, 'Savings top-up', 'transfer', 'main', 100000, 'month', 1, '2026-01-28', 0, 5, 'sav'],
+    [8, 'Accountant', 'expense', 'main', 25000, 'month', 1, '2026-01-31', 1, 6],
+    [9, 'Car insurance', 'expense', 'main', 124000, 'year', 1, '2025-12-18', 0, 7],
+    [10, 'Cloud storage', 'expense', 'usd', 999, 'month', 1, '2026-01-08', 0, 6],
+    [11, 'Building service charge', 'expense', 'eur', 8500, 'month', 3, '2026-02-15', 0, 0],
+    [12, 'Water utility', 'expense', 'main', 14000, 'month', 2, '2026-02-26', 0, 4]
+  ].map(function (r) { return { id: r[0], name: r[1], type: r[2], acc: r[3], amount: r[4], unit: r[5], every: r[6], start: r[7], last: !!r[8], col: COL[r[9]], to: r[10] || null }; });
+
+  function ymd(s) { var p = s.split('-'); return [+p[0], +p[1], +p[2]]; }
+  function str(y, m, d) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d; }
+  function dim(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+  function num(s) { var p = ymd(s); return Date.UTC(p[0], p[1] - 1, p[2]) / 86400000; }
+  function fromNum(n) { var d = new Date(n * 86400000); return str(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+  T = num(TODAY);
+  function nth(it, k) {
+    var s = ymd(it.start), n = k * it.every;
+    if (it.unit === 'month') { var t = s[1] - 1 + n, y = s[0] + Math.floor(t / 12), m = t % 12 + 1; return str(y, m, it.last ? dim(y, m) : Math.min(s[2], dim(y, m))); }
+    var yy = s[0] + n; return str(yy, s[1], Math.min(s[2], dim(yy, s[1])));
+  }
+  function occ(it, from, to) { var o = []; for (var k = 0; k < 400; k++) { var d = nth(it, k); if (d > to) break; if (d >= from) o.push({ k: k, day: d }); } return o; }
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  function dl(n) { var p = ymd(typeof n === 'number' ? fromNum(n) : n); return p[2] + ' ' + MON[p[1] - 1]; }
+  function dlong(n) { var s = typeof n === 'number' ? fromNum(n) : n, p = ymd(s); return WD[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()] + ' ' + p[2] + ' ' + MON[p[1] - 1]; }
+  function h(a, b) { var x = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return x - Math.floor(x); }
+
+  // actual history of the scheduled items (what really happened), then everyday spending
+  var EV = [];   // {day:number, acc, amt:signed native minor, item:id|null, exp:number|null}
+  var PAST = []; // resolved occurrences for the accuracy panel
+  ITEMS.forEach(function (it) {
+    occ(it, fromNum(T - 170), fromNum(T - 1)).forEach(function (o) {
+      var e = num(o.day), shift = 0, amt = it.amount, status = 'paid';
+      if (it.id === 2) shift = o.k % 4 === 2 ? 1 : 0;
+      if (it.id === 3 && o.day >= '2026-09-14') amt = 5400;
+      if (it.id === 4 && o.day === '2026-09-20') status = 'missed';
+      if (it.id === 5) shift = Math.floor(h(5, o.k) * 3);
+      if (it.id === 7 && h(7, o.k) > 0.6) shift = 2;
+      if (it.id === 8) shift = Math.floor(h(8, o.k) * 4);
+      if (it.id === 11) amt = Math.round(it.amount * (1 + (h(11, o.k) - 0.5) * 0.06));
+      if (it.id === 12) { amt = Math.round(it.amount * (1 + (h(12, o.k) - 0.5) * 0.24)); shift = Math.floor(h(3, o.k) * 4); }
+      var a = e + shift;
+      if (it.id === 12 && o.day === '2026-10-26') status = 'overdue';
+      if (a >= T && status === 'paid') status = 'overdue';
+      PAST.push({ item: it, exp: e, act: status === 'paid' ? a : null, expAmt: it.amount, actAmt: status === 'paid' ? amt : null, status: status });
+      if (status !== 'paid') return;
+      var sign = it.type === 'income' ? 1 : -1;
+      EV.push({ day: a, acc: it.acc, amt: sign * amt, item: it.id, exp: e });
+      if (it.type === 'transfer') EV.push({ day: a, acc: it.to, amt: amt, item: it.id, exp: e });
+    });
+  });
+  for (var d = T - 170; d < T; d++) {   // everyday spending on the main account (what the forecast ignores)
+    var s = 2500 + Math.round(4500 * h(d, 3)) + (d % 6 === 0 ? 5000 : 0);
+    EV.push({ day: d, acc: 'main', amt: -s, item: null, exp: null });
+  }
+  // start-of-day balances B[acc][d]; B[acc][T] = START
+  var B = {}, minD = T - 170;
+  Object.keys(ACC).forEach(function (a) {
+    var arr = {}; arr[T] = START[a];
+    for (var dd = T - 1; dd >= minD; dd--) {
+      var f = 0; EV.forEach(function (e) { if (e.acc === a && e.day === dd) f += e.amt; });
+      arr[dd] = arr[dd + 1] - f;
+    }
+    B[a] = arr;
+  });
+
+  // expected occurrences from day t0 on (what a forecast made on t0 knows); overdue count on t0 itself
+  function expectedFrom(t0, to, openOverdue) {
+    var list = [];
+    ITEMS.forEach(function (it) {
+      var from = fromNum(t0);
+      occ(it, from, fromNum(to)).forEach(function (o) { list.push({ item: it, day: num(o.day) }); });
+      if (openOverdue && it.id === 12) list.push({ item: it, day: t0, overdue: true, orig: num('2026-10-26') });
+    });
+    return list.sort(function (a, b) { return a.day - b.day; });
+  }
+  function effects(o) {
+    var it = o.item, r = [{ acc: it.acc, amt: it.type === 'income' ? it.amount : -it.amount }];
+    if (it.type === 'transfer') r.push({ acc: it.to, amt: it.amount });
+    return r;
+  }
+  // forecast made on t0 for t0..t0+H: values per start-of-day, per account
+  function forecast(t0, H, openOverdue) {
+    var occs = expectedFrom(t0, t0 + H, openOverdue), out = {};
+    Object.keys(ACC).forEach(function (a) { out[a] = []; });
+    for (var i = 0; i <= H; i++) {
+      Object.keys(ACC).forEach(function (a) {
+        var v = B[a][t0] !== undefined ? B[a][t0] : START[a];
+        occs.forEach(function (o) { if (o.day < t0 + i) effects(o).forEach(function (e) { if (e.acc === a) v += e.amt; }); });
+        out[a].push(v);
+      });
+    }
+    out.occs = occs;
+    return out;
+  }
+  function actual(a, d) { return B[a][d]; }
+
+  // ---- state + formatting ----------------------------------------------------------------------
+  var st = { screen: 'forecast', cur: 'PLN', series: 'nw', horizon: 90, snap: 30, scope: 'snap', open: {}, hover: null, tabNote: false };
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function money(minor, cur, plain) {
+    var v = minor / 100, s = new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2 }).format(Math.abs(v));
+    if (cur === 'PLN') s = s.replace(/^zł\s?(.*)$/, '$1 zł').replace(/^PLN\s?(.*)$/, '$1 zł');
+    return (plain ? '' : (v < 0 ? '−' : '')) + s;
+  }
+  function toDisp(minor, from) { return minor * RATE[from] / RATE[st.cur]; }
+  function seriesCur() { return st.series === 'nw' ? st.cur : ACC[st.series][1]; }
+  function value(map, i) {   // map: {acc:[...]} -> number in series currency (minor)
+    if (st.series !== 'nw') return map[st.series][i];
+    var s = 0; Object.keys(ACC).forEach(function (a) { s += toDisp(map[a][i], ACC[a][1]); }); return s;
+  }
+  function actualValue(d) {
+    if (st.series !== 'nw') return actual(st.series, d);
+    var s = 0; Object.keys(ACC).forEach(function (a) { s += toDisp(actual(a, d), ACC[a][1]); }); return s;
+  }
+
+  // ---- icons / nav -----------------------------------------------------------------------------
+  var ICON = {
+    home: 'M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H10v-4H6v4H3a.5.5 0 0 1-.5-.5z', list: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01',
+    events: 'M3 3.5h10v10H3zM3 6.5h10M5.5 2v3M10.5 2v3', up: 'M8 2.5v5l3 2M8 14a6 6 0 1 0 0-12 6 6 0 0 0 0 12z',
+    accounts: 'M2 4.5h12v8H2zM2 7h12M4.5 10h2', categories: 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z',
+    budget: 'M8 2a6 6 0 1 0 6 6H8z M9.5 1.5a5 5 0 0 1 5 5h-5z', imp: 'M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 12v1.5h11V12',
+    rates: 'M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5', rules: 'M3 4h10M3 8h6M3 12h8'
+  };
+  function nb(label, ic, on, act, badge) {
+    return '<button class="nav' + (on ? ' on' : '') + '" type="button"' + (act ? ' data-act="screen" data-v="' + act + '"' : '') + '><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + ic + '"/></svg><span>' + label + '</span>' + (badge ? '<span class="badge-n">' + badge + '</span>' : '') + '</button>';
+  }
+
+  // ---- dashboard widget ------------------------------------------------------------------------
+  function dashboard() {
+    var occs = expectedFrom(T, T + 30, true).sort(function (x, y) { return (y.overdue ? 1 : 0) - (x.overdue ? 1 : 0); }), out = 0, inn = 0;
+    occs.forEach(function (o) { var it = o.item; if (it.type === 'expense') out += toDisp(it.amount, ACC[it.acc][1]); if (it.type === 'income') inn += toDisp(it.amount, ACC[it.acc][1]); });
+    var nw = actualValue(T);
+    var h1 = '<section class="card" style="display:flex;flex-direction:column;gap:6px"><h2>Net worth</h2><div style="font-size:34px;font-weight:600;letter-spacing:-.5px">' + money(Math.round(nw), st.cur) + '</div><div class="small" style="color:#1B6B3A">+' + money(Math.round(toDisp(210000, 'PLN')), st.cur, true) + ' since the end of October</div><div class="note">(Other dashboard widgets are unchanged and not repeated in this prototype.)</div></section>';
+    var w = '<section class="card" aria-labelledby="up-t" style="display:flex;flex-direction:column;gap:12px"><div class="inl" style="justify-content:space-between"><h2 id="up-t">Upcoming (30 days)</h2><span class="chip ' + (occs.some(function (o) { return o.overdue; }) ? 'over' : 'est') + '">' + (occs.some(function (o) { return o.overdue; }) ? '1 overdue' : 'On schedule') + '</span></div>';
+    w += '<div class="sum"><div><div class="k">Money out</div><div class="v neg">−' + money(Math.round(out), st.cur, true) + '</div></div><div><div class="k">Money in</div><div class="v pos">+' + money(Math.round(inn), st.cur, true) + '</div></div><div><div class="k">Net</div><div class="v">' + (inn - out < 0 ? '−' : '+') + money(Math.round(Math.abs(inn - out)), st.cur, true) + '</div></div></div>';
+    w += '<div>';
+    occs.slice(0, 6).forEach(function (o) {
+      var it = o.item, c = ACC[it.acc][1], amt = it.type === 'income' ? it.amount : -it.amount;
+      var when = o.overdue ? '<span class="chip over">Overdue · ' + dl(o.orig) + '</span>' : (o.day === T ? 'Today' : dlong(o.day));
+      w += '<div class="row"><div class="tile" style="background:' + it.col + '" aria-hidden="true">' + esc(it.name.charAt(0)) + '</div><div><div class="ttl">' + esc(it.name) + '</div><div class="sub">' + ACC[it.acc][0] + '</div></div><div class="sub">' + when + '</div><div class="amt' + (amt > 0 ? ' in' : '') + '">' + (amt > 0 ? '+' : '') + money(amt, c) + (c !== st.cur ? '<div class="sub">≈ ' + money(Math.round(toDisp(amt, c)), st.cur) + '</div>' : '') + '</div></div>';
+    });
+    w += '</div><div class="inl" style="justify-content:space-between"><span class="small muted">' + Math.max(0, occs.length - 6) + ' more · rates as of 3 Nov 2026 · transfers not counted</span><button class="btn sm" type="button" data-act="screen" data-v="bills">Open Upcoming</button></div></section>';
+    var other = '<section class="card" style="opacity:.55"><h2>Monthly budget</h2><div class="note" style="margin-top:10px">Existing widget (unchanged). Widgets can be reordered by drag and drop; Upcoming is half width like Budget, Expenses, Income and Debts.</div></section>';
+    return '<div class="grid" style="grid-template-columns:1fr">' + h1 + '</div><div class="grid">' + w + other + '</div>' +
+      '<div class="card"><h2>Empty state (no scheduled items yet)</h2><div style="margin-top:8px;font-size:13px">No scheduled items. Set up your bills in Upcoming. <button class="btn sm" type="button" data-act="screen" data-v="bills">Set up</button></div></div>';
+  }
+
+  // ---- forecast page ---------------------------------------------------------------------------
+  var SNAPS = [0, 1, 7, 14, 30, 45, 60, 90];
+  function chart(cur, snap) {
+    var t0 = snap ? T - snap : T, H = st.horizon, i;
+    var cu = forecast(T, H, true), sn = snap ? forecast(t0, 90, false) : null;
+    var xmin = snap ? t0 : T, xmax = Math.max(T + H, snap ? t0 + 90 : 0);
+    var series = { actual: [], snap: [], cur: [] };
+    if (snap) { for (i = t0; i <= T; i++) series.actual.push([i, actualValue(i)]); for (i = 0; i <= 90; i++) series.snap.push([t0 + i, value(sn, i)]); }
+    else { series.actual.push([T, actualValue(T)]); }
+    for (i = 0; i <= H; i++) series.cur.push([T + i, value(cu, i)]);
+    var all = [].concat(series.actual, series.snap, series.cur).map(function (p) { return p[1]; });
+    var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all), pad = (hi - lo) * 0.1 || 1000; lo -= pad; hi += pad;
+    if (lo < 0 && hi > 0 && Math.min.apply(null, all) > -pad * 2) lo = Math.min(lo, 0);
+    var W = 720, Hh = 270, L = 66, R = 14, Tp = 12, Bt = 26;
+    var X = function (d) { return L + (d - xmin) / (xmax - xmin) * (W - L - R); };
+    var Y = function (v) { return Tp + (hi - v) / (hi - lo) * (Hh - Tp - Bt); };
+    var path = function (pts) { return pts.map(function (p, j) { return (j ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1); }).join(''); };
+    var s = '<svg role="img" aria-label="Forecast chart" viewBox="0 0 ' + W + ' ' + Hh + '" style="width:100%;height:auto;display:block" id="svg">';
+    for (i = 0; i <= 4; i++) { var gv = lo + (hi - lo) * i / 4, gy = Y(gv); s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + gy + '" y2="' + gy + '" stroke="#EEEEF2"/><text x="0" y="' + (gy + 3) + '" font-size="10" fill="#6E6E73">' + new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(gv / 100) + '</text>'; }
+    if (lo < 0 && hi > 0) s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(0) + '" y2="' + Y(0) + '" stroke="#D70015" stroke-opacity=".5" stroke-dasharray="3 3"/>';
+    var step = Math.ceil((xmax - xmin) / 6);
+    for (var d = xmin; d <= xmax; d += step) s += '<text x="' + X(d) + '" y="' + (Hh - 8) + '" font-size="10" text-anchor="middle" fill="#6E6E73">' + dl(d) + '</text>';
+    if (snap) {   // shaded gap between actual and the old forecast
+      var poly = series.actual.map(function (p) { return X(p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1); });
+      series.snap.filter(function (p) { return p[0] <= T; }).reverse().forEach(function (p) { poly.push(X(p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1)); });
+      s += '<polygon points="' + poly.join(' ') + '" fill="#F29D0A" fill-opacity=".18"/>';
+    }
+    s += '<line x1="' + X(T) + '" x2="' + X(T) + '" y1="' + Tp + '" y2="' + (Hh - Bt) + '" stroke="#8E8E93"/><text x="' + (X(T) + 4) + '" y="' + (Tp + 9) + '" font-size="10" fill="#6E6E73">Today</text>';
+    if (snap) s += '<path d="' + path(series.snap) + '" fill="none" stroke="#E0861A" stroke-width="2" stroke-dasharray="6 4" stroke-linejoin="round"/>';
+    s += '<path d="' + path(series.cur) + '" fill="none" stroke="#0A66D9" stroke-opacity="' + (snap ? '.5' : '1') + '" stroke-width="2" ' + (snap ? 'stroke-dasharray="2 4"' : 'stroke-dasharray="6 4"') + ' stroke-linejoin="round"/>';
+    if (snap) s += '<path d="' + path(series.actual) + '" fill="none" stroke="#0A66D9" stroke-width="2.4" stroke-linejoin="round"/>';
+    s += '<circle cx="' + X(T) + '" cy="' + Y(series.actual[series.actual.length - 1][1]) + '" r="4" fill="#fff" stroke="#0A66D9" stroke-width="2"/>';
+    if (snap) {
+      var ya = actualValue(T), yf = series.snap.filter(function (p) { return p[0] === T; })[0][1];
+      s += '<line x1="' + (X(T) + 7) + '" x2="' + (X(T) + 7) + '" y1="' + Y(ya) + '" y2="' + Y(yf) + '" stroke="#B3261E" stroke-width="2"/><text x="' + (X(T) + 12) + '" y="' + ((Y(ya) + Y(yf)) / 2 + 3) + '" font-size="11" font-weight="600" fill="#B3261E">gap ' + (ya - yf < 0 ? '−' : '+') + new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Math.abs(ya - yf) / 100) + '</text>';
+    }
+    s += '<line id="guide" x1="0" x2="0" y1="' + Tp + '" y2="' + (Hh - Bt) + '" stroke="#1D1D1F" stroke-opacity=".35" visibility="hidden"/>';
+    s += '<rect id="hit" x="' + L + '" y="0" width="' + (W - L - R) + '" height="' + Hh + '" fill="transparent"/></svg>';
+    return { svg: s, X: X, xmin: xmin, xmax: xmax, series: series, W: W, snapOcc: sn, cu: cu };
+  }
+  function warnings(cu) {
+    var out = [];
+    Object.keys(ACC).forEach(function (a) {
+      for (var i = 0; i <= st.horizon; i++) if (cu[a][i] < 0) {
+        var low = cu[a][i], di = i;
+        for (var j = i; j <= st.horizon && cu[a][j] < 0; j++) if (cu[a][j] < low) low = cu[a][j];
+        var end = i; while (end <= st.horizon && cu[a][end] < 0) end++;
+        var cause = cu.occs.filter(function (o) { return o.day === T + i - 1 || o.day === T + i; }).filter(function (o) { return effects(o).some(function (e) { return e.acc === a && e.amt < 0; }); }).map(function (o) { return o.item.name; });
+        out.push('<b>' + ACC[a][0] + '</b> goes below 0 on <b>' + dl(T + Math.max(0, di - 1)) + '</b> (lowest ' + money(low, ACC[a][1]) + (end <= st.horizon ? ', back above 0 on ' + dl(T + end) : '') + ')' + (cause.length ? ' after “' + cause[0] + '”' : '') + '.');
+        break;
+      }
+    });
+    return out;
+  }
+  function gapSplit(snap) {
+    var t0 = T - snap, sched = 0, every = 0, accs = st.series === 'nw' ? Object.keys(ACC) : [st.series];
+    var cv = function (a, m) { return st.series === 'nw' ? toDisp(m, ACC[a][1]) : m; };
+    expectedFrom(t0, T - 1, false).forEach(function (o) { effects(o).forEach(function (e) { if (accs.indexOf(e.acc) >= 0) sched -= cv(e.acc, e.amt); }); });
+    EV.forEach(function (e) { if (e.day >= t0 && e.day < T && accs.indexOf(e.acc) >= 0) { if (e.item) sched += cv(e.acc, e.amt); else every += cv(e.acc, e.amt); } });
+    return { sched: sched, every: every };
+  }
+  function accuracy(snap) {
+    var from = snap && st.scope === 'snap' ? T - snap : T - 120, rows = [];
+    ITEMS.forEach(function (it) {
+      var list = PAST.filter(function (p) { return p.item.id === it.id && p.exp >= from; });
+      var paid = list.filter(function (p) { return p.status === 'paid'; }), miss = list.filter(function (p) { return p.status === 'missed'; }).length, over = list.filter(function (p) { return p.status === 'overdue'; }).length;
+      var onT = paid.filter(function (p) { return Math.abs(p.act - p.exp) <= 1; }).length;
+      var dd = paid.length ? paid.reduce(function (a, p) { return a + Math.abs(p.act - p.exp); }, 0) / paid.length : 0;
+      var da = paid.length ? paid.reduce(function (a, p) { return a + (p.actAmt - p.expAmt) / p.expAmt; }, 0) / paid.length : 0;
+      var last3 = paid.slice(-3), upd = null;
+      if (last3.length === 3 && last3.every(function (p) { return Math.abs(p.actAmt - p.expAmt) / p.expAmt > 0.02 && (p.actAmt > p.expAmt) === (last3[0].actAmt > last3[0].expAmt); })) upd = last3[2].actAmt;
+      rows.push({ it: it, list: list, paid: paid.length, miss: miss, over: over, onT: onT, dd: dd, da: da, upd: upd });
+    });
+    return rows;
+  }
+  function forecastPage() {
+    var snap = st.snap, c = chart(st.cur, snap), cc = seriesCur();
+    var cu = c.cu, endNow = value(cu, st.horizon), startNow = value(cu, 0);
+    var low = Infinity, lowI = 0; for (var i = 0; i <= st.horizon; i++) { var v = value(cu, i); if (v < low) { low = v; lowI = i; } }
+    var w = warnings(cu);
+    var seriesOpts = '<option value="nw"' + (st.series === 'nw' ? ' selected' : '') + '>Net worth (' + st.cur + ')</option>' + Object.keys(ACC).map(function (a) { return '<option value="' + a + '"' + (st.series === a ? ' selected' : '') + '>' + ACC[a][0] + ' (' + ACC[a][1] + ')</option>'; }).join('');
+    var snapOpts = SNAPS.map(function (n) { return '<option value="' + n + '"' + (st.snap === n ? ' selected' : '') + '>' + (n === 0 ? 'None — today’s forecast only' : dl(T - n) + ' · ' + n + ' day' + (n > 1 ? 's' : '') + ' ago') + '</option>'; }).join('');
+    var h2 = '<div class="card"><div class="inl" style="justify-content:space-between"><div class="inl"><label class="small muted" for="ser">Show</label><select class="sel" id="ser" data-f="series" aria-label="Series">' + seriesOpts + '</select>' +
+      '<div class="seg" role="group" aria-label="Horizon">' + [30, 60, 90].map(function (n) { return '<button type="button" class="' + (st.horizon === n ? 'on' : '') + '" data-act="hz" data-v="' + n + '">' + n + ' days</button>'; }).join('') + '</div></div>' +
+      '<div class="inl"><label class="small muted" for="snp">Compare with a past forecast</label><select class="sel" id="snp" data-f="snap" aria-label="Past forecast">' + snapOpts + '</select></div></div>';
+    h2 += '<div class="sum" style="margin-top:14px"><div><div class="k">Now</div><div class="v">' + money(Math.round(startNow), cc) + '</div></div><div><div class="k">In ' + st.horizon + ' days (' + dl(T + st.horizon) + ')</div><div class="v">' + money(Math.round(endNow), cc) + '</div></div><div><div class="k">Change</div><div class="v ' + (endNow - startNow < 0 ? 'neg' : 'pos') + '">' + (endNow - startNow < 0 ? '−' : '+') + money(Math.round(Math.abs(endNow - startNow)), cc, true) + '</div></div><div><div class="k">Lowest point</div><div class="v">' + money(Math.round(low), cc) + ' <span class="small muted">· ' + dl(T + lowI) + '</span></div></div></div>';
+    h2 += '<div style="margin-top:12px">' + c.svg + '</div><div class="tip" id="tip">Hover the chart for a day’s values.</div>';
+    h2 += '<div class="lg" style="margin-top:6px">' + (snap ? '<span><i style="border-color:#0A66D9;border-top-width:3px"></i>Actual</span><span><i class="d" style="border-color:#E0861A"></i>Forecast made ' + dl(T - snap) + '</span><span><i class="d" style="border-color:#0A66D9;opacity:.6"></i>Forecast made today</span><span><i class="sw" style="background:#F29D0A"></i>Gap</span>' : '<span><i class="d" style="border-color:#0A66D9"></i>Forecast made today (scheduled items only)</span>') + '</div>';
+    h2 += '<div class="note" style="margin-top:8px">Today’s balance plus scheduled items only; everyday spending is not guessed. Net worth is converted at today’s rates (NBU, 3 Nov 2026) for the whole period' + (snap ? '; the comparison converts both lines at the rates saved with the snapshot, so exchange-rate moves do not show up as a gap' : '') + '. Values are balances at the start of each day.</div></div>';
+    var wc = w.length ? '<div class="warn" role="alert"><span aria-hidden="true">⚠️</span><div>' + w.map(function (x) { return '<div>' + x + '</div>'; }).join('') + '</div></div>' : '';
+    var gc = '';
+    if (snap) {
+      var g = gapSplit(snap), tot = g.sched + g.every;
+      var fm = function (v) { return (v < 0 ? '−' : '+') + money(Math.round(Math.abs(v)), cc, true); };
+      gc = '<div class="card"><h2>Forecast vs reality · made ' + dl(T - snap) + ', ' + snap + ' day' + (snap > 1 ? 's' : '') + ' ago</h2><div class="sum" style="margin-top:10px"><div><div class="k">Gap today (actual − forecast)</div><div class="v ' + (tot < 0 ? 'neg' : 'pos') + '">' + fm(tot) + '</div></div>' +
+        '<div><div class="k">Scheduled items paid differently</div><div class="v">' + fm(g.sched) + '</div></div><div><div class="k">Everything else (unscheduled)</div><div class="v ' + (g.every < 0 ? 'neg' : 'pos') + '">' + fm(g.every) + '</div></div></div>' +
+        '<div class="note" style="margin-top:8px">The “everything else” figure is the everyday spending the forecast ignores. It is what an “include average spending” option would have to cover; here it averages ' + fm(g.every / snap) + ' per day.</div></div>';
+    }
+    var acc = accuracy(snap), ah = '<div class="card"><div class="inl" style="justify-content:space-between"><h2>Accuracy per scheduled item</h2>' +
+      (snap ? '<div class="seg" role="group" aria-label="Scope"><button type="button" class="' + (st.scope === 'snap' ? 'on' : '') + '" data-act="scope" data-v="snap">Since ' + dl(T - snap) + '</button><button type="button" class="' + (st.scope === 'all' ? 'on' : '') + '" data-act="scope" data-v="all">Last 120 days</button></div>' : '<span class="small muted">Last 120 days</span>') + '</div>';
+    var tp = 0, ton = 0, tmiss = 0; acc.forEach(function (r) { tp += r.paid; ton += r.onT; tmiss += r.miss + r.over; });
+    ah += '<div class="note" style="margin:6px 0 10px">Overall: ' + tp + ' paid, ' + ton + ' on time (within a day), ' + tmiss + ' missed or overdue.</div>';
+    ah += '<div class="acc h"><span>Item</span><span>Paid</span><span>On time</span><span>Avg. day shift</span><span>Avg. amount</span><span></span></div>';
+    acc.forEach(function (r) {
+      var o = st.open[r.it.id], pc = r.paid ? Math.round(r.onT / r.paid * 100) + '%' : '—';
+      ah += '<div class="acc"><span><b>' + esc(r.it.name) + '</b>' + (r.miss ? ' <span class="chip over">' + r.miss + ' missed</span>' : '') + (r.over ? ' <span class="chip over">overdue</span>' : '') + (r.upd ? ' <span class="chip warn">Update amount to ' + money(r.upd, ACC[r.it.acc][1], true) + '</span>' : '') + '</span>' +
+        '<span>' + r.paid + ' of ' + r.list.length + '</span><span>' + pc + '</span><span>' + (r.paid ? (r.dd < 0.05 ? 'on the day' : '+' + r.dd.toFixed(1) + ' d') : '—') + '</span><span class="' + (Math.abs(r.da) > 0.02 ? 'neg' : '') + '">' + (r.paid ? (r.da >= 0 ? '+' : '−') + Math.abs(r.da * 100).toFixed(1) + ' %' : '—') + '</span>' +
+        '<span style="text-align:right"><button class="btn sm" type="button" data-act="open" data-v="' + r.it.id + '" aria-expanded="' + !!o + '">' + (o ? 'Hide' : 'Details') + '</button></span></div>';
+      if (o) {
+        ah += '<div class="occ h"><span>Expected day</span><span>Actual day</span><span>Δ days</span><span>Expected</span><span>Actual</span><span>Δ</span></div>';
+        if (!r.list.length) ah += '<div class="occ"><span style="grid-column:1/-1" class="muted">No occurrences in this period.</span></div>';
+        r.list.forEach(function (p) {
+          var cur2 = ACC[p.item.acc][1], dd2 = p.act === null ? null : p.act - p.exp;
+          ah += '<div class="occ"><span>' + dlong(p.exp) + '</span><span>' + (p.status === 'paid' ? dlong(p.act) : (p.status === 'missed' ? '<span class="neg">Missed</span>' : '<span class="neg">Overdue</span>')) + '</span><span>' + (dd2 === null ? '—' : (dd2 === 0 ? '0' : '+' + dd2)) + '</span><span>' + money(p.expAmt, cur2, true) + '</span><span>' + (p.actAmt === null ? '—' : money(p.actAmt, cur2, true)) + '</span><span class="' + (p.actAmt !== null && p.actAmt !== p.expAmt ? 'neg' : '') + '">' + (p.actAmt === null ? '—' : (p.actAmt === p.expAmt ? '0' : (p.actAmt > p.expAmt ? '+' : '−') + Math.abs((p.actAmt - p.expAmt) / p.expAmt * 100).toFixed(1) + ' %')) + '</span></div>';
+        });
+      }
+    });
+    ah += '<div class="note" style="margin-top:8px">Built from resolved occurrences (matched, skipped or missed), so it works even before a first snapshot exists. Expected values are the item’s amount and day at the time.</div></div>';
+    st._chart = c;
+    return h2 + wc + gc + ah;
+  }
+
+  // ---- render + events -------------------------------------------------------------------------
+  function render() {
+    var onDash = st.screen === 'dash';
+    $('nav1').innerHTML = nb('Dashboard', ICON.home, onDash, 'dash') + nb('Transactions', ICON.list, false) + nb('Events', ICON.events, false) + nb('Upcoming', ICON.up, !onDash, 'forecast', 4);
+    $('nav2').innerHTML = [['Accounts', 'accounts'], ['Categories', 'categories'], ['Budget', 'budget'], ['Import', 'imp'], ['Exchange rates', 'rates'], ['Rules', 'rules']].map(function (n) { return nb(n[0], ICON[n[1]], false); }).join('');
+    var tabs = onDash ? '' : '<div class="seg" role="group" aria-label="Upcoming tabs"><button type="button" data-act="screen" data-v="bills" class="' + (st.screen === 'bills' ? 'on' : '') + '">Bills</button><button type="button" data-act="screen" data-v="forecast" class="' + (st.screen === 'forecast' ? 'on' : '') + '">Forecast</button></div>';
+    $('bar').innerHTML = '<h1>' + (onDash ? 'Dashboard' : 'Upcoming') + '</h1>' + tabs + '<span class="small muted">NBU rates · 3 Nov 2026</span><div class="seg" role="group" aria-label="Display currency">' +
+      ['UAH', 'PLN', 'EUR', 'USD'].map(function (c) { return '<button type="button" class="' + (st.cur === c ? 'on' : '') + '" aria-pressed="' + (st.cur === c) + '" data-act="cur" data-v="' + c + '">' + c + '</button>'; }).join('') + '</div>';
+    var body = onDash ? dashboard() : (st.screen === 'bills' ? '<div class="card"><h2>Bills</h2><p style="font-size:13px;line-height:1.5;margin:8px 0 0">The Bills tab (grouped occurrences, row actions, suggestions, editor) is in the first prototype, <b>N5-upcoming.dc.html</b>.</p></div>' : forecastPage());
+    $('body').innerHTML = body;
+    bindChart();
+  }
+  function bindChart() {
+    var hit = $('hit'); if (!hit || !st._chart) return;
+    var c = st._chart, svg = $('svg');
+    hit.addEventListener('mousemove', function (ev) {
+      var r = svg.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width * c.W;
+      var d = Math.round(c.xmin + (x - 66) / (c.W - 66 - 14) * (c.xmax - c.xmin));
+      d = Math.max(c.xmin, Math.min(c.xmax, d));
+      var g = $('guide'); g.setAttribute('x1', c.X(d)); g.setAttribute('x2', c.X(d)); g.setAttribute('visibility', 'visible');
+      var cc = seriesCur(), txt = dlong(d) + ' · ';
+      var f = function (arr) { var p = arr.filter(function (q) { return q[0] === d; })[0]; return p ? money(Math.round(p[1]), cc) : null; };
+      var parts = [];
+      if (d <= T && st.snap) parts.push('actual ' + f(c.series.actual));
+      if (st.snap && f(c.series.snap)) parts.push('forecast of ' + dl(T - st.snap) + ' ' + f(c.series.snap));
+      if (d >= T && f(c.series.cur)) parts.push((st.snap ? 'today’s forecast ' : 'forecast ') + f(c.series.cur));
+      var ev2 = c.cu.occs.filter(function (o) { return o.day === d && !o.overdue; }).map(function (o) { return o.item.name; });
+      $('tip').textContent = txt + parts.join(' · ') + (ev2.length ? ' · scheduled: ' + ev2.join(', ') : '');
+    });
+    hit.addEventListener('mouseleave', function () { $('guide').setAttribute('visibility', 'hidden'); });
+  }
+  document.addEventListener('click', function (ev) {
+    var t = ev.target.closest('[data-act]'); if (!t) return;
+    var a = t.dataset.act, v = t.dataset.v;
+    if (a === 'screen') st.screen = v;
+    else if (a === 'cur') st.cur = v;
+    else if (a === 'hz') st.horizon = +v;
+    else if (a === 'scope') st.scope = v;
+    else if (a === 'open') st.open[v] = !st.open[v];
+    render();
+  });
+  document.addEventListener('change', function (ev) {
+    var f = ev.target.closest('[data-f]'); if (!f) return;
+    if (f.dataset.f === 'series') st.series = f.value;
+    if (f.dataset.f === 'snap') { st.snap = +f.value; st.scope = 'snap'; }
+    render();
+  });
+  var q = location.hash.replace('#', ''); if (q === 'dash') st.screen = 'dash'; if (/^snap=\d+$/.test(q)) st.snap = +q.split('=')[1];
+  render();
+})();
+</script>
+</body>
+</html>
