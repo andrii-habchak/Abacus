@@ -154,6 +154,10 @@ struct ImportView: View {
             default: break
             }
           }
+          // `-AbacusImportStale keep|markSettled|delete`: decides every stale pending hold.
+          if let choice = defaults.string(forKey: "AbacusImportStale").flatMap(ImportStaleChoice.init(rawValue:)) {
+            model.setStale(choice, ids: model.staleItems.compactMap { UUID(uuidString: $0.id) })
+          }
           if defaults.bool(forKey: "AbacusImportCommit") { await model.commit() }
         }
       #endif
