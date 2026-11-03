@@ -112,7 +112,7 @@ for correction in options.corrections {
   let txn = Txn(
     type: kind == .income ? .income : .expense, occurredAt: correction.day.date(calendar: calendar),
     accountID: target.id, amountMinor: abs(difference), categoryID: category.id, payee: "Balance correction",
-    note: "Aligns the account with the bank statement balance on \(correction.day)")
+    note: "Aligns the account with the bank statement balance on \(correction.day)", isBalanceCorrection: true)
   try await SQLiteTxnRepository(database: database, calendar: calendar).save(txn, lines: [])
   print("  booked a \(kind.rawValue) “Balance correction” on \(correction.day)")
 }
@@ -129,7 +129,12 @@ for file in options.files {
     }
     target = account.id
   }
-  let preview = try await pipeline.preview(data: data, fileName: file.lastPathComponent, targetAccountID: target)
+  let preview: ImportPreview
+  do {
+    preview = try await pipeline.preview(data: data, fileName: file.lastPathComponent, targetAccountID: target)
+  } catch ImportPipelineError.targetAccountRequired {
+    throw ToolError("\(file.lastPathComponent): PKO statement needs --pko-account <name> (no remembered account yet)")
+  }
   let counts = preview.counts
   print(
     "\(file.lastPathComponent) [\(source.rawValue)]: rows \(preview.rows.count) · new \(counts.new) · already imported \(counts.alreadyImported)"
