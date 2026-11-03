@@ -20,6 +20,7 @@ struct DedupeTests {
   private func importPKO(_ db: FakeDB, _ data: Data) async throws -> (ImportPreview, ImportSummary) {
     var preview = try await db.pipeline().preview(data: data, fileName: "pko.csv", targetAccountID: F.pkoAccount.id)
     preview.acceptSuggestedReviewChoices()
+    preview.keepUndecidedStaleHolds()  // N6: holds the file did not settle need a decision
     return (preview, try await db.pipeline().commit(preview))
   }
 
