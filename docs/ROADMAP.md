@@ -96,13 +96,13 @@ Status values: `proposed` (defaults below await the owner's approval), `approved
 
 | Id | Item | Size | Needs | Status |
 |----|------|------|-------|--------|
-| N1 | Automatic backups and pre-migration snapshot | M | defaults below | approved 2026-11-03 |
-| N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | approved 2026-11-03 |
-| N3 | Stabilisation pass | M | scope below | approved 2026-11-03 |
-| N4 | Database encryption research (document only, no code) | S | none | approved 2026-11-03 |
-| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved 2026-11-03 (spec step first) |
-| N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | approved 2026-11-03 (spec step first) |
-| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved 2026-11-03 (spec step first) |
+| N1 | Automatic backups and pre-migration snapshot | M | defaults below | in progress (lane `wp/N1-backups`) |
+| N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | in progress (lane `wp/N2-mcp`, read tools first; skeleton on `main`) |
+| N3 | Stabilisation pass | M | scope below | done, merged 2026-11-03 (two owner questions open, `docs/status/N3.md`) |
+| N4 | Database encryption research (document only, no code) | S | none | done, merged 2026-11-03 (`docs/status/N4.md`: FileVault now, revisit SQLCipher with Developer ID signing) |
+| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved; spec lane running (`wp/N5-spec`) |
+| N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | approved; spec lane running (`wp/N6-spec`) |
+| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved; spec lane running (`wp/N7-spec`) |
 | N8 | Quick actions: ⌘K command palette, menu-bar quick add, Shortcuts / App Intents "add expense" | M | TA text + approved prototypes | deferred (owner, 2026-11-03) |
 
 Readiness: N1, N2, N3, N4 can start as soon as the owner approves them (nothing blocks them in the

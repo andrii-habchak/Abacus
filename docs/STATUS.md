@@ -4,6 +4,13 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-03 (orchestrator, newest): roadmap run started._ Gate green (1,121 tests with real samples, app build).
+Merged: N3 stabilisation (correction badge, headless `abacus-import` links refunds/estimated transfers, undo of a batch
+whose rows a later import absorbed is refused until that import is undone, timing test made robust), N4 research note,
+N2 target skeleton. No migration added. Running: N1 backups, N2 MCP read tools, spec lanes N5, N6, N7 (TA text +
+prototypes for owner review). Owner questions: `docs/status/N3.md` (debt filter date range, per-currency caption).
+Note: a stale `build.noindex` gave SwiftSyntax module-resolution errors; a fresh derived-data path builds fine.
+
 _Updated 2026-11-03 (orchestrator, newest)._ The owner checked the app visually (1.6.2): fine, so the
 "not checked visually" notes below are closed. Roadmap answers recorded in `docs/ROADMAP.md`.
 

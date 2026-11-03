@@ -186,6 +186,13 @@ Owner paths per lane (no edits outside them; contract changes through the orches
 - [x] **S3 Budget and rules polish** (merged 2026-10-27) — Save button states, remove the rules tester row.
 - [ ] **Release 1.2.1** — DMG built 2026-10-27, owner testing; tag after the OK.
 
+### Phase 5 — Roadmap N1–N7 (2026-11-03, `docs/ROADMAP.md`, D66–D69)
+Wave 1: N1 backups, N2 MCP, N3 stabilisation, N4 encryption research. Spec stream: N5–N7 (TA text + prototypes).
+Merge order: N3, N1, N2, N6, N5, N7. Migrations reserved: v18 (N5), v19 (N6).
+- [x] **N3 Stabilisation** (merged 2026-11-03).
+- [x] **N4 Encryption research** (merged 2026-11-03; document only).
+- [ ] **N1 Backups** · [ ] **N2 MCP server** · [ ] N5 · [ ] N6 · [ ] N7 (each after its spec is approved).
+
 ### Phase 4 — v2 (planned after v1)
 iOS app on `AbacusFeatures`, iCloud sync via SQLiteData `SyncEngine` (needs the paid Apple
 Developer Program), backlog items from TA §7.
