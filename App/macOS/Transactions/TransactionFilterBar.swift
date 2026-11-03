@@ -37,22 +37,29 @@ struct TransactionFilterBar: View {
     .frame(height: Self.rowHeight + 20)
   }
 
-  /// N6: All / Cleared / Uncleared.
-  private var clearedMenu: some View {
-    Menu {
-      ForEach(ClearedFilter.allCases, id: \.self) { option in
-        Button {
-          model.filters.cleared = option
-        } label: {
-          if model.filters.cleared == option { Label(option.title, systemImage: "checkmark") } else { Text(option.title) }
-        }
-      }
-    } label: {
-      Text(model.filters.cleared == .all ? "Cleared" : model.filters.cleared.title)
+  /// N6: All / Cleared / Uncleared as a segmented choice (the prototype's control), so "All" is
+  /// never mistaken for an active "Cleared" filter.
+  private var clearedPicker: some View {
+    Picker("Cleared filter", selection: $model.filters.cleared) {
+      ForEach(ClearedFilter.allCases, id: \.self) { Text($0.title).tag($0) }
     }
-    .menuStyle(.button)
+    .pickerStyle(.segmented)
+    .labelsHidden()
     .fixedSize()
     .help("Show all, cleared or uncleared transactions")
+  }
+
+  /// N6 (R-CLR-4): the cleared actions on the selected rows; the right-click menu has the same ones.
+  @ViewBuilder
+  private var clearedActions: some View {
+    let ids = model.selectedIDs
+    Button("Mark cleared") { Task { await model.setCleared(ids, true) } }
+      .disabled(!model.canMarkCleared(ids))
+    Button("Mark uncleared") { Task { await model.setCleared(ids, false) } }
+      .disabled(!model.canMarkCleared(ids))
+    Button("Mark settled") { Task { await model.markSettled(ids) } }
+      .disabled(!model.canMarkSettled(ids))
+      .help("The payment went through; it stays uncleared until a bank row confirms it")
   }
 
   private func row(labels: FilterBarLabels) -> some View {
@@ -65,7 +72,8 @@ struct TransactionFilterBar: View {
       }
       chip(.types, active: model.filters.isTypeFiltered, label: labels.types)
       chip(.event, active: model.filters.eventID != nil, label: labels.event)
-      clearedMenu
+      clearedPicker
+      clearedActions
       if model.filters.importBatch != nil {
         importChip(label: labels.importFile)
       }

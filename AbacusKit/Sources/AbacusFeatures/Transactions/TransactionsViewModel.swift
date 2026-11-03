@@ -196,6 +196,49 @@ public final class TransactionsViewModel {
       errorMessage = "Couldn't load transactions."
     }
     await loadFacets()
+    await loadAccountFigures()
+  }
+
+  /// N6 footer for exactly one account filtered: its current balance split into the cleared and the
+  /// uncleared part, in the account's own currency (whole history, whatever the date filter says).
+  public struct AccountFigures: Equatable, Sendable {
+    public var balance: String
+    public var cleared: String
+    public var uncleared: String
+  }
+
+  /// Nil unless exactly one account is filtered (or no reconcile data is available).
+  public private(set) var accountFigures: AccountFigures?
+
+  private func loadAccountFigures() async {
+    guard filters.accountIDs.count == 1, let id = filters.accountIDs.first,
+      let account = reference.accounts.first(where: { $0.id == id })
+    else {
+      accountFigures = nil
+      return
+    }
+    guard let txns = try? await transactions.transactions(matching: TxnQuery(accountIDs: [id], newestFirst: false)) else {
+      accountFigures = nil
+      return
+    }
+    guard filters.accountIDs == [id] else { return }
+    accountFigures = Self.accountFigures(account: account, txns: txns)
+  }
+
+  /// Balance = opening + every row's effect; cleared = opening + cleared rows (pending holds never
+  /// count); uncleared = the rest.
+  static func accountFigures(account: Account, txns: [TxnWithLines]) -> AccountFigures {
+    var balance = account.openingBalanceMinor
+    var cleared = account.openingBalanceMinor
+    for item in txns {
+      for effect in Calc.effects(of: item) where effect.accountID == account.id {
+        balance += effect.amountMinor
+        if !item.txn.isPendingAtBank && item.txn.isCleared(on: account.id) { cleared += effect.amountMinor }
+      }
+    }
+    let format = TransactionMoneyFormat()
+    func text(_ minor: Int64) -> String { format.string(Money(minorUnits: minor, currency: account.currency)) }
+    return AccountFigures(balance: text(balance), cleared: text(cleared), uncleared: text(balance - cleared))
   }
 
   /// The query the rows on screen were fetched with. The list view uses it as its identity: a
