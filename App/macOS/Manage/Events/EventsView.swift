@@ -36,6 +36,9 @@ public struct EventsView: View {
     }
     .navigationTitle("Events")
     .toolbar {
+      // A fixed spacer keeps "New event" a pill of its own next to "New transaction" (as the
+      // Accounts page's "New account" menu), not one merged glass pill.
+      ToolbarSpacer(.fixed, placement: .primaryAction)
       ToolbarItem(placement: .primaryAction) {
         Button("New event", systemImage: "plus") { model.newEvent() }
           .labelStyle(.titleAndIcon)
