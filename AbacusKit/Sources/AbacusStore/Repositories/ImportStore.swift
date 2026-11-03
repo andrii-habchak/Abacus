@@ -215,6 +215,11 @@ public struct SQLiteImportStore: ImportStore {
     try await database.write { db in
       guard let batch = try ImportBatch.find(batchID).fetchOne(db) else { throw RepositoryError.notFound }
       guard !batch.isUndone else { return }
+      // N3: a later, still active import turned some of this batch's transactions into one side
+      // of a transfer or completed their estimate (C38). Deleting them would delete that
+      // transfer and orphan the later batch's snapshot, so the later batch is undone first.
+      let held = try Self.heldByLaterImports(batchID, db)
+      if held > 0 { throw ImportUndoError.heldByLaterImport(count: held) }
       // Manual debt records the batch carries go with it; its transactions (transfers to a debt
       // account included) go next; debts the batch created are removed below, once nothing is
       // left in them.
@@ -277,6 +282,14 @@ public struct SQLiteImportStore: ImportStore {
     }
   }
 
+  /// How many of the batch's transactions another batch absorbed or completed (it holds a snapshot of them).
+  private static func heldByLaterImports(_ batchID: ImportBatch.ID, _ db: Database) throws -> Int {
+    let own = Set(try Txn.where { $0.importBatchID.eq(batchID) }.select(\.id).fetchAll(db))
+    guard !own.isEmpty else { return 0 }
+    let held = try ImportTxnSnapshot.where { $0.batchID.neq(batchID) }.fetchAll(db)
+    return Set(held.map(\.txnID)).intersection(own).count
+  }
+
   /// Number of transactions still linked to each batch (import history counts).
   public func transactionCounts() async throws -> [ImportBatch.ID: Int] {
     try await database.read { db in
@@ -290,6 +303,21 @@ public struct SQLiteImportStore: ImportStore {
         if let id { counts[id] = count }
       }
       return counts
+    }
+  }
+}
+
+
+/// N3: why an import cannot be undone.
+public enum ImportUndoError: Error, Equatable, Sendable, LocalizedError {
+  /// A later import turned `count` of this batch's transactions into transfers (C38).
+  case heldByLaterImport(count: Int)
+
+  public var errorDescription: String? {
+    switch self {
+    case .heldByLaterImport(let count):
+      "A later import used \(count) transaction\(count == 1 ? "" : "s") of this one as the other side of a transfer. "
+        + "Undo that later import first."
     }
   }
 }

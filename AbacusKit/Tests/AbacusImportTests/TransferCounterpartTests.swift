@@ -566,4 +566,40 @@ struct TransferCounterpartTests {
     await #expect(throws: TransferCounterpartError.self) { try await env.pipeline.commit(preview) }
     #expect(try await env.pipeline.history().isEmpty)
   }
+
+  // MARK: N3: undoing the earlier batch of an absorbed transaction
+
+  @Test("N3 / C38: undo of the batch that created an absorbed transaction is refused until the absorbing batch is undone")
+  func undoEarlierBatchOfAbsorbed() async throws {
+    let env = try Env()
+    try await env.seed()
+    // Batch A imports the income on the PLN account.
+    let first = try await env.pln([Self.plnIn("2026-03-11", "398.00")])
+    try await env.pipeline.commit(first.acceptingDefaults())
+    let income = try #require(try await env.allTxns().first)
+    #expect(income.importBatchID == first.batchID)
+    // Batch B absorbs it as the other side of a USD transfer.
+    var preview = try await env.usd([Self.usdOut("2026-03-10")])
+    let id = try Self.reviewRow(preview).id
+    let option = try #require(try await env.pipeline.counterpartOptions(for: preview, row: id, to: F.pkoAccount.id).first)
+    let cp = TransferCounterpart(accountID: F.pkoAccount.id, kind: .existing(option.candidate.txn), amountMinor: option.amountMinor)
+    let applied = preview.setTransfer(toAccount: F.pkoAccount.id, counterpart: cp, forRow: id)
+    #expect(applied)
+    try await env.pipeline.commit(preview)
+    let transfer = try #require(await env.txn(income.id))
+    #expect(transfer.type == .transfer)
+
+    // Undo of A is refused and changes nothing.
+    await #expect(throws: ImportUndoError.heldByLaterImport(count: 1)) { try await env.pipeline.undo(first.batchID) }
+    let kept = try #require(await env.txn(income.id))
+    #expect(kept.type == .transfer && kept.toAmountMinor == 398_00)
+    #expect(try await env.snapshotCount() == 1)
+    #expect(try await env.pipeline.history().filter(\.isUndone).isEmpty)
+
+    // Undo of B first restores the income; then A can be undone.
+    try await env.pipeline.undo(preview.batchID)
+    #expect(try await env.txn(income.id)?.type == .income)
+    try await env.pipeline.undo(first.batchID)
+    #expect(try await env.allTxns().isEmpty)
+  }
 }
