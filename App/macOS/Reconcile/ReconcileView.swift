@@ -61,12 +61,12 @@ struct ReconcileView: View {
 
   private var header: some View {
     HStack(spacing: 12) {
-      Text(model.title).font(.system(size: 17, weight: .semibold))
-      Spacer()
+      // The window title already says "Reconcile · <account>" (QA-171: it was shown twice).
       Text(model.lastReconciledText).font(.system(size: 12)).foregroundStyle(.secondary)
+      Spacer()
     }
     .padding(.horizontal, 20)
-    .padding(.vertical, 12)
+    .padding(.vertical, 8)
   }
 }
 
@@ -111,7 +111,8 @@ private struct ReconcileSetup: View {
       }
     }
     .padding(24)
-    .frame(maxWidth: 700, maxHeight: .infinity, alignment: .topLeading)
+    .frame(maxWidth: 700, alignment: .leading)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 }
 

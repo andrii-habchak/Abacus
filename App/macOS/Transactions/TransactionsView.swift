@@ -33,7 +33,9 @@ struct TransactionsView: View {
       Divider()
       list
       Divider()
-      TransactionsFooter(content: model.content)
+      ClearedLegend()
+      Divider()
+      TransactionsFooter(content: model.content, figures: model.accountFigures)
         .background(TxnPalette.barBackground)
     }
     .navigationTitle("Transactions")
@@ -177,14 +179,51 @@ struct TransactionsView: View {
   }
 }
 
+/// N6: what the cleared marks in the first column mean.
+struct ClearedLegend: View {
+  var body: some View {
+    HStack(spacing: 14) {
+      item(.cleared, "Cleared")
+      item(.uncleared, "Uncleared")
+      item(.pending, "Pending hold")
+      item(.partial, "Transfer cleared on one side")
+      Spacer(minLength: 0)
+    }
+    .font(.system(size: 12))
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, TxnMetrics.horizontalPadding)
+    .padding(.vertical, 6)
+    .accessibilityElement(children: .contain)
+  }
+
+  private func item(_ mark: TransactionListContent.ClearedMark, _ title: String) -> some View {
+    HStack(spacing: 5) {
+      ClearedMarkView(mark: mark, help: title).font(.system(size: 12))
+      Text(title)
+    }
+  }
+}
+
 /// Count, income, expenses, net in the display currency (R-LIST-5).
 struct TransactionsFooter: View {
   let content: TransactionListContent
+  /// N6: shown when exactly one account is filtered.
+  var figures: TransactionsViewModel.AccountFigures?
 
   var body: some View {
     HStack(spacing: 20) {
-      Text(content.totals.countLabel)
-        .foregroundStyle(.secondary)
+      HStack(spacing: 6) {
+        Text(content.totals.countLabel)
+        if let figures {
+          Text("·")
+          Text("Balance ") + Text(figures.balance).fontWeight(.semibold)
+          Text("·")
+          Text("Cleared ") + Text(figures.cleared).fontWeight(.semibold)
+          Text("·")
+          Text("Uncleared ") + Text(figures.uncleared).fontWeight(.semibold)
+        }
+      }
+      .foregroundStyle(.secondary)
       Spacer(minLength: 0)
       HStack(spacing: 4) {
         Text("Income")
