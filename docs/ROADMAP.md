@@ -96,10 +96,10 @@ Status values: `proposed` (defaults below await the owner's approval), `approved
 
 | Id | Item | Size | Needs | Status |
 |----|------|------|-------|--------|
-| N1 | Automatic backups and pre-migration snapshot | M | defaults below | proposed |
+| N1 | Automatic backups and pre-migration snapshot | M | defaults below | approved 2026-11-03 |
 | N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | approved 2026-11-03 |
-| N3 | Stabilisation pass | M | scope below | proposed |
-| N4 | Database encryption research (document only, no code) | S | none | proposed |
+| N3 | Stabilisation pass | M | scope below | approved 2026-11-03 |
+| N4 | Database encryption research (document only, no code) | S | none | approved 2026-11-03 |
 | N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved 2026-11-03 (spec step first) |
 | N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | approved 2026-11-03 (spec step first) |
 | N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved 2026-11-03 (spec step first) |
