@@ -4,6 +4,13 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-03 (orchestrator, later)._ Merged since: N1 backups (snapshot store, retention, pre-migration and launch
+snapshots, Settings › Data list/Back up now/second folder), N3b (per-currency debt caption, D73), `AbacusMCP` → `AbacusFX`
+dependency. Gate green (1,170 tests, app build). No migration added. N2 is finishing (live rates, N1 snapshot wiring, README
+without tool names). Draft specs + prototypes for N5, N6, N7 are on `main` for owner review (`docs/status/N*-spec.md`,
+`docs/design/N*.dc.html`); no UI lane starts before approval. The owner backs up `abacus.sqlite` before the next build only if a
+migration is added (none yet).
+
 _Updated 2026-11-03 (orchestrator, newest): roadmap run started._ Gate green (1,121 tests with real samples, app build).
 Merged: N3 stabilisation (correction badge, headless `abacus-import` links refunds/estimated transfers, undo of a batch
 whose rows a later import absorbed is refused until that import is undone, timing test made robust), N4 research note,
