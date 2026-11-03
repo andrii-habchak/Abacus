@@ -233,3 +233,25 @@ struct TransactionListContentTests {
     #expect(list.netText == "+zł\u{00A0}0.00")
   }
 }
+
+@Suite("Transactions · correction badge")
+struct CorrectionBadgeTests {
+  let reference = TransactionsReference(
+    accounts: PreviewData.accounts, categories: PreviewData.categories, events: PreviewData.events)
+
+  func badges(of txn: Txn) -> [TransactionListContent.Badge] {
+    let list = TransactionListContent(
+      rows: [TxnWithLines(txn: txn, lines: [])], reference: reference, displayCurrency: .PLN,
+      converter: RateTable.transactionsPreview, today: PreviewData.today, categoryFilter: nil,
+      refundsReduceSpending: false)
+    return list.days.flatMap(\.rows).flatMap(\.badges)
+  }
+
+  @Test("R-ACC-4: a balance correction row carries a Correction badge; an ordinary row does not")
+  func correctionBadge() {
+    var txn = PreviewData.txns[0]
+    #expect(!badges(of: txn).contains { $0.kind == .correction })
+    txn.isBalanceCorrection = true
+    #expect(badges(of: txn).contains { $0.kind == .correction && $0.label == "Correction" })
+  }
+}
