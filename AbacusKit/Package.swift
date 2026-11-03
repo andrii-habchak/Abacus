@@ -45,7 +45,7 @@ let package = Package(
     // Local MCP server over the app database: tools and query layer (WP N2).
     .target(
       name: "AbacusMCP",
-      dependencies: ["AbacusDomain", "AbacusStore", .product(name: "SQLiteData", package: "sqlite-data")]
+      dependencies: ["AbacusDomain", "AbacusStore", "AbacusFX", .product(name: "SQLiteData", package: "sqlite-data")]
     ),
     // Stdio executable `abacus-mcp`, a thin shell over AbacusMCP.
     .executableTarget(name: "AbacusMCPTool", dependencies: ["AbacusMCP"]),
