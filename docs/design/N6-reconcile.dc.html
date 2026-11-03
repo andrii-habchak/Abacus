@@ -55,6 +55,8 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
 .banner{margin:12px 20px 0;padding:10px 14px;border-radius:8px;font-size:13px;border:1px solid #BFE3CB;background:#E3F4EA;color:#1B6B3A}
 .note{margin:0 20px;font-size:12px;color:#6E6E73;line-height:1.45}
 .dim{opacity:.5}
+.row,.item{user-select:none}
+.cols-acc{padding:8px 20px}
 .lnk{border:0;background:none;padding:0;font-size:12px;color:#0A4FA8}
 .lnk.bad{color:#B3001B}
 .lbl{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#6E6E73}
@@ -94,13 +96,14 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
   var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   var st = {
+    sheet: null, lastSel: {},
     view: 'acc', acct: 'pko', filter: 'all', sel: {},
     phase: 'setup', fromImport: false, ticks: {}, added: [], edits: {}, deleted: {}, settled: {}, editId: null,
     addForm: null, showCleared: false,
     stmt: { pko: { date: '2026-10-21', bal: '3569.55' }, cash: { date: '2026-10-24', bal: '718.00' } },
     lastRec: { pko: null, cash: null },
     done: null,
-    impStep: 2, impTab: 'review', sub: 'pending', impCard: 'all', dup: 'link', showHistory: false,
+    impStep: 2, sub: 'all', impCard: 'review', dup: 'link', showHistory: false,
     review: 'expense',
     hold: { h1: null, h2: null }, holdSel: {}, holdEdit: { h1: { amt: '23.40', day: '2026-10-08', pend: true }, h2: { amt: '12.00', day: '2026-10-10', pend: true } },
     gap: { g1a: 'leave', g1b: 'leave' }
@@ -172,13 +175,13 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
     var on = st.view === view || (view === 'acc' && st.view === 'rec');
     return '<button type="button" class="nav' + (on ? ' on' : '') + '" data-act="view" data-v="' + view + '"' + (on ? ' aria-current="page"' : '') + '><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="' + icon + '"></path></svg><span>' + label + '</span></button>';
   }
-  function shell(title, toolbar, body, footer) {
+  function shell(title, toolbar, body, footer, overlay) {
     return '<nav class="side" aria-label="Sections">' +
       '<div aria-hidden="true" style="display:flex;gap:8px;padding:2px 8px 18px;"><span style="width:12px;height:12px;border-radius:6px;background:#FF5F57"></span><span style="width:12px;height:12px;border-radius:6px;background:#FEBC2E"></span><span style="width:12px;height:12px;border-radius:6px;background:#28C840"></span></div>' +
       '<div class="grp">Overview</div>' + nav('Dashboard', NAVI.home, 'none') + nav('Transactions', NAVI.list, 'tx') +
       '<div class="grp" style="padding-top:14px">Manage</div>' + nav('Accounts', NAVI.accounts, 'acc') + nav('Import', NAVI.imp, 'imp') +
-      '<div style="margin-top:auto;font-size:11px;color:#6E6E73;padding:10px;line-height:1.4">Prototype (N6): synthetic data. Try Accounts → Reconcile…, Transactions, and Import.</div></nav>' +
-      '<main class="main"><div class="bar"><h1>' + title + '</h1>' + toolbar + '</div>' + body + (footer || '') + '</main>';
+      '<div style="margin-top:auto;font-size:11px;color:#6E6E73;padding:10px;line-height:1.4">Prototype (N6): synthetic data. Try Accounts → Reconcile, Transactions, and Import.</div></nav>' +
+      '<main class="main"><div class="bar"><h1>' + title + '</h1>' + toolbar + '</div>' + body + (footer || '') + '</main>' + (overlay || '');
   }
   function acctSelect() {
     return '<select class="sel" aria-label="Account" data-act="acct">' + Object.keys(ACCOUNTS).map(function (k) { return '<option value="' + k + '"' + (k === st.acct ? ' selected' : '') + '>' + ACCOUNTS[k].name + '</option>'; }).join('') + '</select>';
@@ -186,20 +189,31 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
 
   // ---- 0. Accounts: where Reconcile starts --------------------------------------------------
   function viewAcc() {
-    var a = st.acct, acc = ACCOUNTS[a], last = st.lastRec[a];
     var list = Object.keys(ACCOUNTS).map(function (k) {
-      var A = ACCOUNTS[k], on = k === a;
-      return '<button type="button" data-act="pickacct" data-v="' + k + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;border:0;border-bottom:1px solid #F3F3F6;background:' + (on ? '#F2F7FE' : '#fff') + ';padding:10px 16px;font-size:13px">' +
+      var A = ACCOUNTS[k];
+      return '<div class="row" data-act="opensheet" data-v="' + k + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 20px;cursor:pointer">' +
         '<span style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-weight:600">' + A.name + '</b><span class="sub">' + A.label + ' · ' + A.cur + '</span></span>' +
-        '<span style="display:flex;flex-direction:column;gap:3px;align-items:flex-end"><b>' + money(balance(k), A.cur) + '</b>' + (notReconciled(k) ? '<span class="tag" style="background:#FFF1D6;color:#8A4B00">Not reconciled</span>' : '<span class="tag" style="background:#E3F4EA;color:#1B6B3A">Reconciled</span>') + '</span></button>';
+        '<span style="display:flex;gap:12px;align-items:center">' + (notReconciled(k) ? '<span class="tag" style="background:#FFF1D6;color:#8A4B00">Not reconciled</span>' : '<span class="tag" style="background:#E3F4EA;color:#1B6B3A">Reconciled</span>') + '<b>' + money(balance(k), A.cur) + '</b></span></div>';
     }).join('');
-    var cb = clearedBal(a, '9999-12-31', false);
-    var insp = '<div style="flex:1 1 320px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">' +
-      '<div><h2 style="margin:0;font-size:17px">' + acc.name + '</h2><span class="sub">' + acc.label + ' · ' + acc.cur + '</span></div>' +
-      '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 18px;font-size:13px"><span class="sub">Balance</span><b>' + money(balance(a), acc.cur) + '</b><span class="sub">Cleared balance</span><b>' + money(cb, acc.cur) + '</b><span class="sub">Uncleared</span><span>' + money(r2(balance(a) - cb), acc.cur) + '</span><span class="sub">Last reconciled</span><span>' + (last ? dayLong(last.date) + ' · ' + money(last.bal, acc.cur) : 'Never') + '</span></div>' +
-      (notReconciled(a) ? '<div class="item amber"><b style="font-size:13px">Not reconciled</b><span style="font-size:12px;color:#3A3A3C;line-height:1.45">This account has cleared rows booked after the ' + (last ? 'last reconciliation' : 'start') + '. Compare it with the ' + (acc.kind === 'cash' ? 'cash in your wallet' : 'bank statement') + ' to be sure nothing is missing. This is only a hint.</span></div>' : '') +
-      '<div class="item" style="background:#F2F7FE;border-color:#BCD3F2"><b style="font-size:13px">Reconcile this account</b><span style="font-size:12px;color:#3A3A3C;line-height:1.45">' + (acc.kind === 'cash' ? 'Count your cash, type the total, and Abacus shows what differs from its balance.' : 'Type the closing balance from your bank statement and the date it is for. Abacus shows what differs from its cleared rows; you tick, add or fix rows until it matches.') + '</span><span><button type="button" class="btn pri" data-act="startrec">Reconcile…</button></span><span class="sub">Also available: Transactions → Reconcile… (one account filtered), the right-click menu of an account, and after an import.</span></div></div>';
-    return shell('Accounts', '<span style="flex-grow:1"></span>', '<div style="display:flex;flex-wrap:wrap;flex-grow:1"><div style="flex:1 1 300px;max-width:400px;border-right:1px solid #ECECF0">' + list + '</div>' + insp + '</div>');
+    var sheet = '';
+    if (st.sheet) {
+      var a = st.sheet, acc = ACCOUNTS[a], last = st.lastRec[a], cb = clearedBal(a, '9999-12-31', false);
+      var dots = ['#D9534F', '#E0872B', '#C9A227', '#7FA032', '#3F9B57', '#3E9C86', '#3A93B4', '#2F67D8', '#5A55D8', '#7B52CC', '#A650C8', '#C0456F', '#9A5B33'].map(function (c, i) { return '<span style="width:22px;height:22px;border-radius:11px;background:' + c + ';' + (i === 4 ? 'box-shadow:0 0 0 2px #fff,0 0 0 4px ' + c : '') + '"></span>'; }).join('');
+      sheet = '<div style="position:absolute;inset:0;background:rgba(0,0,0,0.32);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto"><div role="dialog" aria-label="' + acc.name + '" style="width:100%;max-width:520px;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:22px 24px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box">' +
+        '<h2 style="margin:0;font-size:17px">' + acc.name + '</h2>' +
+        '<label class="lbl">Name<input type="text" value="' + esc(acc.name) + '"></label>' +
+        '<div style="display:flex;gap:20px"><label class="lbl" style="flex:1">Kind<select class="sel"><option>' + acc.label + '</option></select></label><span class="lbl">Currency<b style="font-size:13px;color:#1D1D1F;padding-top:5px">' + acc.cur + '</b></span></div>' +
+        '<div style="display:flex;gap:12px"><label class="lbl" style="flex:1">Opening balance<input type="text" value="' + acc.opening.toFixed(2) + '" style="text-align:right"></label><label class="lbl">Opening date<input type="date" value="2026-09-30"></label></div>' +
+        '<div class="lbl">Colour<div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px">' + dots + '</div></div>' +
+        '<label class="lbl">Bank account number (IBAN)<input type="text" placeholder="Used to recognise transfers in bank imports"></label>' +
+        '<div class="item" style="gap:6px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:14px">Current balance</span><b style="font-size:15px">' + money(balance(a), acc.cur) + '</b></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;color:#3A3A3C"><span>Cleared balance</span><span>' + money(cb, acc.cur) + '</span></div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;color:#3A3A3C"><span>Last reconciled</span><span>' + (last ? dayLong(last.date) + ' · ' + money(last.bal, acc.cur) : 'Never') + '</span></div>' +
+        (notReconciled(a) ? '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px"><span class="tag" style="background:#FFF1D6;color:#8A4B00">Not reconciled</span><span class="sub">Compare it with the ' + (acc.kind === 'cash' ? 'cash you hold' : 'bank statement') + '.</span></div>' : '') +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px"><span class="sub">Has ' + allRows(a).length + ' transactions — archive it instead of deleting.</span><button type="button" class="btn pri" data-act="startrec">Reconcile</button></div></div>' +
+        '<div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid #E5E5EA;padding-top:12px"><span style="display:flex;gap:8px"><button type="button" class="btn">Archive</button><button type="button" class="btn" disabled>Delete</button></span><span style="display:flex;gap:8px"><button type="button" class="btn" data-act="closesheet">Cancel</button><button type="button" class="btn" disabled>Save</button></span></div></div></div>';
+    }
+    return shell('Accounts', '<span style="flex-grow:1"></span>', '<div class="hd cols-acc"><span>Account</span><span></span></div>' + list + '<div style="padding:12px 20px" class="sub">Click an account to edit it. Reconcile is in the account window, next to the balance.</div>', '', sheet);
   }
 
   // ---- 1. Transactions with the cleared column -------------------------------------------
@@ -215,7 +229,7 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
       '<button type="button" class="btn" data-act="mark" data-v="1"' + (nSel - nPend > 0 ? '' : ' disabled') + '>Mark cleared</button>' +
       '<button type="button" class="btn" data-act="mark" data-v="0"' + (nSel - nPend > 0 ? '' : ' disabled') + '>Mark uncleared</button>' +
       '<button type="button" class="btn" data-act="settle"' + (nPend ? '' : ' disabled') + ' title="The payment went through; it stays uncleared until a bank row confirms it">Mark settled</button>' +
-      '<button type="button" class="btn pri" data-act="startrec">Reconcile…</button>';
+      '<button type="button" class="btn pri" data-act="startrec">Reconcile</button>';
     var out = '<div class="cols-tx hd"><span title="Cleared">✓</span><span>Description</span><span>Category</span><span>Account</span><span style="text-align:right">Amount</span></div>';
     var last = '';
     rows.forEach(function (t) {
@@ -231,7 +245,7 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
     if (!rows.length) out += '<div style="padding:30px 20px;color:#6E6E73;font-size:13px">No transactions match these filters.</div>';
     var legend = '<div style="display:flex;flex-wrap:wrap;gap:14px;padding:10px 20px;font-size:12px;color:#3A3A3C;align-items:center"><span style="display:flex;gap:5px;align-items:center">' + ICON.cl + ' Cleared</span><span style="display:flex;gap:5px;align-items:center">' + ICON.un + ' Uncleared</span><span style="display:flex;gap:5px;align-items:center">' + ICON.pend + ' Pending hold</span><span style="display:flex;gap:5px;align-items:center">' + ICON.half + ' Transfer cleared on one side</span></div>';
     var cb = clearedBal(a, '9999-12-31', false);
-    var f = '<div class="foot"><span style="font-size:12px;color:#3A3A3C">' + allRows(a).length + ' transactions · Balance <b>' + money(balance(a), acc.cur) + '</b> · Cleared <b>' + money(cb, acc.cur) + '</b> · Uncleared <b>' + money(r2(balance(a) - cb), acc.cur) + '</b></span><span class="sub">Clearing never changes balances or reports. Click rows to select, then use the buttons (the editor and right-click menu have the same actions).</span></div>';
+    var f = '<div class="foot"><span style="font-size:12px;color:#3A3A3C">' + allRows(a).length + ' transactions · Balance <b>' + money(balance(a), acc.cur) + '</b> · Cleared <b>' + money(cb, acc.cur) + '</b> · Uncleared <b>' + money(r2(balance(a) - cb), acc.cur) + '</b></span><span class="sub">Clearing never changes balances or reports. Click selects a row, ⌘ click adds or removes one, ⇧ click selects a range; then use the buttons (the editor and right-click menu have the same actions).</span></div>';
     return shell('Transactions', tb, out + legend, f);
   }
 
@@ -273,7 +287,7 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
       '<div class="tile" style="' + (okDiff ? 'border-color:#BFE3CB;background:#F3FBF6' : 'border-color:#E8A0A8;background:#FFF8F9') + '"><span class="sub">Difference</span><b class="' + (okDiff ? 'ok' : 'bad') + '">' + (diff === null ? '—' : (diff === 0 ? money(0, acc.cur) : money(diff, acc.cur, true))) + '</b><span class="sub ' + (okDiff ? 'ok' : 'bad') + '">' + (diff === null ? 'Enter a balance' : okDiff ? 'Balanced — ready to finish' : (diff < 0 ? 'Statement is lower: a payment is missing from the cleared rows, or a ticked row is not on the statement' : 'Statement is higher: income or a refund is missing from the cleared rows')) + '</span></div></div>';
     var help = okDiff ? '' : '<div class="item" style="margin:10px 20px 0;background:#F2F7FE;border-color:#BCD3F2"><b style="font-size:13px">Ways to make the difference zero</b><ol style="margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:#3A3A3C">' +
       '<li><b>Tick</b> rows that are on the ' + (isCash ? 'count' : 'statement') + ' (hand-typed payments the bank has booked).</li>' +
-      '<li><b>Add transaction…</b> for a payment the ' + (isCash ? 'cash count' : 'statement') + ' has but Abacus does not. It is added already cleared.</li>' +
+      '<li><b>Add transaction</b> for a payment the ' + (isCash ? 'cash count' : 'statement') + ' has but Abacus does not. It is added already cleared.</li>' +
       '<li><b>Edit</b> a row whose amount or day differs, then tick it. <b>Delete</b> a hand-typed row that never happened.</li>' +
       '<li><b>Mark settled</b> a pending hold that was paid, or delete one that was released.</li>' +
       '<li>Last resort: <b>Add correction</b> below books the remaining difference as a “Balance correction”.</li></ol></div>';
@@ -309,7 +323,7 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
       return main;
     }
     var body = '<div class="cols-rec hd"><span>✓</span><span>' + (isCash ? 'Date' : 'Booked') + '</span><span>Description</span><span>State</span><span>Actions</span><span style="text-align:right">Amount</span></div>';
-    body += '<div class="day"><span>To check (' + todo.length + ') — tick what appears on the ' + (isCash ? 'count' : 'statement') + '</span><span style="display:flex;gap:8px"><button type="button" class="btn" style="min-height:24px;padding:2px 10px;font-size:12px" data-act="addopen">Add transaction…</button><button type="button" class="btn" style="min-height:24px;padding:2px 10px;font-size:12px" data-act="tickall">' + (isCash ? 'Tick all up to the date' : 'Tick all') + '</button></span></div>';
+    body += '<div class="day"><span>To check (' + todo.length + ') — tick what appears on the ' + (isCash ? 'count' : 'statement') + '</span><span style="display:flex;gap:8px"><button type="button" class="btn" style="min-height:24px;padding:2px 10px;font-size:12px" data-act="addopen">Add transaction</button><button type="button" class="btn" style="min-height:24px;padding:2px 10px;font-size:12px" data-act="tickall">' + (isCash ? 'Tick all up to the date' : 'Tick all') + '</button></span></div>';
     body += todo.length ? todo.map(function (t) { return recRow(t, false); }).join('') : '<div style="padding:14px 20px;font-size:13px;color:#6E6E73">Nothing left to check up to this date.</div>';
     body += '<div class="day"><span>Already cleared (' + already.length + ')</span><button type="button" class="btn" style="min-height:24px;padding:2px 10px;font-size:12px" data-act="togglecleared">' + (st.showCleared ? 'Hide' : 'Show') + '</button></div>';
     if (st.showCleared) body += already.map(function (t) { return recRow(t, !t.staged); }).join('');
@@ -336,7 +350,7 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
   ];
   var STAT = { 'new': ['New', '#E6EEF9', '#0A4FA8'], dup: ['Already imported', '#EEEEF1', '#6E6E73'], maybe: ['Possible duplicate', '#FFF1D6', '#8A4B00'], settle: ['Settles pending', '#E3F4EA', '#1B6B3A'] };
   var HOLDS = [['h1', 'Bolt', '2026-10-08'], ['h2', 'City Kiosk', '2026-10-10']];
-  var HOLD_LABEL = { keep: 'Keep pending', settle: 'Mark settled', del: 'Delete', edit: 'Edit…' };
+  var HOLD_LABEL = { keep: 'Keep pending', settle: 'Mark settled', del: 'Delete', edit: 'Edit' };
   function undecided() { return (st.hold.h1 ? 0 : 1) + (st.hold.h2 ? 0 : 1); }
   function holdItem(h) {
     var id = h[0], d = st.hold[id], e = st.holdEdit[id], amt = e.amt;
@@ -350,7 +364,7 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
       '<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" data-act="hpend" data-id="' + id + '"' + (e.pend ? ' checked' : '') + '> Still pending</label>' +
       '<span class="sub" style="max-width:320px;line-height:1.4">Stays uncleared: the bank file does not show it.</span></div>' : '';
     var res = d ? '<span class="sub ' + (d === 'del' ? 'bad' : 'ok') + '">' + ({ keep: 'Stays pending and uncleared; asked again at the next import', settle: 'Stops being pending; stays uncleared until a bank row confirms it', del: 'Will be deleted when you import (undo brings it back)', edit: 'Will be updated when you import' })[d] + '</span>' : '<span class="sub bad">Needs a decision</span>';
-    return '<div class="item amber"><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><span style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" aria-label="Select ' + h[1] + '" data-act="holdsel" data-id="' + id + '"' + (st.holdSel[id] ? ' checked' : '') + ' style="width:16px;height:16px;margin-top:2px"><span style="display:flex;flex-direction:column;gap:2px"><b style="font-size:13px">' + h[1] + ' · −' + esc(amt) + ' PLN</b><span class="sub">Pending hold · value day ' + dayShort(h[2]) + ' · imported earlier, source PKO</span></span></span><span class="tag" style="background:#FFF1D6;color:#8A4B00">Pending payment not in the bank file</span></div>' +
+    return '<div class="item amber" data-act="holdrow" data-id="' + id + '" style="' + (st.holdSel[id] ? 'box-shadow:0 0 0 2px #0A66D9;' : '') + '"><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><span style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" aria-label="Select ' + h[1] + '" data-act="holdsel" data-id="' + id + '"' + (st.holdSel[id] ? ' checked' : '') + ' style="width:16px;height:16px;margin-top:2px"><span style="display:flex;flex-direction:column;gap:2px"><b style="font-size:13px">' + h[1] + ' · −' + esc(amt) + ' PLN</b><span class="sub">Pending hold · value day ' + dayShort(h[2]) + ' · imported earlier, source PKO</span></span></span><span class="tag" style="background:#FFF1D6;color:#8A4B00">Pending payment not in the bank file</span></div>' +
       '<span style="font-size:12px;color:#3A3A3C;line-height:1.45">This file is booked up to 21.10.2026, ' + days + ' days after this hold, and no row of it matches (settled rows match by merchant, amount within 5 % and value day ± 3). The bank has probably released it.</span>' +
       '<div class="opt">' + opts + '</div>' + edit + res + '</div>';
   }
@@ -370,37 +384,34 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
     return '<ol aria-label="Steps" style="display:flex;gap:6px;align-items:center;list-style:none;margin:0 0 0 12px;padding:0;flex-grow:1;font-size:12px">' + out + '</ol>';
   }
   function viewImp() {
-    var tb = steps() + '<button type="button" class="btn" data-act="history" aria-expanded="' + st.showHistory + '">History</button><button type="button" class="btn pri" data-act="choosefile">Choose file…</button>';
+    var tb = steps() + '<button type="button" class="btn" data-act="history" aria-expanded="' + st.showHistory + '">History</button><button type="button" class="btn pri" data-act="choosefile">Choose file</button>';
     var hist = st.showHistory ? '<div style="padding:12px 20px;border-bottom:1px solid #ECECF0;display:flex;flex-direction:column;gap:8px">' +
       [['saldo_export.csv', '21 Oct 2026, 18:40', 'Saldo · 4,612 new · 139 reviewed · all cleared'], ['Zestawienie operacji 21.08–21.09.csv', '21 Sep 2026, 09:12', 'PKO Personal · 74 new · 3 duplicates skipped · 0 stale holds · 0 balance gaps']].map(function (h) {
         return '<div style="display:flex;flex-direction:column;gap:3px;padding:10px 12px;border:1px solid #E5E5EA;border-radius:8px"><b style="font-size:13px">' + h[0] + '</b><span class="sub">' + h[1] + '</span><span style="font-size:12px;color:#3A3A3C">' + h[2] + '</span></div>';
       }).join('') + '</div>' : '';
     if (st.impStep === 1) {
-      return shell('Import', tb, hist + '<div style="padding:28px 20px;display:flex;flex-direction:column;gap:20px;align-items:center"><div style="width:100%;max-width:640px;box-sizing:border-box;border:2px dashed #C7C7CC;border-radius:14px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;background:#FAFAFC"><h2 style="margin:0;font-size:17px;font-weight:600">Drop a CSV export here</h2><p style="margin:0;font-size:13px;color:#3A3A3C;max-width:460px;line-height:1.45">Saldo exports and PKO BP statements are recognised automatically. Nothing is saved until you confirm the preview.</p><button type="button" class="btn">Choose file…</button></div><div style="display:flex;gap:10px;align-items:center;font-size:12px;color:#6E6E73"><span>Prototype: open a sample →</span><button type="button" class="btn" style="color:#0A4FA8;font-size:12px" data-act="pickpko">Zestawienie operacji 21.09–21.10.csv</button></div></div>');
+      return shell('Import', tb, hist + '<div style="padding:28px 20px;display:flex;flex-direction:column;gap:20px;align-items:center"><div style="width:100%;max-width:640px;box-sizing:border-box;border:2px dashed #C7C7CC;border-radius:14px;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;background:#FAFAFC"><h2 style="margin:0;font-size:17px;font-weight:600">Drop a CSV export here</h2><p style="margin:0;font-size:13px;color:#3A3A3C;max-width:460px;line-height:1.45">Saldo exports and PKO BP statements are recognised automatically. Nothing is saved until you confirm the preview.</p><button type="button" class="btn">Choose file</button></div><div style="display:flex;gap:10px;align-items:center;font-size:12px;color:#6E6E73"><span>Prototype: open a sample →</span><button type="button" class="btn" style="color:#0A4FA8;font-size:12px" data-act="pickpko">Zestawienie operacji 21.09–21.10.csv</button></div></div>');
     }
     if (st.impStep === 3) {
       var hs = [st.hold.h1, st.hold.h2], cnt = function (k) { return hs.filter(function (x) { return x === k; }).length; };
       var removed = (st.gap.g1a === 'remove' ? 1 : 0) + (st.gap.g1b === 'remove' ? 1 : 0);
       var done = '<div style="padding:28px 20px;display:flex;flex-direction:column;gap:14px;max-width:640px"><h2 style="margin:0;font-size:17px">PKO statement imported</h2>' +
         '<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7"><li>2 transactions imported, all cleared · 1 pending payment settled and cleared</li><li>1 hand-typed row confirmed by the bank and marked cleared (linked)</li><li>2 stale pending holds: ' + cnt('keep') + ' kept, ' + cnt('settle') + ' settled, ' + cnt('del') + ' deleted, ' + cnt('edit') + ' edited</li><li>1 balance gap, ' + removed + ' row' + (removed === 1 ? '' : 's') + ' removed</li></ul>' +
-        '<div class="item" style="background:#F2F7FE;border-color:#BCD3F2"><b style="font-size:13px">Check this account against the statement</b><span style="font-size:12px;color:#3A3A3C;line-height:1.45">The file closes at +3,569.55 PLN on 21.10.2026. Reconcile PKO Personal with this balance and date filled in.</span><span><button type="button" class="btn pri" data-act="goreconcile">Reconcile PKO Personal…</button></span></div></div>';
+        '<div class="item" style="background:#F2F7FE;border-color:#BCD3F2"><b style="font-size:13px">Check this account against the statement</b><span style="font-size:12px;color:#3A3A3C;line-height:1.45">The file closes at +3,569.55 PLN on 21.10.2026. Reconcile PKO Personal with this balance and date filled in.</span><span><button type="button" class="btn pri" data-act="goreconcile">Reconcile PKO Personal</button></span></div></div>';
       return shell('Import', tb, hist + done);
     }
     var cards = [
       ['all', 'All rows', '5', 'in this file', '#1D1D1F'], ['new', 'New', '2', 'imported as cleared', '#0A4FA8'], ['dup', 'Already imported', '1', 'skipped automatically', '#6E6E73'],
       ['maybe', 'Possible duplicates', '1', 'hand-typed row → link', '#8A4B00'], ['settle', 'Settle pending', '1', 'update earlier holds', '#1B6B3A'],
-      ['pending', 'Pending not in file', '2', 'decide before import', '#8A4B00'], ['gaps', 'Balance gaps', '1', 'rows may be missing', '#B3001B'], ['review', 'Needs review', '1', 'resolve before import', '#B3001B']
+      ['review', 'Needs review', '4', '1 decision · 2 pending · 1 gap', '#B3001B']
     ];
     var cardsH = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;padding:14px 20px">' + cards.map(function (c) {
-      var on = (c[0] === 'pending' || c[0] === 'gaps' || c[0] === 'review') ? st.impTab === 'review' && ((c[0] === 'review' && st.sub === 'decisions') || st.sub === (c[0] === 'gaps' ? 'gaps' : c[0] === 'pending' ? 'pending' : '#')) : (st.impTab === 'rows' && st.impCard === c[0]);
+      var on = st.impCard === c[0];
       return '<button type="button" class="card' + (on ? ' on' : '') + '" data-act="impcard" data-v="' + c[0] + '" aria-pressed="' + on + '"><span style="font-size:22px;font-weight:600;color:' + c[4] + '">' + c[2] + '</span><span style="font-size:12px;font-weight:500">' + c[1] + '</span><span class="sub">' + c[3] + '</span></button>';
     }).join('') + '</div>';
     var fileBar = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid #ECECF0;background:#FAFAFC"><span style="font-weight:600;font-size:13px">Zestawienie operacji za 21.09.2026 - 21.10.2026.csv</span><span class="tag" style="background:#E6EEF9;color:#0A4FA8">PKO BP statement</span><span class="sub">78 rows · booked 21.09–21.10.2026 · running balance present</span><span style="flex-grow:1"></span><label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#3A3A3C">Import into <select class="sel"><option>PKO Personal · PLN</option></select></label></div>';
-    var tabs = '<div role="tablist" class="tabs">' + [['rows', 'Transactions'], ['mapping', 'Accounts & categories'], ['review', 'Needs review (4)']].map(function (t) {
-      return '<button type="button" role="tab" aria-selected="' + (st.impTab === t[0]) + '" class="' + (st.impTab === t[0] ? 'on' : '') + '" data-act="imptab" data-v="' + t[0] + '">' + t[1] + '</button>';
-    }).join('') + '</div>';
     var main;
-    if (st.impTab === 'rows') {
+    if (st.impCard !== 'review') {
       main = '<div style="display:grid;grid-template-columns:130px 86px minmax(0,2fr) 110px minmax(0,1.6fr);gap:10px;padding:8px 20px;font-size:11px;font-weight:600;color:#6E6E73;border-bottom:1px solid #ECECF0"><span>Status</span><span>Date</span><span>Description</span><span style="text-align:right">Amount</span><span>Category / action</span></div>' +
         IMPROWS.filter(function (r) { return st.impCard === 'all' || st.impCard === r.st; }).map(function (r) {
           var s = STAT[r.st];
@@ -409,31 +420,27 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
             : '<span class="sub">' + r.note + '</span>';
           return '<div style="display:grid;grid-template-columns:130px 86px minmax(0,2fr) 110px minmax(0,1.6fr);gap:10px;align-items:center;padding:8px 20px;font-size:13px;border-bottom:1px solid #F3F3F6;min-height:40px"><span class="tag" style="background:' + s[1] + ';color:' + s[2] + '">' + s[0] + '</span><span style="color:#3A3A3C">' + r.date + '</span><span style="display:flex;flex-direction:column;min-width:0"><span class="ell">' + esc(r.payee) + '</span><span class="sub ell">' + esc(r.sub) + '</span></span><span style="text-align:right;font-weight:600">' + money(r.amt, 'PLN', true) + '</span><span style="display:flex;flex-direction:column;gap:2px">' + action + '</span></div>';
         }).join('') + '<div style="padding:10px 20px;font-size:12px;color:#6E6E73">Showing sample rows of 78.</div>';
-    } else if (st.impTab === 'mapping') {
-      main = '<div style="padding:16px 20px;font-size:13px;color:#3A3A3C">Unchanged from the approved import screen (account and category mapping).</div>';
     } else {
       var nSelH = HOLDS.filter(function (h) { return st.holdSel[h[0]]; }).length;
-      var subs = '<div class="seg" role="tablist" aria-label="Needs review" style="margin:14px 20px 0;width:fit-content">' + [['decisions', 'Decisions (1)'], ['pending', 'Pending payments (' + HOLDS.length + ')'], ['gaps', 'Balance gaps (1)']].map(function (t) {
+      var subs = '<div class="tabs" role="tablist" aria-label="Needs review">' + [['all', 'All (4)'], ['decisions', 'Decisions (1)'], ['pending', 'Pending payments (' + HOLDS.length + ')'], ['gaps', 'Balance gaps (1)']].map(function (t) {
         return '<button type="button" role="tab" aria-selected="' + (st.sub === t[0]) + '" class="' + (st.sub === t[0] ? 'on' : '') + '" data-act="sub" data-v="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div>';
-      var inner;
-      if (st.sub === 'decisions') {
-        inner = '<p style="margin:0;font-size:12px;color:#6E6E73">Rows the importer could not place confidently. Each needs a decision before importing.</p><div class="item"><div style="display:flex;justify-content:space-between"><b style="font-size:13px">Unknown operation type</b><span class="sub">15.10.2026</span></div><span style="font-size:12px;color:#3A3A3C;line-height:1.45">“Przelew na telefon przychodz. zew.”, −200.00 PLN. The sign says money went out.</span><div class="opt">' + [['expense', 'Expense'], ['transfer', 'Transfer to my account'], ['skip', 'Skip']].map(function (o) { return '<label><input type="radio" name="rv" data-act="review" data-v="' + o[0] + '"' + (st.review === o[0] ? ' checked' : '') + '> ' + o[1] + '</label>'; }).join('') + '</div></div>';
-      } else if (st.sub === 'pending') {
-        inner = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" data-act="holdall" style="width:16px;height:16px"' + (nSelH === HOLDS.length ? ' checked' : '') + '> Select all</label><span style="display:flex;gap:8px;align-items:center"><span class="sub">' + nSelH + ' selected</span><button type="button" class="btn" data-act="holdbulk" data-v="keep"' + (nSelH ? '' : ' disabled') + '>Keep pending</button><button type="button" class="btn" data-act="holdbulk" data-v="settle"' + (nSelH ? '' : ' disabled') + '>Mark settled</button><button type="button" class="btn" data-act="holdbulk" data-v="del"' + (nSelH ? '' : ' disabled') + '>Delete</button><button type="button" class="btn" data-act="keepall">Keep all</button></span></div>' +
-          '<p style="margin:0;font-size:12px;color:#6E6E73;line-height:1.45">Holds from earlier imports that this file should have settled (value day at least 5 days before its last booked day, 21.10) and did not. Each needs a decision before you import. The count is kept on the import record, which is how you see whether such cases happen at all.</p>' + HOLDS.map(holdItem).join('');
-      } else {
-        inner = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><b style="font-size:13px">Balance continuity: 1 gap</b><button type="button" class="btn" data-act="gapleaveall">Leave all</button></div>' +
-          '<div class="item red"><div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center"><b style="font-size:13px" class="bad">Rows may be missing between 14.10 and 16.10</b><span class="tag" style="background:#FDE7EA;color:#B3001B">Balance gap −210.00 PLN</span></div>' + gapTable() +
-          '<span style="font-size:12px;color:#3A3A3C;line-height:1.45">The balance after 14.10 is 4,351.40 but the next row starts from 4,141.40: rows adding up to −210.00 are not in this file. <b>Leave</b> imports a row as the file says; <b>Remove</b> does not import it (for example to export a corrected period and import again). This is a warning; it never blocks the import.</span></div>' +
-          '<div class="item" style="background:#F3FBF6;border-color:#BFE3CB"><b style="font-size:13px" class="ok">File start matches PKO Personal</b><span style="font-size:12px;color:#3A3A3C;line-height:1.45">The oldest row starts from 2,000.00 PLN; the cleared balance of PKO Personal on 20.09.2026 is 2,000.00 PLN. (If it differed, a warning would say by how much.)</span></div>';
-      }
-      main = subs + '<div style="display:flex;flex-direction:column;gap:12px;padding:14px 20px">' + inner + '</div>';
+      var secDecisions = '<div class="item"><div style="display:flex;justify-content:space-between"><b style="font-size:13px">Unknown operation type</b><span class="sub">15.10.2026</span></div><span style="font-size:12px;color:#3A3A3C;line-height:1.45">“Przelew na telefon przychodz. zew.”, −200.00 PLN. The sign says money went out.</span><div class="opt">' + [['expense', 'Expense'], ['transfer', 'Transfer to my account'], ['skip', 'Skip']].map(function (o) { return '<label><input type="radio" name="rv" data-act="review" data-v="' + o[0] + '"' + (st.review === o[0] ? ' checked' : '') + '> ' + o[1] + '</label>'; }).join('') + '</div></div>';
+      var secPending = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" data-act="holdall" style="width:16px;height:16px"' + (nSelH === HOLDS.length ? ' checked' : '') + '> Select all</label><span style="display:flex;gap:8px;align-items:center"><span class="sub">' + nSelH + ' selected</span><button type="button" class="btn" data-act="holdbulk" data-v="keep"' + (nSelH ? '' : ' disabled') + '>Keep pending</button><button type="button" class="btn" data-act="holdbulk" data-v="settle"' + (nSelH ? '' : ' disabled') + '>Mark settled</button><button type="button" class="btn" data-act="holdbulk" data-v="del"' + (nSelH ? '' : ' disabled') + '>Delete</button><button type="button" class="btn" data-act="keepall">Keep all</button></span></div>' +
+        '<p style="margin:0;font-size:12px;color:#6E6E73;line-height:1.45">Holds from earlier imports that this file should have settled (value day at least 5 days before its last booked day, 21.10) and did not. Click selects one, ⌘ click adds or removes one, ⇧ click selects a range. Each needs a decision before you import; the count is kept on the import record.</p>' + HOLDS.map(holdItem).join('');
+      var secGaps = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><b style="font-size:13px">Balance continuity: 1 gap</b><button type="button" class="btn" data-act="gapleaveall">Leave all</button></div>' +
+        '<div class="item red"><div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center"><b style="font-size:13px" class="bad">Rows may be missing between 14.10 and 16.10</b><span class="tag" style="background:#FDE7EA;color:#B3001B">Balance gap −210.00 PLN</span></div>' + gapTable() +
+        '<span style="font-size:12px;color:#3A3A3C;line-height:1.45">The balance after 14.10 is 4,351.40 but the next row starts from 4,141.40: rows adding up to −210.00 are not in this file. <b>Leave</b> imports a row as the file says; <b>Remove</b> does not import it. This is a warning; it never blocks the import.</span></div>' +
+        '<div class="item" style="background:#F3FBF6;border-color:#BFE3CB"><b style="font-size:13px" class="ok">File start matches PKO Personal</b><span style="font-size:12px;color:#3A3A3C;line-height:1.45">The oldest row starts from 2,000.00 PLN; the cleared balance of PKO Personal on 20.09.2026 is 2,000.00 PLN. (If it differed, a warning would say by how much.)</span></div>';
+      var sect = function (title, body) { return '<div style="display:flex;flex-direction:column;gap:12px"><b style="font-size:13px;border-bottom:1px solid #ECECF0;padding-bottom:6px">' + title + '</b>' + body + '</div>'; };
+      var inner = st.sub === 'decisions' ? secDecisions : st.sub === 'pending' ? secPending : st.sub === 'gaps' ? secGaps
+        : sect('Decisions (1)', secDecisions) + sect('Pending payments (2)', secPending) + sect('Balance gaps (1)', secGaps);
+      main = subs + '<div style="display:flex;flex-direction:column;gap:18px;padding:14px 20px">' + inner + '</div>';
     }
     var u = undecided();
     var removed = (st.gap.g1a === 'remove' ? 1 : 0) + (st.gap.g1b === 'remove' ? 1 : 0);
     var f = '<div class="foot"><span class="sub" style="max-width:600px;line-height:1.4">' + (u ? '<b class="bad">' + u + ' pending payment' + (u === 1 ? '' : 's') + ' not in the file still need a decision (Needs review → Pending payments).</b> ' : '') + (removed ? removed + ' row' + (removed === 1 ? '' : 's') + ' next to the balance gap will not be imported. ' : '') + 'All or nothing: if anything fails, nothing is saved.</span><button type="button" class="btn pri" data-act="commit"' + (u ? ' disabled' : '') + '>Import 3 transactions</button></div>';
-    return shell('Import', tb, hist + fileBar + cardsH + tabs + main, f);
+    return shell('Import', tb, hist + fileBar + cardsH + main, f);
   }
 
   // ---- render + events ---------------------------------------------------------------------
@@ -442,6 +449,18 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
     var fa = document.activeElement, fid = fa && fa.id, pos = fa && fa.selectionStart;
     app.innerHTML = st.view === 'tx' ? viewTx() : st.view === 'imp' ? viewImp() : st.view === 'rec' ? viewRec() : viewAcc();
     if (fid) { var el = document.getElementById(fid); if (el) { el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch (e) {} } }
+  }
+  // click selects one, cmd/ctrl+click adds or removes one, shift+click selects the range from the last clicked
+  function pick(e, map, key, id, sel) {
+    var ids = [].slice.call(app.querySelectorAll(sel)).map(function (n) { return n.getAttribute('data-id'); });
+    if (e.metaKey || e.ctrlKey) { map[id] = !map[id]; }
+    else if (e.shiftKey && st.lastSel[key] && ids.indexOf(st.lastSel[key]) >= 0) {
+      var a = ids.indexOf(st.lastSel[key]), b = ids.indexOf(id), lo = Math.min(a, b), hi = Math.max(a, b);
+      Object.keys(map).forEach(function (k) { delete map[k]; });
+      ids.slice(lo, hi + 1).forEach(function (x) { map[x] = true; });
+      return;
+    } else { var only = map[id] && Object.keys(map).filter(function (k) { return map[k]; }).length === 1; Object.keys(map).forEach(function (k) { delete map[k]; }); if (!only) map[id] = true; }
+    st.lastSel[key] = id;
   }
   function openRec(fromImport) { st.view = 'rec'; st.phase = 'setup'; st.fromImport = !!fromImport; st.done = null; clearStaged(); }
   app.addEventListener('click', function (e) {
@@ -452,13 +471,15 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
       if (st.view === 'rec' && hasStaged() && !confirm('Discard the staged changes of this reconciliation?')) return;
       clearStaged(); st.view = v === 'none' ? 'tx' : v;
     }
-    else if (act === 'pickacct') st.acct = v;
-    else if (act === 'startrec') openRec(false);
+    else if (act === 'opensheet') { st.sheet = v; st.acct = v; }
+    else if (act === 'closesheet') st.sheet = null;
+    else if (act === 'startrec') { st.sheet = null; openRec(false); }
     else if (act === 'beginrec') { st.phase = 'work'; }
     else if (act === 'changestmt') { st.phase = 'setup'; }
     else if (act === 'cancelrec') { clearStaged(); st.view = 'acc'; }
     else if (act === 'filter') st.filter = v;
-    else if (act === 'select') st.sel[id] = !st.sel[id];
+    else if (act === 'select') pick(e, st.sel, 'tx', id, '[data-act=select]');
+    else if (act === 'holdrow') { if (e.target.closest('label,input,select,button,a')) return; pick(e, st.holdSel, 'hold', id, '[data-act=holdrow]'); }
     else if (act === 'mark') { TXNS.forEach(function (x) { if (st.sel[x.id] && !x.pend) x.cl = v === '1'; }); st.sel = {}; }
     else if (act === 'settle') { TXNS.forEach(function (x) { if (st.sel[x.id] && x.pend) { x.pend = false; x.settledByHand = true; } }); st.sel = {}; }
     else if (act === 'tickall') { rowsOf(st.acct).forEach(function (x) { if (!x.cl && !x.pend && stmtDay(x) <= st.stmt[st.acct].date) st.ticks[x.id] = true; }); }
@@ -483,16 +504,15 @@ input[type=text],input[type=date]{font-size:13px;padding:4px 6px;border-radius:6
       st.lastRec[a] = { date: sm.date, bal: closing };
       st.done = { a: a, date: sm.date, bal: closing, n: n, corr: corr };
     }
-    else if (act === 'imptab') { st.impTab = v; if (v === 'rows') st.impCard = 'all'; }
     else if (act === 'sub') st.sub = v;
-    else if (act === 'impcard') { if (v === 'pending' || v === 'gaps') { st.impTab = 'review'; st.sub = v; } else if (v === 'review') { st.impTab = 'review'; st.sub = 'decisions'; } else { st.impTab = 'rows'; st.impCard = v; } }
+    else if (act === 'impcard') { st.impCard = v; if (v === 'review') st.sub = 'all'; }
     else if (act === 'keepall') { st.hold.h1 = 'keep'; st.hold.h2 = 'keep'; }
     else if (act === 'holdbulk') { HOLDS.forEach(function (h) { if (st.holdSel[h[0]]) st.hold[h[0]] = v; }); st.holdSel = {}; }
     else if (act === 'gapleaveall') { st.gap = { g1a: 'leave', g1b: 'leave' }; }
     else if (act === 'commit') st.impStep = 3;
     else if (act === 'history') st.showHistory = !st.showHistory;
     else if (act === 'choosefile') { st.impStep = 1; st.hold = { h1: null, h2: null }; st.holdSel = {}; st.gap = { g1a: 'leave', g1b: 'leave' }; }
-    else if (act === 'pickpko') { st.impStep = 2; st.impTab = 'review'; st.sub = 'pending'; st.impCard = 'all'; }
+    else if (act === 'pickpko') { st.impStep = 2; st.impCard = 'review'; st.sub = 'all'; }
     else if (act === 'goreconcile') { st.acct = 'pko'; st.stmt.pko = { date: '2026-10-21', bal: '3569.55' }; st.view = 'rec'; st.phase = 'setup'; st.fromImport = true; st.done = null; clearStaged(); }
     render();
   });
