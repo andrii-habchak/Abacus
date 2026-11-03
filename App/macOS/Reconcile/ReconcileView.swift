@@ -23,13 +23,41 @@ struct ReconcileView: View {
         ReconcileWorking(model: model)
       }
     }
+    // An explicit ideal size, like Import's: without it the window follows the content's ideal height.
+    .frame(minWidth: 0, idealWidth: 900, maxWidth: .infinity, minHeight: 0, idealHeight: 600, maxHeight: .infinity)
     .navigationTitle(model.title)
+    #if DEBUG
+      .task { await debugDrive() }
+    #endif
     .alert("Reconcile", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
       Button("OK") { model.errorMessage = nil }
     } message: {
       Text(model.errorMessage ?? "")
     }
   }
+
+  #if DEBUG
+    /// UI checks (in-app snapshot): `-AbacusReconcileStart YES` leaves the setup step (with
+    /// `-AbacusReconcileDay <YYYY-MM-DD>` and `-AbacusReconcileClosing <text>` when given),
+    /// `-AbacusReconcileTickAll YES` ticks every row to check, `-AbacusReconcileShowCleared YES`
+    /// opens "Already cleared".
+    private func debugDrive() async {
+      let defaults = UserDefaults.standard
+      FileHandle.standardError.write(Data("RECONCILE appeared phase=\(model.phase)\n".utf8))
+      guard defaults.bool(forKey: "AbacusReconcileStart") else { return }
+      for _ in 0..<50 where model.phase == .loading { try? await Task.sleep(for: .milliseconds(100)) }
+      if let day = defaults.string(forKey: "AbacusReconcileDay") {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        if let date = formatter.date(from: day) { model.statementDay = date }
+      }
+      if let closing = defaults.string(forKey: "AbacusReconcileClosing") { model.closingText = closing }
+      model.start()
+      if defaults.bool(forKey: "AbacusReconcileTickAll") { model.tickAll() }
+      if defaults.bool(forKey: "AbacusReconcileShowCleared") { model.showCleared = true }
+      FileHandle.standardError.write(Data("RECONCILE driven phase=\(model.phase)\n".utf8))
+    }
+  #endif
 
   private var header: some View {
     HStack(spacing: 12) {
