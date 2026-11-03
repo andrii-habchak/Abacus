@@ -12,6 +12,13 @@ prototypes, then wave 2 lanes for them; (2) the QA-170 open differences from the
 N3 owner questions in `docs/status/N3.md`; (4) tidy: remove merged lane worktrees and branches, drop the untracked N9
 screenshots; (5) N8 stays deferred.
 
+_Update 2026-11-04 00:05 CET: QA-171 merged (`wp/QA-171-n6-polish`, `docs/status/QA-171.md`): segmented All / Cleared /
+Uncleared filter, Mark cleared / uncleared / settled buttons and legend, footer Balance · Cleared · Uncleared for one
+account, no duplicate Reconcile title. Gate green (605 tests in the main run, app build). Not seen running in the app:
+the filter row scrolls sideways, so check it in a narrow window. Skipped on purpose: Accounts-list badge, Import done-step
+date (matches the prototype). Item (2) of the next stage above is therefore done. No further lane is running; the pause
+above stays in force until the owner reviews N5 / N7._
+
 _Updated 2026-11-03 (orchestrator, earlier)._ Merged: QA-170 (Reconcile screen had no ideal size and rendered blank; import
 Pending payments / Balance gaps sub-tabs showed the Decisions text) and N9 (event editor as a sheet, Archive/Delete icons on
 event rows, separate "New event" / "New category" toolbar pills). Gate green (1,221 tests with real samples, app build).
