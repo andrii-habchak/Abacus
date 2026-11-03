@@ -13,6 +13,13 @@ public final class DataSettingsModel {
   public private(set) var isWorking = false
   /// A backup chosen for restore, waiting for the user's confirmation.
   public var pendingRestore: URL?
+  /// Automatic snapshots, newest first (N1).
+  public private(set) var snapshots: [BackupEntry] = []
+  public private(set) var snapshotFolder: URL?
+  public private(set) var mirrorFolder: URL?
+  public private(set) var mirrorCount = 0
+  /// A snapshot chosen in the list, waiting for the restore confirmation.
+  public var pendingSnapshot: BackupEntry?
   /// The outcome of the last action, shown under the buttons.
   public private(set) var message: String?
   public private(set) var messageIsError = false
@@ -30,6 +37,18 @@ public final class DataSettingsModel {
   public func load() async {
     databaseURL = await environment.dataLocation.databaseURL()
     lastExport = await loadLastExport()
+    await loadSnapshots()
+  }
+
+  /// Whether this session takes automatic snapshots (false for demo databases and previews).
+  public var hasSnapshots: Bool { environment.snapshots != nil }
+
+  public func loadSnapshots() async {
+    guard let service = environment.snapshots else { return }
+    snapshots = await service.list()
+    snapshotFolder = await service.folder()
+    mirrorFolder = await service.mirrorFolder()
+    mirrorCount = await service.mirrorCount()
   }
 
   /// The stored day; a date B1 kept in `UserDefaults` is moved into the database once.
@@ -74,6 +93,34 @@ public final class DataSettingsModel {
 
   public static let backupExtension = "abacus"
 
+  /// "~/Library/Application Support/Abacus/Backups".
+  public var snapshotFolderPath: String { Self.abbreviated(snapshotFolder) }
+
+  public var mirrorFolderPath: String { mirrorFolder.map { Self.abbreviated($0) } ?? "Not set" }
+
+  /// "Automatic snapshots on launch (every 24 h); 14 daily, 6 monthly and the last 3 before a migration are kept."
+  public static let snapshotNote =
+    "A snapshot is taken at launch when the newest is older than a day, and before every database migration. "
+    + "The newest of each of the last 14 days and 6 months is kept, plus the last 3 taken before a migration."
+
+  public var mirrorNote: String {
+    guard mirrorFolder != nil else {
+      return "A copy on the same disk is not disaster recovery. Pick an iCloud Drive or external disk folder for a second copy."
+    }
+    return "Every snapshot is also copied here (\(mirrorCount) there now)."
+  }
+
+  /// "3 Nov 2026, 09:00".
+  public func stamp(_ date: Date) -> String {
+    "\(formats.day(of: date)), \(formats.time(date))"
+  }
+
+  static func abbreviated(_ url: URL?) -> String {
+    guard let url else { return "" }
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    return url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
+  }
+
   /// "Replace all data with “abacus-backup-2026-10-14.abacus”?"
   public var restoreTitle: String {
     "Replace all data with “\(pendingRestore?.lastPathComponent ?? "")”?"
@@ -100,6 +147,58 @@ public final class DataSettingsModel {
       }
     } catch {
       show("Couldn't export the backup: \(error.localizedDescription)", error: true)
+    }
+  }
+
+  /// Back up now: a manual snapshot into the backup folder (and the second one).
+  public func backUpNow() async {
+    guard let service = environment.snapshots else { return }
+    isWorking = true
+    defer { isWorking = false }
+    do {
+      let entry = try await service.backUpNow()
+      show("Backed up as \(entry.url.lastPathComponent).")
+    } catch {
+      show("Couldn't back up: \(error.localizedDescription)", error: true)
+    }
+    await loadSnapshots()
+  }
+
+  /// Choose… / Remove for the second folder.
+  public func setMirrorFolder(_ folder: URL?) async {
+    guard let service = environment.snapshots else { return }
+    await service.setMirrorFolder(folder)
+    await loadSnapshots()
+  }
+
+  /// Restore on a list row: asks first (`pendingSnapshot`), see `confirmSnapshotRestore`.
+  public func askRestore(snapshot: BackupEntry) {
+    pendingSnapshot = snapshot
+  }
+
+  public func cancelSnapshotRestore() {
+    pendingSnapshot = nil
+  }
+
+  public var snapshotRestoreTitle: String {
+    "Replace all data with the snapshot of \(pendingSnapshot.map { stamp($0.date) } ?? "")?"
+  }
+
+  /// "Replace all data" for a snapshot: a safety snapshot of today's data first, then the
+  /// all-or-nothing restore (R-SET-2).
+  public func confirmSnapshotRestore() async {
+    guard let entry = pendingSnapshot else { return }
+    pendingSnapshot = nil
+    isWorking = true
+    defer { isWorking = false }
+    do {
+      try await environment.snapshots?.backUpBeforeRestore()
+      try await environment.backup.restore(from: entry.url)
+      show("Restored from the snapshot of \(stamp(entry.date)). Today's data was saved as “Before restore”.")
+      await loadSnapshots()
+      await onRestore?()
+    } catch {
+      show("Couldn't restore the snapshot: \(error.localizedDescription). Nothing was changed.", error: true)
     }
   }
 

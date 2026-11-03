@@ -81,7 +81,7 @@ struct BackupSnapshotTests {
   }
 
   @Test("R-SET-2: the last 3 pre-migration snapshots are kept, apart from the daily ones")
-  func preMigrationKeptSeparately() async throws {
+  func safetyKeptSeparately() async throws {
     let f = try Self.seeded()
     let store = Self.store()
     for day in 1...5 {
@@ -91,6 +91,17 @@ struct BackupSnapshotTests {
     let kept = store.list()
     #expect(kept.filter { $0.reason == .preMigration }.map { Self.calendar.component(.day, from: $0.date) } == [5, 4, 3])
     #expect(kept.filter { $0.reason == .automatic }.count == 1)
+  }
+
+  @Test("R-SET-2: manual and safety snapshots do not displace each other within a day")
+  func safetySnapshotsKeepManualOnes() async throws {
+    let f = try Self.seeded()
+    let store = Self.store()
+    let when = Self.date(2026, 11, 3)
+    try await store.snapshot(of: f.database, reason: .manual, now: when)
+    try await store.snapshot(of: f.database, reason: .preRestore, now: when.addingTimeInterval(60))
+    try await store.snapshot(of: f.database, reason: .preWrite, now: when.addingTimeInterval(120))
+    #expect(Set(store.list().map(\.reason)) == [.manual, .preRestore, .preWrite])
   }
 
   @Test("R-SET-2: a mirror folder receives every snapshot and is pruned the same way")

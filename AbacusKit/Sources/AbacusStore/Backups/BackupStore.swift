@@ -29,13 +29,14 @@ public struct BackupSnapshot: Sendable, Equatable, Identifiable {
 /// (readable by `SQLiteBackup.restore`); files are named `abacus-<UTC time>-<reason>.abacus`.
 ///
 /// Retention: the newest snapshot of each of the last 14 days and of each of the last 6 months
-/// (any reason except pre-migration), plus the last 3 pre-migration snapshots. Pruning applies
-/// to both folders.
+/// (automatic and manual ones), plus the last 3 of each safety kind (before a migration, before
+/// an MCP write, before a restore). Pruning applies to both folders.
 public struct BackupStore: Sendable {
   public static let fileExtension = "abacus"
   public static let dailyKept = 14
   public static let monthlyKept = 6
-  public static let preMigrationKept = 3
+  /// Last N kept of each safety reason (pre-migration, pre-write, pre-restore).
+  public static let safetyKept = 3
   /// An automatic snapshot is due when the newest one is older than this.
   public static let interval: TimeInterval = 24 * 3600
 
@@ -67,12 +68,14 @@ public struct BackupStore: Sendable {
   /// API the MCP server calls before a session's first write: `snapshot(of: db, reason: .preWrite)`.
   @discardableResult
   public func snapshot(
-    of database: any DatabaseWriter, reason: SnapshotReason, now: Date = Date()
+    of database: any DatabaseWriter, reason: SnapshotReason, now: Date = Date(), prune: Bool = true
   ) async throws -> BackupSnapshot {
-    try snapshotNow(of: database, reason: reason, now: now)
+    try snapshotNow(of: database, reason: reason, now: now, prune: prune)
   }
 
-  func snapshotNow(of database: any DatabaseWriter, reason: SnapshotReason, now: Date) throws -> BackupSnapshot {
+  func snapshotNow(
+    of database: any DatabaseWriter, reason: SnapshotReason, now: Date, prune: Bool = true
+  ) throws -> BackupSnapshot {
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
     let name = Self.fileName(date: now, reason: reason)
@@ -88,7 +91,7 @@ public struct BackupStore: Sendable {
         // The primary snapshot stands; the Settings list shows what the mirror holds.
       }
     }
-    prune(now: now)
+    if prune { self.prune(now: now) }
     return BackupSnapshot(url: url, date: Self.truncated(now), reason: reason)
   }
 
@@ -131,8 +134,10 @@ public struct BackupStore: Sendable {
   /// File names that survive pruning.
   func retained(_ snapshots: [BackupSnapshot]) -> Set<String> {
     var keep = Set<String>()
-    keep.formUnion(snapshots.filter { $0.reason == .preMigration }.prefix(Self.preMigrationKept).map(\.id))
-    let rotating = snapshots.filter { $0.reason != .preMigration }  // newest first
+    for reason in [SnapshotReason.preMigration, .preWrite, .preRestore] {
+      keep.formUnion(snapshots.filter { $0.reason == reason }.prefix(Self.safetyKept).map(\.id))
+    }
+    let rotating = snapshots.filter { $0.reason == .automatic || $0.reason == .manual }  // newest first
     var days = Set<DateComponents>()
     var months = Set<DateComponents>()
     for snapshot in rotating {

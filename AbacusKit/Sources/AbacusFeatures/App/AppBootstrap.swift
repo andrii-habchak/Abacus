@@ -26,7 +26,8 @@ public enum AppBootstrap {
           at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         $0.defaultDatabase = try! AbacusDatabase.open(at: url)
       case .appFile(let url):
-        $0.defaultDatabase = try! AbacusDatabase.open(at: url)
+        // N1: a database with migrations pending is snapshotted before they run.
+        $0.defaultDatabase = try! AbacusDatabase.open(at: url, backups: try? BackupStore.standard(defaults: defaults))
       }
     }
   }

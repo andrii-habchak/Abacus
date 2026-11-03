@@ -110,6 +110,36 @@ struct DataSettingsView: View {
           }
         }
       }
+      if model.hasSnapshots {
+        LabeledContent("Snapshots:") {
+          VStack(alignment: .leading, spacing: 6) {
+            Text(model.snapshotFolderPath)
+              .font(.system(.callout, design: .monospaced))
+              .textSelection(.enabled)
+            HStack {
+              Button("Back up now") { Task { await model.backUpNow() } }
+                .disabled(model.isWorking)
+              Button("Show in Finder") { reveal(model.snapshotFolder) }
+                .disabled(model.snapshotFolder == nil)
+            }
+            SnapshotList(model: model)
+            Hint(DataSettingsModel.snapshotNote)
+          }
+        }
+        LabeledContent("Second folder:") {
+          VStack(alignment: .leading, spacing: 6) {
+            Text(model.mirrorFolderPath)
+              .font(.system(.callout, design: .monospaced))
+              .textSelection(.enabled)
+            HStack {
+              Button("Choose…", action: chooseMirror)
+              Button("Remove") { Task { await model.setMirrorFolder(nil) } }
+                .disabled(model.mirrorFolder == nil)
+            }
+            Hint(model.mirrorNote)
+          }
+        }
+      }
       LabeledContent("Backup:") {
         VStack(alignment: .leading, spacing: 6) {
           HStack {
@@ -127,6 +157,18 @@ struct DataSettingsView: View {
       }
     }
     .formStyle(.columns)
+    .task { await model.loadSnapshots() }
+    .alert(
+      model.snapshotRestoreTitle,
+      isPresented: Binding(get: { model.pendingSnapshot != nil }, set: { if !$0 { model.cancelSnapshotRestore() } })
+    ) {
+      Button("Cancel", role: .cancel) { model.cancelSnapshotRestore() }
+      Button("Replace all data", role: .destructive) {
+        Task { await model.confirmSnapshotRestore() }
+      }
+    } message: {
+      Text("Everything currently in Abacus is replaced by the snapshot. Today's data is saved first as “Before restore”.")
+    }
     .alert(
       model.restoreTitle,
       isPresented: Binding(get: { model.pendingRestore != nil }, set: { if !$0 { model.cancelRestore() } })
@@ -165,6 +207,23 @@ struct DataSettingsView: View {
     Task { await model.moveDatabase(to: url) }
   }
 
+  private func reveal(_ folder: URL?) {
+    guard let folder else { return }
+    try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    NSWorkspace.shared.open(folder)
+  }
+
+  private func chooseMirror() {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.canCreateDirectories = true
+    panel.prompt = "Use This Folder"
+    panel.message = "Choose a second folder for snapshots, for example in iCloud Drive or on an external disk."
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    Task { await model.setMirrorFolder(url) }
+  }
+
   private func exportBackup() {
     let panel = NSSavePanel()
     panel.nameFieldStringValue = model.suggestedBackupName
@@ -183,6 +242,36 @@ struct DataSettingsView: View {
     panel.message = "Choose an Abacus backup. All current data will be replaced."
     guard panel.runModal() == .OK, let url = panel.url else { return }
     model.askRestore(from: url)
+  }
+}
+
+/// The snapshots, newest first, each with Restore.
+struct SnapshotList: View {
+  @Bindable var model: DataSettingsModel
+
+  var body: some View {
+    if model.snapshots.isEmpty {
+      Text("No snapshots yet.")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    } else {
+      List(model.snapshots) { entry in
+        HStack {
+          VStack(alignment: .leading, spacing: 1) {
+            Text(model.stamp(entry.date))
+            Text(entry.reason)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          Spacer()
+          Button("Restore…") { model.askRestore(snapshot: entry) }
+            .disabled(model.isWorking)
+        }
+      }
+      .frame(height: 150)
+      .frame(maxWidth: 380)
+      .border(Color.secondary.opacity(0.3))
+    }
   }
 }
 

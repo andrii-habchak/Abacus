@@ -13,6 +13,8 @@ public struct AppEnvironment: Sendable {
   public var rates: any RatesService
   public var backup: any BackupService
   public var dataLocation: any DataLocationService
+  /// Automatic snapshots (N1); nil where none are taken (tests, demo databases).
+  public var snapshots: (any SnapshotService)?
   /// A last-export date still in `UserDefaults` from before it moved into the database.
   public var legacyLastExport: LegacyLastExport
   public var today: @Sendable () -> Day
@@ -53,9 +55,11 @@ public struct AppEnvironment: Sendable {
     for setting in PreviewData.settings {
       if let key = SettingKey(rawValue: setting.id) { settings[key] = setting.value }
     }
-    return AppEnvironment(
+    var environment = AppEnvironment(
       settings: InMemorySettingsRepository(settings), rateStore: store, rates: service,
       backup: PreviewBackupService(), dataLocation: PreviewDataLocationService(),
       today: { PreviewData.today })
+    environment.snapshots = PreviewSnapshotService()
+    return environment
   }
 }
