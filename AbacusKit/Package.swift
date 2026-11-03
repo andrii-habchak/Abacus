@@ -10,7 +10,9 @@ let package = Package(
     .library(name: "AbacusFX", targets: ["AbacusFX"]),
     .library(name: "AbacusImport", targets: ["AbacusImport"]),
     .library(name: "AbacusFeatures", targets: ["AbacusFeatures"]),
+    .library(name: "AbacusMCP", targets: ["AbacusMCP"]),
     .executable(name: "abacus-import", targets: ["AbacusImportTool"]),
+    .executable(name: "abacus-mcp", targets: ["AbacusMCPTool"]),
   ],
   dependencies: [
     .package(url: "https://github.com/pointfreeco/sqlite-data", from: "1.9.0")
@@ -40,6 +42,13 @@ let package = Package(
       name: "AbacusImportTool",
       dependencies: ["AbacusImport", "AbacusStore", .product(name: "SQLiteData", package: "sqlite-data")]
     ),
+    // Local MCP server over the app database: tools and query layer (WP N2).
+    .target(
+      name: "AbacusMCP",
+      dependencies: ["AbacusDomain", "AbacusStore", .product(name: "SQLiteData", package: "sqlite-data")]
+    ),
+    // Stdio executable `abacus-mcp`, a thin shell over AbacusMCP.
+    .executableTarget(name: "AbacusMCPTool", dependencies: ["AbacusMCP"]),
     // Helpers shared by test targets: fixtures, real-sample lookup, test tags.
     .target(
       name: "AbacusTestSupport",
@@ -56,5 +65,6 @@ let package = Package(
       resources: [.copy("Fixtures")]
     ),
     .testTarget(name: "AbacusFeaturesTests", dependencies: ["AbacusFeatures", "AbacusTestSupport"]),
+    .testTarget(name: "AbacusMCPTests", dependencies: ["AbacusMCP", "AbacusTestSupport"]),
   ]
 )
