@@ -37,6 +37,24 @@ struct TransactionFilterBar: View {
     .frame(height: Self.rowHeight + 20)
   }
 
+  /// N6: All / Cleared / Uncleared.
+  private var clearedMenu: some View {
+    Menu {
+      ForEach(ClearedFilter.allCases, id: \.self) { option in
+        Button {
+          model.filters.cleared = option
+        } label: {
+          if model.filters.cleared == option { Label(option.title, systemImage: "checkmark") } else { Text(option.title) }
+        }
+      }
+    } label: {
+      Text(model.filters.cleared == .all ? "Cleared" : model.filters.cleared.title)
+    }
+    .menuStyle(.button)
+    .fixedSize()
+    .help("Show all, cleared or uncleared transactions")
+  }
+
   private func row(labels: FilterBarLabels) -> some View {
     HStack(spacing: 8) {
       chip(.date, active: model.filters.isDateFiltered, label: labels.date, systemImage: "calendar")
@@ -47,6 +65,7 @@ struct TransactionFilterBar: View {
       }
       chip(.types, active: model.filters.isTypeFiltered, label: labels.types)
       chip(.event, active: model.filters.eventID != nil, label: labels.event)
+      clearedMenu
       if model.filters.importBatch != nil {
         importChip(label: labels.importFile)
       }

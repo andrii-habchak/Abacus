@@ -93,6 +93,20 @@ public struct CategoryReassignImpact: Hashable, Sendable {
 }
 
 /// Filters of the transaction list (R-LIST-2…6). Empty sets mean "any".
+/// N6: the Transactions list's cleared filter. A transaction is *cleared* when every side is cleared
+/// and it is not a pending hold; *uncleared* is everything else.
+public enum ClearedFilter: String, CaseIterable, Hashable, Sendable {
+  case all, cleared, uncleared
+
+  public var title: String {
+    switch self {
+    case .all: "All"
+    case .cleared: "Cleared"
+    case .uncleared: "Uncleared"
+    }
+  }
+}
+
 public struct TxnQuery: Hashable, Sendable {
   public var fromDay: Day?
   public var toDay: Day?
@@ -112,13 +126,17 @@ public struct TxnQuery: Hashable, Sendable {
   /// "Uncategorised" also matches transfers (they never have a category). Set while a debt is
   /// filtered: its rows are transfers, so the Categories menu can offer Uncategorised (C28).
   public var uncategorisedIncludesTransfers: Bool
+  /// N6: only cleared or only uncleared transactions.
+  public var cleared: ClearedFilter
 
   public init(
     fromDay: Day? = nil, toDay: Day? = nil, categoryIDs: Set<Category.ID> = [],
     accountIDs: Set<Account.ID> = [], types: Set<TxnType> = [], eventIDs: Set<Event.ID> = [],
     search: String = "", newestFirst: Bool = true, includeUncategorised: Bool = false,
-    importBatchIDs: Set<ImportBatch.ID> = [], uncategorisedIncludesTransfers: Bool = false
+    importBatchIDs: Set<ImportBatch.ID> = [], uncategorisedIncludesTransfers: Bool = false,
+    cleared: ClearedFilter = .all
   ) {
+    self.cleared = cleared
     self.fromDay = fromDay
     self.toDay = toDay
     self.categoryIDs = categoryIDs

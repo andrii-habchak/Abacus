@@ -99,8 +99,13 @@ struct SectionDetail: View {
     case .rates:
       RatesView(model: app.rates)
     case .accounts:
-      AccountsView(model: session.accounts, displayCurrency: app.displayCurrency)
-        .shellToolbar()
+      if let reconcile = session.reconcile {
+        ReconcileView(model: reconcile)
+          .shellToolbar()
+      } else {
+        AccountsView(model: session.accounts, displayCurrency: app.displayCurrency)
+          .shellToolbar()
+      }
     case .categories:
       CategoriesView(model: session.categories)
         .shellToolbar()
@@ -123,6 +128,7 @@ struct SectionDetail: View {
         ImportView(
           model: wizard,
           onShowTransactions: { session.showTransactions(ofImport: $0) },
+          onReconcile: { session.openReconcile(accountID: $0.accountID, offer: ($0.day, $0.closingMinor)) },
           onDataChanged: { Task { await session.dataChanged() } }
         )
         .shellToolbar()

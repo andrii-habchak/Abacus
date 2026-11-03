@@ -48,7 +48,10 @@ struct ImportBulkTests {
     #expect(model.tabs.first { $0.tab == .review }?.label == "Needs review (\(total))")
     #expect(model.tabs.contains { $0.label.hasPrefix("Category assignment") } == false)
     #expect(model.cards.first { $0.status == .needsReview }?.count == "\(total)")
-    #expect(model.reviewFilters.map(\.label) == ["All (\(total))", "Decisions (\(decisions))", "Categories (\(needing.count))"])
+    // N6: a PKO file adds the Pending payments and Balance gaps sub-tabs (counts of the sample: none).
+    #expect(
+      model.reviewFilters.map(\.label)
+        == ["All (\(total))", "Decisions (\(decisions))", "Categories (\(needing.count))", "Pending payments (0)", "Balance gaps (0)"])
     #expect(model.reviewFilter == .all)
 
     let first = try #require(needing.first)

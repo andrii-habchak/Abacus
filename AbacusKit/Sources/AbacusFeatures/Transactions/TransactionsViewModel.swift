@@ -16,8 +16,14 @@ public final class TransactionsViewModel {
   public var converter: any CurrencyConverter { didSet { rebuild() } }
   /// R-SET-3; off by default.
   public var refundsReduceSpending: Bool { didSet { if oldValue != refundsReduceSpending { rebuild() } } }
-  /// The highlighted row.
-  public var selection: Txn.ID?
+  /// The highlighted rows: click selects one, ⌘ click adds or removes one, ⇧ click selects a range
+  /// (N6: the cleared actions work on several rows).
+  public var selectedIDs: Set<Txn.ID> = []
+  /// The highlighted row when exactly one is selected.
+  public var selection: Txn.ID? {
+    get { selectedIDs.count == 1 ? selectedIDs.first : nil }
+    set { selectedIDs = newValue.map { [$0] } ?? [] }
+  }
 
   /// Names and colours the rows show; a change rebuilds the rows at once (R-MGMT-7).
   public private(set) var reference = TransactionsReference() { didSet { if oldValue != reference { rebuild() } } }
@@ -74,6 +80,7 @@ public final class TransactionsViewModel {
   /// C48: the move traces of the loaded rows ("Moved from <account>"); empty without a reader.
   public private(set) var moveTraces: [Txn.ID: TxnMove] = [:]
   @ObservationIgnored let moveReader: (any TxnMoveReading)?
+  @ObservationIgnored private let reconcile: (any ReconcileRepository)?
   /// "Link a refund…", "This is a refund of…", "Unlink refund"; nil = not offered.
   @ObservationIgnored let refunds: (any RefundRepository)?
   /// The search sheet of a refund link; nil when closed.
@@ -87,9 +94,10 @@ public final class TransactionsViewModel {
     calendar: Calendar = .current, today: @escaping @Sendable () -> Day = { Day(Date()) },
     settings: (any SettingsRepository)? = nil, debts: (any DebtRepository)? = nil,
     refunds: (any RefundRepository)? = nil, pageSize: Int = 500,
-    moves: (any TxnMoveReading)? = nil
+    moves: (any TxnMoveReading)? = nil, reconcile: (any ReconcileRepository)? = nil
   ) {
     self.refunds = refunds
+    self.reconcile = reconcile
     self.moveReader = moves
     self.pageSize = max(1, pageSize)
     self.settings = settings
@@ -221,7 +229,8 @@ public final class TransactionsViewModel {
     exhausted = limit.map { fetched.count < $0 } ?? true
     isLoading = false
     errorMessage = nil
-    if let selection, !fetched.contains(where: { $0.txn.id == selection }) { self.selection = nil }
+    let loaded = Set(fetched.map(\.txn.id))
+    if !selectedIDs.isSubset(of: loaded) { selectedIDs.formIntersection(loaded) }
     rebuild()
   }
 
@@ -535,6 +544,47 @@ public final class TransactionsViewModel {
   }
 
   public func clearFilters() { filters.clear() }
+
+  // MARK: Cleared (N6)
+
+  /// N6: marks the transactions cleared or uncleared on the side of the account they are listed
+  /// under (pending holds are skipped); the list reloads.
+  public func setCleared(_ ids: Set<Txn.ID>, _ cleared: Bool) async {
+    guard let reconcile else { return }
+    var byAccount: [Account.ID: [Txn.ID]] = [:]
+    for row in rows where ids.contains(row.txn.id) {
+      byAccount[row.txn.accountID, default: []].append(row.txn.id)
+      // A transfer listed once is marked on both of its sides.
+      if let to = row.txn.toAccountID { byAccount[to, default: []].append(row.txn.id) }
+    }
+    do {
+      for (account, ids) in byAccount { try await reconcile.setCleared(ids, cleared, on: account) }
+      await reload()
+      await onDataChange?()
+    } catch {
+      errorMessage = "Couldn't change the cleared mark."
+    }
+  }
+
+  /// N6: a pending hold was paid: it stops being pending and stays uncleared.
+  public func markSettled(_ ids: Set<Txn.ID>) async {
+    guard let reconcile else { return }
+    do {
+      try await reconcile.markSettled(Array(ids))
+      await reload()
+      await onDataChange?()
+    } catch {
+      errorMessage = "Couldn't mark the payment settled."
+    }
+  }
+
+  public func canMarkSettled(_ ids: Set<Txn.ID>) -> Bool {
+    rows.contains { ids.contains($0.txn.id) && $0.txn.isPendingAtBank }
+  }
+
+  public func canMarkCleared(_ ids: Set<Txn.ID>) -> Bool {
+    rows.contains { ids.contains($0.txn.id) && !$0.txn.isPendingAtBank }
+  }
 
   // MARK: Transfer to a debt account (R-DEBT-11, R-DEBT-19, docs/status/C22.md)
 

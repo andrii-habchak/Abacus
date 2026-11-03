@@ -356,10 +356,10 @@ extension ImportWizardModel {
 
   public var tabs: [ImportTabItem] {
     guard let preview else { return [] }
-    var tabs = [
-      ImportTabItem(tab: .transactions, label: "Transactions"),
-      ImportTabItem(tab: .mapping, label: "Accounts & categories"),
-    ]
+    var tabs = [ImportTabItem(tab: .transactions, label: "Transactions")]
+    // N6: a PKO statement belongs to one account (picked in "Import into"), so there is nothing to
+    // map; the tab stays for Saldo files and appears for a PKO file only with counterparties to map.
+    if preview.source == .saldo || hasCounterpartyMappings { tabs.append(ImportTabItem(tab: .mapping, label: "Accounts & categories")) }
     if preview.source == .saldo { tabs.append(ImportTabItem(tab: .events, label: "Events from tags")) }
     tabs.append(ImportTabItem(tab: .review, label: "Needs review (\(needsReviewTotal.formatted()))"))
     return tabs
@@ -857,6 +857,10 @@ extension ImportWizardModel {
     if !preview.rulesToSave.isEmpty {
       text += ImportFormat.count(preview.rulesToSave.count, "new rule") + " will be saved from your choices. "
     }
+    if !preview.continuity.gaps.isEmpty {
+      let removed = preview.gapRowsRemoved
+      if removed > 0 { text += ImportFormat.count(removed, "row") + " next to a balance gap will not be imported. " }
+    }
     return text + "All or nothing: if anything fails, nothing is saved."
   }
 
@@ -866,6 +870,10 @@ extension ImportWizardModel {
     var parts: [String] = []
     if preview.unresolvedReviewCount > 0 {
       parts.append(ImportFormat.count(preview.unresolvedReviewCount, "row") + " in Needs review still " + (preview.unresolvedReviewCount == 1 ? "needs" : "need") + " a decision.")
+    }
+    let stale = preview.undecidedStaleHolds.count
+    if stale > 0 {
+      parts.append(ImportFormat.count(stale, "pending payment") + " not in the file still " + (stale == 1 ? "needs" : "need") + " a decision (Needs review → Pending payments).")
     }
     parts += preview.issues
     if parts.isEmpty, !hasWork { parts.append("Nothing new in this file.") }

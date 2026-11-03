@@ -95,7 +95,7 @@ struct TransactionsView: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
       ScrollViewReader { proxy in
-      List(selection: $model.selection) {
+      List(selection: $model.selectedIDs) {
         // One flat ForEach (day header, rows, attached lines): a nested one costs SwiftUI about
         // 0.5 ms per row on every appended page (C28, measured).
         ForEach(model.content.items) { item in
@@ -143,6 +143,14 @@ struct TransactionsView: View {
           if model.canUnlinkRefund(id) {
             Button("Unlink Refund") { Task { await model.unlinkRefund(id) } }
           }
+        }
+        // N6: the cleared mark (bookkeeping only; balances and reports do not change).
+        if model.canMarkCleared(ids) {
+          Button("Mark Cleared") { Task { await model.setCleared(ids, true) } }
+          Button("Mark Uncleared") { Task { await model.setCleared(ids, false) } }
+        }
+        if model.canMarkSettled(ids) {
+          Button("Mark Settled") { Task { await model.markSettled(ids) } }
         }
       } primaryAction: { ids in
         if let id = ids.first { onOpen?(id) }

@@ -176,6 +176,13 @@ struct TxnFilter: Sendable {
       let ids = sqlList(query.accountIDs.sorted())
       parts.append(#"("txns"."accountID" IN \#(ids) OR "txns"."toAccountID" IN \#(ids))"#)
     }
+    let allCleared =
+      #"("txns"."isCleared" = 1 AND "txns"."isPendingAtBank" = 0 AND ("txns"."toAccountID" IS NULL OR "txns"."isToCleared" = 1))"#
+    switch query.cleared {
+    case .all: break
+    case .cleared: parts.append("\(raw: allCleared)")
+    case .uncleared: parts.append("NOT \(raw: allCleared)")
+    }
     if !query.eventIDs.isEmpty {
       parts.append(#""txns"."eventID" IN \#(sqlList(query.eventIDs.sorted()))"#)
     }

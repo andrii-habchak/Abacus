@@ -15,15 +15,18 @@ struct ImportView: View {
   @State private var model: ImportWizardModel
   var onShowTransactions: (ImportBatch.ID) -> Void
   var onDataChanged: () -> Void
+  /// N6: "Reconcile <account>" on the Done step of a PKO import (the statement's closing balance).
+  var onReconcile: (ImportReconcileOffer) -> Void
 
   @State private var isDropTargeted = false
 
   init(
     model: ImportWizardModel, onShowTransactions: @escaping (ImportBatch.ID) -> Void = { _ in },
-    onDataChanged: @escaping () -> Void = {}
+    onReconcile: @escaping (ImportReconcileOffer) -> Void = { _ in }, onDataChanged: @escaping () -> Void = {}
   ) {
     _model = State(initialValue: model)
     self.onShowTransactions = onShowTransactions
+    self.onReconcile = onReconcile
     self.onDataChanged = onDataChanged
   }
 
@@ -223,7 +226,7 @@ struct ImportView: View {
     case .review:
       ImportReviewStep(model: model)
     case .done:
-      ImportDoneStep(model: model, isTargeted: isDropTargeted) {
+      ImportDoneStep(model: model, isTargeted: isDropTargeted, onReconcile: onReconcile) {
         if let id = model.summary?.batch.id { onShowTransactions(id) }
       }
     }
@@ -361,6 +364,7 @@ struct ImportChooseFileStep: View {
 struct ImportDoneStep: View {
   let model: ImportWizardModel
   var isTargeted = false
+  var onReconcile: (ImportReconcileOffer) -> Void = { _ in }
   let showTransactions: () -> Void
 
   var body: some View {
@@ -384,6 +388,20 @@ struct ImportDoneStep: View {
           .buttonStyle(.borderedProminent)
       }
       .padding(.top, 6)
+      if let offer = model.reconcileOffer {
+        VStack(spacing: 6) {
+          Text("Check this account against the statement")
+            .font(.system(size: 13, weight: .semibold))
+          Text("The file closes at \(offer.closingText) on \(offer.dayText). Reconcile \(offer.accountName) with this balance and date filled in.")
+            .font(.system(size: 12))
+            .foregroundStyle(ImportPalette.label)
+            .multilineTextAlignment(.center)
+          Button("Reconcile \(offer.accountName)") { onReconcile(offer) }
+        }
+        .padding(14)
+        .frame(maxWidth: 460)
+        .background(RoundedRectangle(cornerRadius: 10).fill(ImportPalette.accentFill))
+      }
       // The next file can be dropped right here (C31).
       VStack(spacing: 6) {
         Image(systemName: "arrow.down.doc")

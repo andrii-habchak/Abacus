@@ -102,7 +102,8 @@ extension ImportWizardModel {
   public var selectableIDs: [String] {
     switch tab {
     case .transactions: visibleRows.map(\.id)
-    case .review: visibleReviewItems.map(\.id) + visibleCategoryRows.map(\.id)
+    case .review:
+      reviewFilter == .pending ? staleItems.map(\.id) : visibleReviewItems.map(\.id) + visibleCategoryRows.map(\.id)
     case .mapping, .events: []
     }
   }
@@ -116,24 +117,31 @@ extension ImportWizardModel {
 
   /// The cards the Needs review tab shows under the current sub-filter.
   public var visibleReviewItems: [ImportReviewItem] {
-    reviewFilter == .categories ? [] : reviewItems
+    [.all, .decisions].contains(reviewFilter) ? reviewItems : []
   }
 
   /// The category rows the Needs review tab shows under the current sub-filter.
   public var visibleCategoryRows: [ImportRowItem] {
-    reviewFilter == .decisions ? [] : sorted(categoryRows)
+    [.all, .categories].contains(reviewFilter) ? sorted(categoryRows) : []
   }
 
   /// Decisions + categories, each row once: the Needs review tab and card count.
-  public var needsReviewTotal: Int { reviewItems.count + categoryRows.count }
+  public var needsReviewTotal: Int {
+    reviewItems.count + categoryRows.count + (preview?.staleHolds.count ?? 0) + (preview?.continuity.gaps.count ?? 0)
+  }
 
   /// The sub-filter buttons of the Needs review tab with their counts.
   public var reviewFilters: [ImportReviewFilterItem] {
-    [
+    var items = [
       ImportReviewFilterItem(filter: .all, label: "All (\(needsReviewTotal.formatted()))"),
       ImportReviewFilterItem(filter: .decisions, label: "Decisions (\(reviewItems.count.formatted()))"),
       ImportReviewFilterItem(filter: .categories, label: "Categories (\(categoryRows.count.formatted()))"),
     ]
+    if preview?.source == .pko {
+      items.append(ImportReviewFilterItem(filter: .pending, label: "Pending payments (\((preview?.staleHolds.count ?? 0).formatted()))"))
+      items.append(ImportReviewFilterItem(filter: .gaps, label: "Balance gaps (\((preview?.continuity.gaps.count ?? 0).formatted()))"))
+    }
+    return items
   }
 
   public func select(_ id: String, mode: ImportSelectionMode) {

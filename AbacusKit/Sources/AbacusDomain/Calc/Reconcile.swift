@@ -13,6 +13,13 @@ public struct ReconcileRow: Hashable, Identifiable, Sendable {
   public var statementDay: Day
   public var id: Txn.ID { item.txn.id }
   public var isPending: Bool { item.txn.isPendingAtBank }
+
+  public init(item: TxnWithLines, effectMinor: Int64, isCleared: Bool, statementDay: Day) {
+    self.item = item
+    self.effectMinor = effectMinor
+    self.isCleared = isCleared
+    self.statementDay = statementDay
+  }
 }
 
 public struct ReconcileFigures: Hashable, Sendable {
@@ -23,6 +30,11 @@ public struct ReconcileFigures: Hashable, Sendable {
   public var clearedMinor: Int64
   /// statement − cleared: 0 means the account agrees with the bank.
   public var differenceMinor: Int64 { statementMinor - clearedMinor }
+
+  public init(statementMinor: Int64, clearedMinor: Int64) {
+    self.statementMinor = statementMinor
+    self.clearedMinor = clearedMinor
+  }
 }
 
 public enum Reconcile {

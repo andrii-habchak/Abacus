@@ -173,7 +173,7 @@ struct ImportNeedsReviewTab: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      ImportBulkBar(model: model)
+      if model.reviewFilter != .pending, model.reviewFilter != .gaps { ImportBulkBar(model: model) }
       filterBar
       ImportRule(color: ImportPalette.softRule)
       GeometryReader { proxy in
@@ -203,8 +203,19 @@ struct ImportNeedsReviewTab: View {
   private func list(columns: ImportColumns) -> some View {
     let cards = model.visibleReviewItems
     let rows = model.visibleCategoryRows
+    let isChecks = model.reviewFilter == .pending || model.reviewFilter == .gaps
     return ScrollView {
       VStack(alignment: .leading, spacing: 0) {
+        if model.reviewFilter == .pending {
+          ImportStaleList(model: model)
+            .padding(.horizontal, ImportMetrics.horizontalPadding)
+            .padding(.vertical, 16)
+        }
+        if model.reviewFilter == .gaps {
+          ImportGapList(model: model)
+            .padding(.horizontal, ImportMetrics.horizontalPadding)
+            .padding(.vertical, 16)
+        }
         if model.reviewFilter != .categories {
           decisions(cards)
             .frame(maxWidth: 900, alignment: .leading)
@@ -238,7 +249,27 @@ struct ImportNeedsReviewTab: View {
               .padding(.vertical, 10)
           }
         }
-        if model.reviewFilter == .all, cards.isEmpty, rows.isEmpty {
+        if model.reviewFilter == .all, model.preview?.source == .pko {
+          if !model.staleItems.isEmpty {
+            Text("Pending payments not in the bank file")
+              .font(.system(size: 13, weight: .semibold))
+              .padding(.horizontal, ImportMetrics.horizontalPadding)
+              .padding(.top, 8)
+            ImportStaleList(model: model)
+              .padding(.horizontal, ImportMetrics.horizontalPadding)
+              .padding(.vertical, 12)
+          }
+          if !model.gapItems.isEmpty {
+            Text("Balance gaps")
+              .font(.system(size: 13, weight: .semibold))
+              .padding(.horizontal, ImportMetrics.horizontalPadding)
+              .padding(.top, 8)
+            ImportGapList(model: model)
+              .padding(.horizontal, ImportMetrics.horizontalPadding)
+              .padding(.vertical, 12)
+          }
+        }
+        if model.reviewFilter == .all, cards.isEmpty, rows.isEmpty, model.needsReviewTotal == 0, !isChecks {
           Text("Nothing needs review in this file.")
             .font(.system(size: 13))
             .foregroundStyle(.secondary)

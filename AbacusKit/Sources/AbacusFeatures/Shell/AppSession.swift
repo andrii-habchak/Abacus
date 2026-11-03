@@ -25,12 +25,15 @@ public final class AppSession {
   public let debts: DebtsModel
   /// Import wizard (WP B6); nil in previews without a database.
   public let importWizard: ImportWizardModel?
+  /// N6: the open Reconcile screen (shown in place of Accounts); nil when closed.
+  public private(set) var reconcile: ReconcileModel?
   /// What the transaction editor (WP B4) reads and writes; its converter follows the rates.
   public private(set) var editorDependencies: TransactionEditorDependencies
 
   /// The result of "Load Sample Data", shown in an alert.
   public var sampleDataMessage: String?
 
+  @ObservationIgnored private let manageDependencies: ManageDependencies
   @ObservationIgnored private let database: (any DatabaseWriter)?
   @ObservationIgnored private let refresher: RateRefresher?
   @ObservationIgnored private var tasks: [Task<Void, Never>] = []
@@ -63,8 +66,10 @@ public final class AppSession {
         dependencies: .live(database: database, converter: { await refresher?.snapshot.table }))
     }
     self.editorDependencies = editorDependencies
+    self.manageDependencies = manage
     self.database = database
     self.refresher = refresher
+    accounts.onReconcile = { [weak self] id in self?.openReconcile(accountID: id) }
     app.data.onRestore = { [weak self] in await self?.dataChanged() }
     // "New transaction" on the Categories page starts with the selected category (R-MGMT-8).
     app.newTransactionCategory = { [weak self] in
@@ -170,7 +175,8 @@ public final class AppSession {
       calendar: calendar, today: { Day(now(), calendar: calendar) },
       settings: SQLiteSettingsRepository(database: database),
       debts: SQLiteDebtRepository(database: database, calendar: calendar), refunds: refunds,
-      moves: SQLiteImportStore(database: database, calendar: calendar))
+      moves: SQLiteImportStore(database: database, calendar: calendar),
+      reconcile: SQLiteReconcileRepository(database: database, calendar: calendar))
     var editor = TransactionEditorDependencies(
       transactions: SQLiteTxnRepository(database: database, calendar: calendar, converter: currentRates),
       accounts: SQLiteAccountRepository(database: database, calendar: calendar),
@@ -349,6 +355,29 @@ public final class AppSession {
     case .debts: await debts.load()
     case .importFiles: break
     }
+  }
+
+  /// N6: opens Reconcile for an account in place of the Accounts page, from the account window or
+  /// from the import's Done step (`offer`: the statement's last booked day and balance).
+  public func openReconcile(accountID: Account.ID, offer: (day: Day, closingMinor: Int64)? = nil) {
+    let model = ReconcileModel(dependencies: manageDependencies, accountID: accountID, offer: offer)
+    model.onClose = { [weak self] in self?.closeReconcile() }
+    model.onDataChanged = { [weak self] in
+      guard let self else { return }
+      Task {
+        await self.transactions.reload()
+        await self.dashboard.load()
+        await self.reloadManageScreens()
+      }
+    }
+    reconcile = model
+    app.section = .accounts
+    Task { await model.load() }
+  }
+
+  public func closeReconcile() {
+    reconcile = nil
+    Task { await accounts.load() }
   }
 
   /// An event's "Show N transactions": the list filtered to that event (R-EVT-3).

@@ -391,6 +391,33 @@ struct AccountFields: View {
             .monospacedDigit()
             .foregroundStyle(model.isBalanceNegative ? ManagePalette.negative : Color.primary)
         }
+        if let cleared = model.clearedBalanceText {
+          HStack {
+            Text("Cleared balance").foregroundStyle(.secondary)
+            Spacer()
+            Text(cleared).monospacedDigit()
+          }
+          .font(.system(size: 12))
+          HStack {
+            Text("Last reconciled").foregroundStyle(.secondary)
+            Spacer()
+            Text(model.lastReconciledText)
+          }
+          .font(.system(size: 12))
+          HStack(alignment: .center) {
+            if model.isNotReconciled {
+              Text("Not reconciled")
+                .font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.orange.opacity(0.2)))
+            }
+            Spacer()
+            Button("Reconcile") { model.reconcileSelected() }
+              .buttonStyle(.borderedProminent)
+              .help("Compare this account with your bank statement (or counted cash)")
+          }
+        }
         Text(model.deleteHint).font(.system(size: 11)).foregroundStyle(.secondary)
       }
     }
