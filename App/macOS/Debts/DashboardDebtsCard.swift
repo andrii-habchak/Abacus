@@ -35,6 +35,9 @@ struct DashboardDebtsCard: View {
             Text("No rate").font(.title3).foregroundStyle(.secondary)
               .help("A rate to the display currency is missing; refresh the rates")
           }
+          if let caption = debts.totalCaption {
+            Text(caption).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+          }
         }
         if debts.isEmpty {
           Text("No open debts.").font(.callout).foregroundStyle(.secondary)

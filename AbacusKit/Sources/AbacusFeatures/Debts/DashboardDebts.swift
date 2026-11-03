@@ -47,6 +47,9 @@ public struct DashboardDebts: Hashable, Sendable {
   public let totalText: String?
   /// Some balance was converted: shown as "≈ total".
   public let isApproximate: Bool
+  /// D73: the total per currency ("−zł1,200 · +€300", display sign, no labels); only when the open
+  /// balances span more than one currency, nil otherwise.
+  public let totalCaption: String?
   public let people: [Person]
   public let missing: DashboardMissingRates
 
@@ -78,10 +81,15 @@ public struct DashboardDebts: Hashable, Sendable {
       complete
       ? Money(minorUnits: summary.people.reduce(0) { $0 + ($1.converted?.minorUnits ?? 0) }, currency: currency)
       : nil
+    var perCurrency: [Currency: Int64] = [:]
+    for person in summary.people { for money in person.balances { perCurrency[money.currency, default: 0] += money.minorUnits } }
+    let totalCaption = DebtSign.caption(
+      perCurrency.sorted { $0.key.rawValue < $1.key.rawValue }.map { Money(minorUnits: $0.value, currency: $0.key) },
+      magnitude: format.money)
     return DashboardDebts(
       currency: currency, owedToMe: summary.owedToMe, iOwe: summary.iOwe, total: total,
       totalText: total.map { DebtSign.text(stored: $0, magnitude: format.money) },
       isApproximate: summary.people.contains { $0.balances.contains { $0.currency != currency } },
-      people: people, missing: missing)
+      totalCaption: totalCaption, people: people, missing: missing)
   }
 }

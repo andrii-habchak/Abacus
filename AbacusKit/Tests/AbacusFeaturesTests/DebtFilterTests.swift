@@ -352,3 +352,22 @@ struct DebtFilterTests {
     #expect(model.filters.accountIDs == mariaAccounts)
   }
 }
+
+@Suite("Debt filter date range (D73)")
+struct DebtFilterDateRangeTests {
+  @Test("R-DEBT-22 / C24, D73: removing the last debt restores the range active before the filter; a hand-picked range stays")
+  func restoresRange() {
+    let debt = UUID()
+    var filters = TransactionFilters.debt(debt, accountIDs: [])
+    filters.dateRangeBeforeDebt = .preset(.thisYear)
+    #expect(filters.dateRange == TransactionFilters.allDates)
+    filters.removeDebt(debt)
+    #expect(filters.dateRange == .preset(.thisYear) && filters.dateRangeBeforeDebt == nil)
+
+    var picked = TransactionFilters.debt(debt, accountIDs: [])
+    picked.dateRangeBeforeDebt = .preset(.thisYear)
+    picked.dateRange = .preset(.last30Days)
+    picked.removeDebt(debt)
+    #expect(picked.dateRange == .preset(.last30Days))
+  }
+}
