@@ -5,7 +5,8 @@ import Foundation
 import SQLiteData
 
 // Headless import into the app database with the wizard's defaults, for loading real exports
-// before the import wizard exists. Prints counts only.
+// before the import wizard exists. Prints counts only. Like the wizard it finds the expense an
+// incoming row refunds and the estimated transfer a row completes, and accepts those offers.
 //
 //   abacus-import [--db <path>] [--pko-account <name>] [--remember-pko <CUR>=<account>]...
 //                 [--balance-correction <account>=<balance>@<YYYY-MM-DD>]... [--dry-run] <file>...
@@ -76,7 +77,9 @@ let accounts = SQLiteAccountRepository(database: database, calendar: calendar)
 let pipeline = ImportPipeline(
   store: SQLiteImportStore(database: database, calendar: calendar), accounts: accounts,
   categories: SQLiteCategoryRepository(database: database), events: SQLiteEventRepository(database: database),
-  rules: SQLiteRuleRepository(database: database), calendar: calendar)
+  rules: SQLiteRuleRepository(database: database), calendar: calendar,
+  refunds: SQLiteRefundRepository(database: database, calendar: calendar),
+  counterparts: SQLiteTransferCounterpartRepository(database: database, calendar: calendar))
 print("Database: \(url.path)\(options.dryRun ? " (dry run)" : "")")
 
 // Remembered PKO statement accounts per currency (same key the pipeline reads).
@@ -136,7 +139,11 @@ for file in options.files {
     throw ToolError("PKO statement needs --pko-account <name> (no remembered account yet)")
   }
   if options.dryRun { continue }
-  let ready = preview.acceptingDefaults()
+  // Same linking as the wizard's "Accept": refunds of expenses and real figures of estimated
+  // transfers; counts only.
+  let offers = preview.acceptingOffers()
+  let ready = offers.preview.acceptingDefaults()
+  print("  offers accepted: refunds \(offers.refunds) · estimated transfers completed \(offers.estimates)")
   guard ready.canCommit else { throw ToolError("Preview still has unresolved choices") }
   let summary = try await pipeline.commit(ready)
   print(

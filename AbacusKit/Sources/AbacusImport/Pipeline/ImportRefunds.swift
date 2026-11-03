@@ -77,6 +77,22 @@ extension ImportPreview {
     recompute()
   }
 
+  /// Headless imports (command-line tool, no one to click "Accept"): takes every offer the
+  /// wizard would show, in file order — the refund of an expense with the same description and
+  /// amount (C35) and the real figure of an estimated transfer (C38). Rows without an offer, and
+  /// transfers whose amount on the other account is unknown, are left as `acceptDefaults()`
+  /// handles them. Returns the preview and how many of each were accepted.
+  public func acceptingOffers() -> (preview: ImportPreview, refunds: Int, estimates: Int) {
+    var preview = self
+    var refunds = 0
+    var estimates = 0
+    for id in rows.map(\.id) {
+      if let offer = preview.row(id)?.refundOffer, preview.acceptRefund(offer, forRow: id) { refunds += 1 }
+      if preview.row(id)?.estimateOffer != nil, preview.acceptEstimate(forRow: id) { estimates += 1 }
+    }
+    return (preview, refunds, estimates)
+  }
+
   fileprivate func rowIndex(_ id: String) -> Int? { rows.firstIndex { $0.id == id } }
 }
 

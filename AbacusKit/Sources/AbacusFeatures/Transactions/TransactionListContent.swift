@@ -41,7 +41,7 @@ public struct TransactionListContent: Equatable, Sendable {
   }
 
   public struct Badge: Hashable, Sendable {
-    public enum Kind: Hashable, Sendable { case pending, refund, event, debt, moved }
+    public enum Kind: Hashable, Sendable { case pending, refund, event, debt, moved, correction }
     public var kind: Kind
     public var label: String
   }
@@ -330,6 +330,8 @@ public struct TransactionListContent: Equatable, Sendable {
     } else if txn.isRefund {
       badges.append(Badge(kind: .refund, label: txn.type == .income ? "Reversal" : "Refund"))
     }
+    // R-ACC-4 (C29): the "Balance correction" booked when an account with a balance is archived.
+    if txn.isBalanceCorrection { badges.append(Badge(kind: .correction, label: "Correction")) }
     if let event = txn.eventID.flatMap({ reference.eventsByID[$0] }) {
       badges.append(Badge(kind: .event, label: event.name))
     }
