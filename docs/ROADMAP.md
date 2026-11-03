@@ -97,11 +97,11 @@ Status values: `proposed` (defaults below await the owner's approval), `approved
 | Id | Item | Size | Needs | Status |
 |----|------|------|-------|--------|
 | N1 | Automatic backups and pre-migration snapshot | M | defaults below | proposed |
-| N2 | Local MCP server (read tools, then write tools) | M | defaults below | proposed |
+| N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | approved 2026-11-03 |
 | N3 | Stabilisation pass | M | scope below | proposed |
 | N4 | Database encryption research (document only, no code) | S | none | proposed |
-| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | proposed |
-| N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | proposed |
+| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved 2026-11-03 (spec step first) |
+| N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | approved 2026-11-03 (spec step first) |
 | N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved 2026-11-03 (spec step first) |
 | N8 | Quick actions: ⌘K command palette, menu-bar quick add, Shortcuts / App Intents "add expense" | M | TA text + approved prototypes | deferred (owner, 2026-11-03) |
 
@@ -137,7 +137,16 @@ R-SET-2) and migrations run on open (`AbacusDatabase.open`) with no copy taken.
   (for example an account with transactions is archived, not deleted); a propose-then-confirm step
   per write; a cap on rows per call; a backup snapshot (N1) before a session's first write; every
   write logged; no restore-from-backup and no settings changes through MCP. The lane must check how
-  the running app notices changes written by another process.
+  the running app notices changes written by another process (proposed design next).
+- **Cross-process changes (proposed):** the database stays shared. (1) The app polls SQLite's
+  `PRAGMA data_version` about once a second; it changes whenever another connection wrote, so the
+  app then reloads its screens (this also covers `abacus-import`). (2) After a write the MCP
+  server posts a Darwin notification for an instant refresh. (3) The app also refreshes when it
+  becomes active. Writes use short transactions and a busy timeout (WAL allows readers meanwhile).
+  The MCP server refuses to write when the database is on a newer schema than its own build. A
+  sheet open on a record that MCP changes meanwhile warns before saving over it. A single-writer
+  design (MCP asks the running app to perform the write over a local channel) is a heavier
+  alternative if the above proves flaky.
 - First task: check whether the official Swift MCP SDK fits Swift 6.2 / macOS 26; otherwise a small
   hand-written JSON-RPC over stdio. Setup snippet for an AI client goes into the README.
 
@@ -164,15 +173,31 @@ that. Recommendation, no code.
 - Screens: an Upcoming section in the sidebar and a dashboard widget "Upcoming (30 days)".
 - Forecast: projected account balances and net worth for 90 days = today + scheduled items only
   (no guessing of everyday spending); an "include average spending" toggle can come later.
-- Open: remind vs auto-create, forecast horizon, whether the budget is part of the forecast.
+- **Forecast vs reality (owner, 2026-11-03):** the app saves a forecast snapshot (projected
+  balances and expected items for the next 90 days) about once a day (new table, migration v18).
+  A chart overlays a chosen past snapshot on the actual balance or net worth, and a small
+  accuracy panel lists, per scheduled item, expected vs actual date and amount. The gap between the
+  lines is the everyday spending the forecast ignores, which also shows whether the later "include
+  average spending" toggle is worth building.
+- Decided: remind only. Open: forecast horizon (default 90 days), whether the budget is part of
+  the forecast, how long snapshots are kept.
 
 **N6 Reconciliation.**
 - `cleared` flag on transactions; per-account Reconcile mode: enter the statement date and closing
   balance, see the difference against the cleared sum, mark rows cleared.
-- Rows from a bank file count as cleared; pending holds do not.
+- Rows from a bank file count as cleared (a booked bank row cannot disappear); imported Saldo rows
+  count as cleared too (the owner is migrating from Saldo; an import never deletes anything).
+  Hand-typed rows start uncleared and become cleared when a bank row matches them (existing fuzzy
+  match) or when ticked in Reconcile. A cash account is reconciled against a counted amount.
+- **Stale pending holds (owner, 2026-11-03):** PKO holds vanish from later exports
+  (`docs/import/pko-format.md`); one that never settles stays pending forever today. At import, a
+  pending hold that the new file covers (value date at least a few days older than the file's last
+  booked day) and that matched no row is raised in the preview as "pending payment not in the bank
+  file" and needs a manual decision: keep, delete, or edit. It also shows whether such cases occur
+  at all. Pending holds stay uncleared until settled.
 - Balance-continuity detection at import: compare each row's running balance with the next row (PKO
   "Saldo po transakcji") and warn on a gap; this was proposed earlier in `docs/status/C41.md`.
-- Open: auto-clear on import yes or no.
+- Decided: bank-file rows auto-clear on import.
 
 **N7 App lock.** System authentication (Touch ID with password fallback). Locks at launch, after
 an idle time set in Settings (default 5 minutes), and on sleep or screen lock; content hidden while locked. **Off by
