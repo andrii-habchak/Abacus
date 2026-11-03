@@ -109,7 +109,29 @@ public struct ImportPipeline: Sendable {
       accountMappings: accountMappings, categoryMappings: categoryMappings, converter: await converter())
     await suggestRefunds(&built)
     await suggestEstimateMatches(&built)
+    await addChecks(&built)
     return built
+  }
+
+  /// N6: the stale holds and the balance continuity of a PKO file (R-CLR-8, R-CLR-9). Read-only; a
+  /// failing lookup just leaves the checks out.
+  private func addChecks(_ preview: inout ImportPreview) async {
+    guard preview.source == .pko, let target = preview.targetAccountID else { return }
+    preview.continuity = BalanceContinuity.analyze(preview.parsedRows, calendar: calendar)
+    preview.staleHolds = []
+    if let range = StaleHolds.bookedRange(of: preview.parsedRows, calendar: calendar),
+      let window = StaleHolds.window(for: range, calendar: calendar),
+      let pending = try? await store.pendingTxns(accountID: target, from: window.lowerBound, to: window.upperBound)
+    {
+      preview.staleHolds = StaleHolds.find(
+        pending: pending, claimed: preview.claimedExistingIDs, range: range, calendar: calendar)
+    }
+    preview.startCheck = nil
+    if let start = preview.continuity.startMinor, let day = preview.continuity.startDay,
+      let cleared = try? await store.clearedBalance(accountID: target, before: day), cleared.hasClearedRows
+    {
+      preview.startCheck = StartBalanceCheck(fileStartMinor: start, accountClearedMinor: cleared.balanceMinor)
+    }
   }
 
   /// Same as `preview(data:fileName:targetAccountID:)`; for headless imports (command-line
@@ -137,6 +159,7 @@ public struct ImportPipeline: Sendable {
     updated.recompute()
     await suggestRefunds(&updated)
     await suggestEstimateMatches(&updated)
+    await addChecks(&updated)
     return updated
   }
 

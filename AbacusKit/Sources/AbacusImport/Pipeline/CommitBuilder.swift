@@ -392,6 +392,34 @@ struct CommitBuilder {
     summary.alreadyImported = preview.counts.alreadyImported
     summary.skipped = preview.counts.skipped
 
+    // N6 (R-CLR-8): what the owner decided for each stale pending hold; kept ones change nothing.
+    var deletedHolds: [Txn] = []
+    for hold in preview.staleHolds {
+      switch preview.staleHoldDecision(hold.id) ?? .keep {
+      case .keep:
+        summary.staleKept += 1
+      case .markSettled:
+        var settled = hold.txn
+        settled.isPendingAtBank = false
+        flagOriginals.append(hold.txn)
+        updated.append(settled)
+        summary.staleSettled += 1
+      case .delete:
+        deletedHolds.append(hold.txn)
+        summary.staleDeleted += 1
+      case .edit(let edit):
+        var edited = hold.txn
+        edited.amountMinor = edit.amountMinor
+        edited.occurredAt = edit.day.date(calendar: calendar)
+        edited.isPendingAtBank = edit.stillPending
+        flagOriginals.append(hold.txn)
+        updated.append(edited)
+        summary.staleEdited += 1
+      }
+    }
+    summary.balanceGaps = preview.continuity.gaps.count
+    summary.gapRowsRemoved = preview.gapRowsRemoved
+
     // Remembered mappings (R-IMP-2, R-IMP-PKO-1).
     var mappings: [ImportMapping] = []
     func remember(_ kind: MappingKind, _ key: String, _ target: UUID?) {
@@ -452,7 +480,7 @@ struct CommitBuilder {
       batch: summary.batch, newAccounts: newAccounts, newCategories: newCategories, newEvents: newEvents,
       txns: txns, fingerprints: fingerprints, updatedTxns: updated, mappings: mappings, rules: rules,
       debtLinks: debtLinks, absorbedOriginals: absorbedOriginals, completedOriginals: completedOriginals,
-      flagOriginals: flagOriginals)
+      flagOriginals: flagOriginals, deletedTxns: deletedHolds)
     return (commit, summary)
   }
 
@@ -479,6 +507,11 @@ struct CommitBuilder {
     if s.settled > 0 { parts.append("\(s.settled) settled") }
     if s.linked > 0 { parts.append("\(s.linked) linked") }
     if s.confirmed > 0 { parts.append("\(s.confirmed) confirmed") }
+    if preview.source == .pko {
+      let stale = s.staleKept + s.staleSettled + s.staleDeleted + s.staleEdited
+      parts.append(stale == 1 ? "1 stale hold" : "\(stale) stale holds")
+      parts.append(s.balanceGaps == 1 ? "1 balance gap" : "\(s.balanceGaps) balance gaps")
+    }
     if s.debtRecords > 0 { parts.append(s.debtRecords == 1 ? "1 to a debt account" : "\(s.debtRecords) to debt accounts") }
     if s.alreadyImported > 0 { parts.append("\(s.alreadyImported) skipped") }
     if s.duplicatesSkipped > 0 {

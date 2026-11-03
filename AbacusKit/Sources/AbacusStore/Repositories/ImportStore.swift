@@ -72,6 +72,20 @@ public struct SQLiteImportStore: ImportStore {
     }
   }
 
+  /// N6: the account's cleared balance at the end of the day before `day`, and whether it has any
+  /// cleared row booked before `day`.
+  public func clearedBalance(accountID: Account.ID, before day: Day) async throws -> (balanceMinor: Int64, hasClearedRows: Bool)? {
+    guard let account = try await database.read({ try Account.find(accountID).fetchOne($0) }) else { return nil }
+    let txns = try await SQLiteTxnRepository(database: database, calendar: calendar)
+      .transactions(matching: TxnQuery(accountIDs: [accountID]))
+    let rows = Reconcile.rows(account: account, txns: txns, calendar: calendar)
+    let before = day.adding(days: -1, calendar: calendar)
+    return (
+      Reconcile.clearedBalance(account: account, rows: rows, through: before),
+      rows.contains { $0.isCleared && !$0.isPending && $0.statementDay < day }
+    )
+  }
+
   /// R-IMP-2: remembered mappings of a source.
   public func mappings(source: ImportSource) async throws -> [ImportMapping] {
     try await database.read { db in
@@ -244,6 +258,7 @@ public struct SQLiteImportStore: ImportStore {
             current.bookedDay = original.bookedDay
             current.amountMinor = original.amountMinor
             current.isRefund = original.isRefund
+            current.occurredAt = original.occurredAt
             current.originalAmountMinor = original.originalAmountMinor
             current.originalCurrencyCode = original.originalCurrencyCode
             try Txn.upsert { Txn.Draft(current) }.execute(db)

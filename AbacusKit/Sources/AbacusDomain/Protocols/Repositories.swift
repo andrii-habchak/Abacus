@@ -440,9 +440,14 @@ public protocol ImportStore: Sendable {
   /// C44: stored fingerprints among `ids` with their transaction and the accounts it is on now
   /// (moved PKO keys are matched to the account the transaction was moved to).
   func fingerprintOwners(_ ids: [String]) async throws -> [String: FingerprintOwner]
+  /// N6: see the extension below.
+  func clearedBalance(accountID: Account.ID, before day: Day) async throws -> (balanceMinor: Int64, hasClearedRows: Bool)?
 }
 
 extension ImportStore {
+  /// N6: the account's cleared balance at the end of the day before `day` and whether it has any
+  /// cleared row before it (the import's "file starts at X" check); nil for fakes.
+  public func clearedBalance(accountID: Account.ID, before day: Day) async throws -> (balanceMinor: Int64, hasClearedRows: Bool)? { nil }
   /// Fakes without debts.
   public func debtBook() async throws -> DebtBook { .empty }
   /// Fakes without moved batches.

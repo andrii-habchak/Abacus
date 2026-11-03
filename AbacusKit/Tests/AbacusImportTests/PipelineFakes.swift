@@ -118,6 +118,7 @@ struct FakeImportStore: ImportStore {
         guard let i = db.txns.firstIndex(where: { $0.id == txn.id }) else { throw RepositoryError.notFound }
         db.txns[i] = txn
       }
+      for txn in commit.deletedTxns { db.txns.removeAll { $0.id == txn.id } }
       for fp in commit.fingerprints {
         db.fingerprints[fp.id] = ImportFingerprint(id: fp.id, txnID: fp.txnID, batchID: commit.batch.id)
       }
