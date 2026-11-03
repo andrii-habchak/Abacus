@@ -39,16 +39,32 @@ struct LargeDataPerformanceTests {
     return clock.now - start
   }
 
-  /// The slowest of `runs` evaluations of a body-read property.
-  func bodyTime<T>(_ runs: Int = 20, _ read: () -> T) -> Duration {
-    let clock = ContinuousClock()
-    var worst: Duration = .zero
-    for _ in 0..<runs {
-      let start = clock.now
-      _ = read()
-      worst = max(worst, clock.now - start)
+  /// N3: the fastest of `attempts` runs of `work`. A full parallel test run shares the CPU with
+  /// other suites, so a single run can be hit by a scheduling pause; a real slowdown is in every attempt.
+  func bestTime(attempts: Int = 3, _ work: () async -> Void) async -> Duration {
+    var best: Duration?
+    for _ in 0..<attempts {
+      let duration = await time(work)
+      best = min(best ?? duration, duration)
     }
-    return worst
+    return best ?? .zero
+  }
+
+  /// The slowest of `runs` evaluations of a body-read property, best of `attempts` rounds (N3: see
+  /// `bestTime`; a body that redoes a load's work is slow in every round).
+  func bodyTime<T>(_ runs: Int = 20, attempts: Int = 3, _ read: () -> T) -> Duration {
+    let clock = ContinuousClock()
+    var best: Duration?
+    for _ in 0..<attempts {
+      var worst: Duration = .zero
+      for _ in 0..<runs {
+        let start = clock.now
+        _ = read()
+        worst = max(worst, clock.now - start)
+      }
+      best = min(best ?? worst, worst)
+    }
+    return best ?? .zero
   }
 
   @Test("The large data set has the advertised size")
@@ -83,7 +99,7 @@ struct LargeDataPerformanceTests {
     ]
     for (name, load, loaded) in loads {
       await load()  // first load: caches warm
-      let warm = await time(load)
+      let warm = await bestTime(load)
       #expect(loaded(), "\(name) did not load")
       #expect(warm < Self.loadBudget, "\(name) took \(warm)")
       report.append("\(name) \(warm)")
