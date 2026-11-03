@@ -475,6 +475,89 @@ struct ManageEventsTests {
     let txns = try await store.txnRepository.transactions(matching: TxnQuery())
     #expect(txns.contains { $0.txn.id == PreviewData.id(911) && $0.txn.eventID == nil })
   }
+
+  @Test("N9: the editor is a sheet — edit opens it, Cancel keeps the selection, Save closes it")
+  func editorSheet() async throws {
+    let model = await model()
+    model.select(ManageSample.car.id)
+    model.newEvent()
+    let new = try #require(model.sheet)
+    #expect(new.isNew)
+    var draft = new
+    #expect(!model.canSave(draft))
+    draft.name = "Ski week"
+    #expect(model.validationMessage(draft) == nil)
+    model.dismissSheet()
+    #expect(model.sheet == nil)
+    #expect(model.selection == ManageSample.car.id)
+    #expect(!model.rows.contains { $0.name == "Ski week" })
+
+    model.newEvent()
+    var created = try #require(model.sheet)
+    created.name = "Ski week"
+    await model.save(created)
+    #expect(model.sheet == nil)
+    #expect(model.rows.contains { $0.name == "Ski week" })
+
+    model.edit(ManageSample.lyonTrip.id)
+    var edit = try #require(model.sheet)
+    #expect(!model.isDirty(edit))
+    edit.name = " "
+    #expect(model.validationMessage(edit) == "Enter a name.")
+    #expect(!model.canSave(edit))
+    edit.name = "Lyon weekend"
+    #expect(model.canSave(edit))
+    await model.save(edit)
+    #expect(model.sheet == nil)
+    #expect(model.event(ManageSample.lyonTrip.id)?.name == "Lyon weekend")
+  }
+
+  @Test("N9: an archived event's sheet is read-only except the colour")
+  func archivedSheet() async throws {
+    let model = await model()
+    await model.archiveOrUnarchive(PreviewData.relocation.id)
+    model.edit(PreviewData.relocation.id)
+    var draft = try #require(model.sheet)
+    #expect(model.isReadOnly(draft))
+    draft.name = "Changed"
+    draft.colorHex = "#123456"
+    await model.save(draft)
+    let event = try #require(model.event(PreviewData.relocation.id))
+    #expect(event.name != "Changed")
+    #expect(event.colorHex == "#123456")
+  }
+
+  @Test("N9: row buttons archive and delete the row's event without changing the selection")
+  func rowActions() async throws {
+    let model = await model()
+    model.select(ManageSample.lyonTrip.id)
+    #expect(model.archiveTitle(for: PreviewData.relocation.id) == "Archive")
+    await model.archiveOrUnarchive(PreviewData.relocation.id)
+    #expect(model.event(PreviewData.relocation.id)?.isArchived == true)
+    #expect(model.archiveTitle(for: PreviewData.relocation.id) == "Unarchive")
+    #expect(model.selection == ManageSample.lyonTrip.id)
+    await model.archiveOrUnarchive(PreviewData.relocation.id)
+    #expect(model.event(PreviewData.relocation.id)?.isArchived == false)
+
+    model.requestDelete(ManageSample.car.id)
+    #expect(model.dialog?.title == "Delete “Car”?")
+    await model.confirmDialog()
+    #expect(model.event(ManageSample.car.id) == nil)
+    #expect(model.selection == ManageSample.lyonTrip.id)
+  }
+
+  @Test("N9: Archive and Delete from inside the sheet close it")
+  func sheetActionsClose() async throws {
+    let model = await model()
+    model.edit(PreviewData.relocation.id)
+    await model.archiveOrUnarchive(PreviewData.relocation.id)
+    #expect(model.sheet == nil)
+    model.edit(ManageSample.car.id)
+    model.requestDelete(ManageSample.car.id)
+    await model.confirmDialog()
+    #expect(model.sheet == nil)
+    #expect(model.event(ManageSample.car.id) == nil)
+  }
 }
 
 @MainActor
