@@ -162,6 +162,51 @@ Rates is ⌘R, Settings is ⌘,.
   (`bank.gov.ua`) as a fallback. Turn off automatic updates in **Settings › Rates** to fetch
   only when you click Refresh rates.
 
+## MCP server (optional)
+
+`abacus-mcp` lets an AI chat client you run yourself (Claude Desktop, Claude Code, any MCP
+client) ask questions about your finances: net worth, spending by category and month, budget
+status, cash flow, debts, rates, and a capped transaction search. It is **off until you set it
+up**, runs **locally over stdio** (no network, no account), and opens the database **read-only**.
+Everything a tool returns is sent to the AI client you chose, so it is aggregate-first:
+amounts are decimal strings with a currency, transaction descriptions are included, and IBANs
+and account numbers never are.
+
+Build it once (from `AbacusKit/`), then note the path the second command prints:
+
+```bash
+swift build -c release --product abacus-mcp
+echo "$(swift build -c release --product abacus-mcp --show-bin-path)/abacus-mcp"
+```
+
+Claude Desktop: add this to `~/Library/Application Support/Claude/claude_desktop_config.json`
+(use the path printed above), then restart the app.
+
+```json
+{
+  "mcpServers": {
+    "abacus": {
+      "command": "/path/to/abacus-mcp"
+    }
+  }
+}
+```
+
+Claude Code:
+
+```bash
+claude mcp add abacus -- /path/to/abacus-mcp
+```
+
+To try it on a copy instead of your real data, add `--db /path/to/copy.sqlite`.
+
+**Write tools** (add, change or delete transactions and categories, create or archive accounts,
+undo or move an import) are a separate opt-in: start the server with `--enable-writes` (refused until the backup snapshot of automatic backups
+is built in). Every
+write is two steps (the assistant proposes, you approve, it confirms), a backup snapshot is
+taken before the first write of a session, every write is appended to `MCP/write-log.jsonl`
+next to the database, and accounts are never deleted nor backups restored through MCP.
+
 ## Building from source
 
 Requirements: Xcode with the macOS 26 SDK (built and tested with Xcode 27), and [XcodeGen](https://github.com/yonaskolb/XcodeGen)
