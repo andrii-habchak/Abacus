@@ -39,9 +39,7 @@ do {
   let url = try databasePath.map { URL(fileURLWithPath: $0) } ?? AbacusDatabase.defaultURL()
   var writes: WriteConfiguration?
   if enableWrites {
-    guard let snapshots = LiveSnapshots.provider else {
-      throw ToolError("Write tools need the backup snapshot API, which this build does not have yet.")
-    }
+    let snapshots = try LiveSnapshots.provider(for: url)
     writes = WriteConfiguration(snapshots: snapshots, maxRows: maxRows)
   }
   let server = try ServerFactory.make(databaseURL: url, writes: writes)
