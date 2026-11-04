@@ -100,9 +100,9 @@ Status values: `proposed` (defaults below await the owner's approval), `approved
 | N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | in progress (lane `wp/N2-mcp`: read + write tools built; wiring live rates and N1 snapshots, then merge) |
 | N3 | Stabilisation pass | M | scope below | done, merged 2026-11-03 (two owner questions open, `docs/status/N3.md`) |
 | N4 | Database encryption research (document only, no code) | S | none | done, merged 2026-11-03 (`docs/status/N4.md`: FileVault now, revisit SQLCipher with Developer ID signing) |
-| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved; draft spec + prototype on `main` (`docs/status/N5-spec.md`), awaiting owner review |
+| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved by the owner 2026-11-04; lane `wp/N5-recurring` started (`docs/status/N5.md`) |
 | N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | done, merged 2026-11-03 (migration v19; `docs/status/N6.md`) |
-| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved; draft spec + prototype on `main` (`docs/status/N7-spec.md`), awaiting owner review |
+| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved by the owner 2026-11-04; lane `wp/N7-app-lock` started (`docs/status/N7.md`) |
 | N8 | Quick actions: ⌘K command palette, menu-bar quick add, Shortcuts / App Intents "add expense" | M | TA text + approved prototypes | deferred (owner, 2026-11-03) |
 
 Readiness: N1, N2, N3, N4 can start as soon as the owner approves them (nothing blocks them in the
