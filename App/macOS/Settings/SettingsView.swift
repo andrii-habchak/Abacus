@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum SettingsTab: String, Hashable, CaseIterable {
-  case general, rates, data
+  case general, rates, data, security
 }
 
 /// The Settings window (⌘,), tabs General / Rates / Data (approved prototype group 6, R-SET-1…3).
@@ -24,6 +24,9 @@ struct SettingsView: View {
       }
       Tab("Data", systemImage: "cylinder.split.1x2", value: .data) {
         DataSettingsView(model: app.data)
+      }
+      Tab("Security", systemImage: "lock", value: .security) {
+        SecuritySettingsView()
       }
     }
     .scenePadding()
