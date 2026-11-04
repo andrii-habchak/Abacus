@@ -167,13 +167,20 @@ extension AbacusDatabase {
           """#)
       try db.execute(sql: #"CREATE INDEX IF NOT EXISTS "idx_txnMoves_txnID" ON "txnMoves"("txnID")"#)
     }
+    // N5 (R-REC): scheduled items, resolved occurrences, forecast snapshots (header + items) and
+    // dismissed suggestions. Append-only and CloudKit-safe: new tables only, STRICT, single TEXT
+    // primary key, no UNIQUE (one-per-key rules live in the repositories), foreign keys only
+    // ON DELETE SET NULL / CASCADE and none relied on for correctness; accounts and items are plain
+    // ids so an occurrence survives its item as history. Safe to run again (IF NOT EXISTS).
+    migrator.registerMigration("v18: recurring transactions") { db in
+      for sql in recurringV18 { try db.execute(sql: sql) }
+    }
     // N6 (R-CLR): the cleared flag per transaction side, the finished reconciliations and a kind on
     // import snapshots (undo restores only what clearing changed, or re-inserts a deleted stale
     // hold). Append-only and CloudKit-safe: columns with a default (`ON CONFLICT REPLACE DEFAULT 0`
     // / 'full'), one new table with a single primary key and ON DELETE CASCADE only, no UNIQUE. Safe
     // to run again (columns checked, IF NOT EXISTS; the backfill only ever sets flags to 1).
-    // v18 is reserved for N5 (recurring transactions); the migrator applies by name, so order
-    // between them does not matter.
+    // v18 (N5) is registered above; the migrator applies by name.
     migrator.registerMigration("v19: cleared flag and reconciliations") { db in
       for column in ["isCleared", "isToCleared"] {
         if try !db.columns(in: "txns").contains(where: { $0.name == column }) {
@@ -202,6 +209,85 @@ extension AbacusDatabase {
     }
     return migrator
   }
+
+  /// N5 tables (v18). See the migration comment for the CloudKit rules.
+  static let recurringV18: [String] = [
+    """
+    CREATE TABLE IF NOT EXISTS "scheduledItems" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "type" TEXT NOT NULL,
+      "accountID" TEXT NOT NULL,
+      "toAccountID" TEXT,
+      "amountMinor" INTEGER NOT NULL,
+      "toAmountMinor" INTEGER,
+      "categoryID" TEXT REFERENCES "categories"("id") ON DELETE SET NULL,
+      "eventID" TEXT REFERENCES "events"("id") ON DELETE SET NULL,
+      "payee" TEXT NOT NULL DEFAULT '',
+      "note" TEXT NOT NULL DEFAULT '',
+      "unit" TEXT NOT NULL,
+      "interval" INTEGER NOT NULL DEFAULT 1,
+      "startDay" TEXT NOT NULL,
+      "lastDayOfMonth" INTEGER NOT NULL DEFAULT 0,
+      "endKind" TEXT NOT NULL DEFAULT 'never',
+      "endDay" TEXT,
+      "endCount" INTEGER,
+      "mode" TEXT NOT NULL DEFAULT 'remind',
+      "tolerancePercent" INTEGER NOT NULL DEFAULT 5,
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "pausedBecause" TEXT,
+      "createdAt" TEXT NOT NULL
+    ) STRICT
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS "scheduledOccurrences" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "itemID" TEXT NOT NULL,
+      "expectedDay" TEXT NOT NULL,
+      "expectedAmountMinor" INTEGER NOT NULL,
+      "status" TEXT NOT NULL,
+      "txnID" TEXT REFERENCES "txns"("id") ON DELETE SET NULL,
+      "actualDay" TEXT,
+      "actualAmountMinor" INTEGER,
+      "matchKind" TEXT,
+      "resolvedAt" TEXT NOT NULL
+    ) STRICT
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS "forecastSnapshots" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "takenDay" TEXT NOT NULL,
+      "horizonDays" INTEGER NOT NULL,
+      "startBalancesJSON" TEXT NOT NULL,
+      "ratesJSON" TEXT NOT NULL,
+      "createdAt" TEXT NOT NULL
+    ) STRICT
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS "forecastSnapshotItems" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "snapshotID" TEXT NOT NULL REFERENCES "forecastSnapshots"("id") ON DELETE CASCADE,
+      "itemID" TEXT,
+      "day" TEXT NOT NULL,
+      "accountID" TEXT NOT NULL,
+      "toAccountID" TEXT,
+      "amountMinor" INTEGER NOT NULL,
+      "toAmountMinor" INTEGER
+    ) STRICT
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS "suggestionDismissals" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "accountID" TEXT NOT NULL,
+      "key" TEXT NOT NULL,
+      "dismissedAt" TEXT NOT NULL
+    ) STRICT
+    """,
+    #"CREATE INDEX IF NOT EXISTS "idx_scheduledItems_accountID" ON "scheduledItems"("accountID")"#,
+    #"CREATE INDEX IF NOT EXISTS "idx_scheduledOccurrences_itemID" ON "scheduledOccurrences"("itemID")"#,
+    #"CREATE INDEX IF NOT EXISTS "idx_scheduledOccurrences_txnID" ON "scheduledOccurrences"("txnID")"#,
+    #"CREATE INDEX IF NOT EXISTS "idx_forecastSnapshotItems_snapshotID" ON "forecastSnapshotItems"("snapshotID")"#,
+    #"CREATE INDEX IF NOT EXISTS "idx_forecastSnapshots_takenDay" ON "forecastSnapshots"("takenDay")"#,
+  ]
 
   /// Debts and records (R-DEBT-1, R-DEBT-3). Single primary keys, no UNIQUE, only CASCADE /
   /// SET NULL (CloudKit rules). A record's leg points at the record (`txns.debtRecordID`), so
