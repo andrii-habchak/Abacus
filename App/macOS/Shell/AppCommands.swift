@@ -7,6 +7,7 @@ import SwiftUI
 struct AppCommands: Commands {
   /// Read on every use: moving the data folder replaces the session (R-SET-1).
   let host: AppSessionHost
+  let lock: AppLockModel
   private var session: AppSession { host.session }
   private var app: AppModel { session.app }
 
@@ -17,6 +18,12 @@ struct AppCommands: Commands {
     CommandGroup(replacing: .newItem) {
       Button("New Transaction") { app.requestNewTransaction() }
         .keyboardShortcut("n")
+        .disabled(!lock.commandsEnabled)
+    }
+    CommandGroup(after: .appInfo) {
+      Button("Lock Abacus") { lock.lockNow() }
+        .keyboardShortcut("l", modifiers: [.option, .command])
+        .disabled(!lock.enabled || lock.isLocked)
     }
 
     CommandGroup(before: .sidebar) {
@@ -24,8 +31,10 @@ struct AppCommands: Commands {
         if index < AppModel.shortcutKeys.count, let key = AppModel.shortcutKeys[index].first {
           Button(section.title) { app.section = section }
             .keyboardShortcut(KeyEquivalent(key))
+            .disabled(!lock.commandsEnabled)
         } else {
           Button(section.title) { app.section = section }
+            .disabled(!lock.commandsEnabled)
         }
       }
       Divider()
@@ -33,7 +42,7 @@ struct AppCommands: Commands {
         Task { await app.rates.refresh() }
       }
       .keyboardShortcut("r")
-      .disabled(app.rates.isRefreshing)
+      .disabled(app.rates.isRefreshing || !lock.commandsEnabled)
       Divider()
     }
 
@@ -42,6 +51,7 @@ struct AppCommands: Commands {
       Button("Load Sample Data") {
         Task { await session.loadSampleData() }
       }
+      .disabled(!lock.commandsEnabled)
       .help("Adds synthetic accounts and transactions to an empty database, for a demo.")
     }
   }
