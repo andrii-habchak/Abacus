@@ -19,6 +19,11 @@ the filter row scrolls sideways, so check it in a narrow window. Skipped on purp
 date (matches the prototype). Item (2) of the next stage above is therefore done. No further lane is running; the pause
 above stays in force until the owner reviews N5 / N7._
 
+_Update 2026-11-04 01:35 CET: N7 app lock merged in part (`wp/N7-app-lock`, `docs/status/N7.md`): lock model, lock screen,
+Security settings tab, ⌥⌘L, off by default. Gate green (618 tests, app build). **Not done:** hiding open sheets when the lock
+triggers (R-LOCK-11, security gap, needs the spike from the spec), toolbar still visible while locked, queued messages
+(R-LOCK-12), README recovery text, real Touch ID prompt unverified. Do not announce the lock as complete until those are done._
+
 _Updated 2026-11-03 (orchestrator, earlier)._ Merged: QA-170 (Reconcile screen had no ideal size and rendered blank; import
 Pending payments / Balance gaps sub-tabs showed the Decisions text) and N9 (event editor as a sheet, Archive/Delete icons on
 event rows, separate "New event" / "New category" toolbar pills). Gate green (1,221 tests with real samples, app build).
