@@ -24,6 +24,15 @@ Security settings tab, ⌥⌘L, off by default. Gate green (618 tests, app build
 triggers (R-LOCK-11, security gap, needs the spike from the spec), toolbar still visible while locked, queued messages
 (R-LOCK-12), README recovery text, real Touch ID prompt unverified. Do not announce the lock as complete until those are done._
 
+_Update 2026-11-04 01:40 CET (**execution stopped until the owner restarts**): N5 first slice merged (`wp/N5-recurring`,
+`docs/status/N5.md`): migration v18 (five tables), entities, recurrence rules, occurrence and forecast engine, subscription
+detection, tests; no UI or repositories yet. Gate green (618 tests in the main run, app build). **Next stage, in order:**
+(1) N5 steps 1-8 in `docs/status/N5.md` (repositories first, then UI against the approved prototypes; known limits: net
+worth ignores debts, monthly day-spread rule rejects a 30th/1st pattern); (2) finish N7: hide open sheets on lock
+(R-LOCK-11, security gap), hide the toolbar while locked, R-LOCK-12, README recovery text, check the real Touch ID prompt;
+(3) tidy merged lane worktrees and branches (needs the owner, deletes are blocked for agents); (4) N8 stays deferred.
+No lane is running; main is clean and pushed._
+
 _Updated 2026-11-03 (orchestrator, earlier)._ Merged: QA-170 (Reconcile screen had no ideal size and rendered blank; import
 Pending payments / Balance gaps sub-tabs showed the Decisions text) and N9 (event editor as a sheet, Archive/Delete icons on
 event rows, separate "New event" / "New category" toolbar pills). Gate green (1,221 tests with real samples, app build).
