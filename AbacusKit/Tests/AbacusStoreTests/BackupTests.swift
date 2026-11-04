@@ -69,6 +69,20 @@ struct BackupTests {
         Reconciliation(accountID: F.bank.id, statementDay: "2026-04-01", closingMinor: 1_000_00, finishedAt: F.at("2026-04-02"))
       }.execute(db)
     }
+    // N5 (v18): a scheduled item with a resolved occurrence, a forecast snapshot with an item, a dismissal.
+    try await f.database.write { db in
+      let item = ScheduledItem(type: .expense, accountID: F.bank.id, amountMinor: 49_00, payee: "Streamly", startDay: "2026-01-05")
+      let snapshot = ForecastSnapshot(takenDay: "2026-04-02", startBalancesJSON: "{}", ratesJSON: "{}")
+      try ScheduledItem.insert { item }.execute(db)
+      try ScheduledOccurrence.insert {
+        ScheduledOccurrence(itemID: item.id, expectedDay: "2026-03-05", expectedAmountMinor: 49_00, status: .skipped)
+      }.execute(db)
+      try ForecastSnapshot.insert { snapshot }.execute(db)
+      try ForecastSnapshotItem.insert {
+        ForecastSnapshotItem(snapshotID: snapshot.id, itemID: item.id, day: "2026-04-05", accountID: F.bank.id, amountMinor: -49_00)
+      }.execute(db)
+      try SuggestionDismissal.insert { SuggestionDismissal(accountID: F.bank.id, key: "gym|expense|PLN") }.execute(db)
+    }
     // C48 (v17): the trace of a transaction moved to another account.
     try await f.database.write { db in
       try TxnMove.insert {

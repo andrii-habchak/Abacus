@@ -149,7 +149,7 @@ struct BackupSnapshotTests {
     #expect(snapshots.map(\.reason) == [.preMigration])
     let applied = try database.read { try AbacusDatabase.migrator().appliedMigrations($0) }
     let inSnapshot = try DatabaseQueue(path: snapshots[0].url.path).read { try AbacusDatabase.migrator().appliedMigrations($0) }
-    #expect(applied.count == inSnapshot.count + 2)  // v17 and v19 (v18 is reserved)
+    #expect(applied.count == inSnapshot.count + 3)  // v17, v18 and v19
     #expect(!inSnapshot.contains("v17: transaction moves"))
   }
 
