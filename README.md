@@ -162,6 +162,25 @@ Rates is ⌘R, Settings is ⌘,.
   (`bank.gov.ua`) as a fallback. Turn off automatic updates in **Settings › Rates** to fetch
   only when you click Refresh rates.
 
+## App lock
+
+**Settings › Security** can require Touch ID, Apple Watch or your Mac password to open Abacus
+(off by default). When it is on, Abacus locks at launch, after the idle time you pick (5 minutes by
+default), when the Mac sleeps or the screen locks, and on **Abacus › Lock Abacus** (⌥⌘L). While
+locked, the windows, open sheets and the toolbar are hidden; unsaved edits stay and come back
+after unlock.
+
+The lock hides the window; it does **not** encrypt your data. The database file stays readable by
+other apps, and `abacus-mcp` and `abacus-import` open it directly without the lock. **FileVault**
+protects the disk if the Mac is lost or stolen.
+
+If you can no longer unlock (for example the Mac's authentication is broken), quit Abacus and turn
+the lock off from Terminal:
+
+```bash
+defaults write io.github.andrii-habchak.Abacus appLock.enabled -bool NO
+```
+
 ## MCP server (optional)
 
 `abacus-mcp` lets an MCP-capable AI client you run yourself ask questions about your finances: net worth, spending by category and month, budget
