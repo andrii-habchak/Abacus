@@ -54,3 +54,23 @@ Darwin notification triggers it, in-memory is not watched, the session's list dr
 by another connection.
 `EditorSaveConflictTests.swift` — fingerprint match/changed/deleted, no-conflict save, Replace,
 Cancel reload, deleted + Replace, duplicate not checked.
+
+## Manual run (scratch database, 17 Nov 2026)
+
+Debug app on a scratch file (`-AbacusDatabasePath <scratch>/demo.sqlite -AbacusLoadSampleData YES`,
+`CFFIXED_USER_HOME=<scratch>/home`), watcher log via `log stream --predicate
+'category == "DatabaseChangeWatcher"'`:
+
+- `abacus-mcp --enable-writes` `create_account` (propose + confirm) while the app was in the
+  background → log line within a second (Darwin notification); the account showed on the Accounts
+  page (in-app snapshot taken after the write).
+- `abacus-import` of a synthetic Saldo fixture while the app was in the background → no reload
+  (poll paused); bringing the app forward → reload at once (activation check).
+- `abacus-import` of another fixture while the app was active → reload from the poll (no
+  notification from the importer).
+
+## Not done / open
+
+- `abacus-import` posts no Darwin notification (the app relies on the poll / activation). Adding
+  one is an `AbacusImport` change outside this lane.
+- No `UIApplication` lifecycle hook for iOS yet.
