@@ -149,8 +149,13 @@ struct ForecastChart: View {
           .foregroundStyle(ForecastStyle.gapMarker)
           .lineStyle(StrokeStyle(lineWidth: 2))
           .offset(x: 7)
-          .annotation(position: .trailing, alignment: .center, spacing: 10) {
-            Text(gap.text).font(.caption.weight(.semibold)).foregroundStyle(ForecastStyle.gapMarker)
+          .annotation(position: .topTrailing, alignment: .leading, spacing: 4) {
+            Text(gap.text)
+              .font(.caption.weight(.semibold))
+              .foregroundStyle(ForecastStyle.gapMarker)
+              .padding(.horizontal, 4)
+              .padding(.vertical, 1)
+              .background(DashboardStyle.cardBackground.opacity(0.9), in: .rect(cornerRadius: 3))
           }
       }
       if let point = data.todayPoint {
@@ -205,7 +210,8 @@ struct ForecastChart: View {
           }
       }
     }
-    .frame(height: 270)
+    .padding(.top, 14)
+    .frame(height: 284)
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Forecast chart")
   }

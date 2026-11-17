@@ -35,6 +35,21 @@ _Last update: 2026-11-17._
   `ForecastAccuracyCard`, `ForecastDebugHost` (DEBUG, not referenced by the shell).
 - **Tests** `AbacusKit/Tests/AbacusFeaturesTests/Forecast/ForecastModelTests.swift` (R-REC-13, 14, 15, 19, 20).
 
+## Visual check
+
+Screens in `docs/status/N5d-screens/` (light and dark): today's forecast only, overlay with the accuracy
+panel and an expanded row, and an account series with the below-zero warning. Rendered by a preview
+snapshot harness kept outside the repo (a scratch Swift package hosting `ForecastView` in an off-screen
+`NSHostingView` over a scratch database: `SampleData` + `ForecastDemoSeed`, `PreviewData.today`,
+`PreviewData.fxRates`). The shell could not be edited to host the view (shared file), so the in-app
+`-AbacusForecastDemo` host (`ForecastDebugHost`) is ready but not referenced; the orchestrator can
+check it in the app once the Upcoming tab hosts `ForecastView`. Never run on the real database.
+
+Seen and fixed: gap label struck through by the lines (now on a card-coloured tag), chart top padding
+for the "Today" label. Known look differences from the prototype: Swift Charts step lines
+(`.stepEnd`) instead of straight segments, so balances change on the day of the occurrence; menus and
+segmented controls are the native ones.
+
 ## For the orchestrator (merge)
 
 `ForecastView` is self-contained. Two initialisers (internal to the app target, like the other screens):

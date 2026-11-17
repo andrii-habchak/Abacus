@@ -56,12 +56,49 @@
       let balances = try await SQLiteReportQueries(database: database, calendar: calendar).balances(on: [today])
       let counts = Dictionary(grouping: txns, by: \.accountID).mapValues(\.count)
       let busiest = accounts.filter { !$0.kind.isLiability }.max { (counts[$0.id] ?? 0) < (counts[$1.id] ?? 0) }
+      var payments: [(item: ScheduledItem, day: Day, txn: Txn)] = []
       if let main = busiest {
-        let balance = balances.balances[main.id]?.first ?? 0
+        // Synthetic bills with a paid history (late days, a price rise, one missed month).
+        let first = today.plusDays(-170)
+        func monthly(_ payee: String, _ type: TxnType, _ amount: Int64, day: Int) -> ScheduledItem {
+          let start = Day(year: first.year, month: first.month, day: day)
+          return ScheduledItem(
+            type: type, accountID: main.id, amountMinor: amount, payee: payee, unit: .month, startDay: start.string,
+            tolerancePercent: 15, createdAt: start.date(calendar: calendar))
+        }
+        let synthetic = [
+          monthly("Salary", .income, 9_800_00, day: 10), monthly("Rent", .expense, 3_200_00, day: 5),
+          monthly("Streaming service", .expense, 49_00, day: 14), monthly("Phone plan", .expense, 59_99, day: 22),
+          monthly("Gym membership", .expense, 129_00, day: 20),
+        ]
+        for (index, item) in synthetic.enumerated() {
+          items.append(item)
+          guard let schedule = item.schedule else { continue }
+          let past = schedule.occurrences(from: first, through: today.plusDays(-1))
+          for (k, day) in past.enumerated() {
+            if item.payee == "Gym membership" && k == past.count - 3 { continue }  // missed
+            var amount = item.amountMinor
+            var shift = 0
+            switch index {
+            case 0: shift = k % 3 == 2 ? 1 : 0
+            case 2: if k >= past.count - 3 { amount = 54_00 }
+            case 3: shift = (k * 7) % 3
+            default: break
+            }
+            let paidDay = min(day.plusDays(shift), today.plusDays(-1))
+            let txn = Txn(
+              type: item.type, occurredAt: paidDay.date(calendar: calendar).addingTimeInterval(43_200),
+              accountID: main.id, amountMinor: amount, payee: item.payee)
+            payments.append((item, day, txn))
+          }
+        }
+        // Today's balance once the synthetic payments are in.
+        let paidNet = payments.reduce(Int64(0)) { $0 + ($1.txn.type == .income ? $1.txn.amountMinor : -$1.txn.amountMinor) }
+        let balance = (balances.balances[main.id]?.first ?? 0) + paidNet
         let due = today.plusDays(24)
         items.append(
           ScheduledItem(
-            type: .expense, accountID: main.id, amountMinor: max(100_00, balance + 1_250_00), payee: "Car insurance",
+            type: .expense, accountID: main.id, amountMinor: max(100_00, balance + 12_000_00), payee: "Car insurance",
             unit: .year, startDay: due.string, createdAt: today.date(calendar: calendar)))
         if let savings = accounts.first(where: { $0.id != main.id && !$0.kind.isLiability && $0.currency == main.currency }) {
           let start = today.plusDays(-75)
@@ -71,15 +108,32 @@
               unit: .month, startDay: start.string, createdAt: start.date(calendar: calendar)))
         }
       }
+      let txnsToInsert = payments.map(\.txn)
+      try await database.write { db in
+        for txn in txnsToInsert { try Txn.insert { txn }.execute(db) }
+      }
       for item in items { try await store.save(item) }
-      // Past forecasts first (as the app would have taken them, before those payments existed).
+      // Past forecasts, taken as the app would have on those days.
       let snapshots = SQLiteForecastSnapshotRepository(database: database, calendar: calendar)
       let rates =
         converter.map { SnapshotRates.latest(from: $0, currencies: Set(accounts.map(\.currency))) }
         ?? SnapshotRates(asOf: nil, base: .UAH, toBase: [:])
-      for days in snapshotDaysAgo.sorted(by: >) {
-        try await snapshots.takeIfNeeded(today: today.plusDays(-days), rates: rates, debts: [:])
+      // Each past forecast sees the payments made up to its day as resolved, like the app would.
+      var marked = 0
+      let ordered = payments.sorted { $0.txn.occurredAt < $1.txn.occurredAt }
+      func markPaid(through day: Day) async {
+        while marked < ordered.count, Day(ordered[marked].txn.occurredAt, calendar: calendar) <= day {
+          let payment = ordered[marked]
+          _ = try? await store.markPaid(itemID: payment.item.id, expectedDay: payment.day, txnID: payment.txn.id, kind: .auto)
+          marked += 1
+        }
       }
+      for days in snapshotDaysAgo.sorted(by: >) {
+        let day = today.plusDays(-days)
+        await markPaid(through: day)
+        try await snapshots.takeIfNeeded(today: day, rates: rates, debts: [:])
+      }
+      await markPaid(through: today)
       _ = try await store.sweep(today: today, matcher: ScheduledMatch.rule)
       try await snapshots.takeIfNeeded(today: today, rates: rates, debts: [:])
       return items.count
