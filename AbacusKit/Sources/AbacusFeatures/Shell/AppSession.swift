@@ -39,6 +39,10 @@ public final class AppSession {
   @ObservationIgnored private var tasks: [Task<Void, Never>] = []
   @ObservationIgnored private var started = false
   @ObservationIgnored private var ratesStartup: Task<Void, Never>?
+  /// N2: reloads the screens when `abacus-mcp` or `abacus-import` writes the database file.
+  @ObservationIgnored private(set) var changeWatcher: DatabaseChangeWatcher?
+  /// False in tests that drive `DatabaseChangeWatcher` themselves (no `NSApplication`).
+  @ObservationIgnored var watchesApplication = true
   /// Builds a session like this one on another database (data folder moved, R-SET-1).
   /// The launch snapshot (N1); nil for tests and demo databases.
   @ObservationIgnored var launchSnapshots: LiveSnapshots?
@@ -248,6 +252,7 @@ public final class AppSession {
     await app.load()
     transactions.displayCurrency = app.displayCurrency
     transactions.refundsReduceSpending = app.refundsReduceSpending
+    await startChangeWatcher()
     guard let refresher else { return }
     await refresher.setAutoRefresh(app.ratesAutoRefresh)
     let updates = await refresher.updates()
@@ -281,6 +286,31 @@ public final class AppSession {
   public func stop() {
     tasks.forEach { $0.cancel() }
     tasks = []
+    changeWatcher?.stop()
+    changeWatcher = nil
+  }
+
+  /// N2: watches the database file for writes by other processes (only a file on disk).
+  private func startChangeWatcher() async {
+    guard let database, changeWatcher == nil else { return }
+    let watcher = DatabaseChangeWatcher(database: database, observeApplication: watchesApplication) { [weak self] in
+      await self?.databaseChangedElsewhere()
+    }
+    changeWatcher = watcher
+    await watcher.start()
+  }
+
+  /// Another process (`abacus-mcp`, `abacus-import`) wrote the database: like a rate refresh,
+  /// the screens already shown re-read their data; screens not opened yet load when they
+  /// appear. Settings are re-read too (the tools may store settings).
+  public func databaseChangedElsewhere() async {
+    await app.load()
+    transactions.displayCurrency = app.displayCurrency
+    transactions.refundsReduceSpending = app.refundsReduceSpending
+    if transactions.loadedQuery != nil { await transactions.reload() }
+    if dashboard.phase == .loaded { await dashboard.load() }
+    await reloadManageScreens()
+    await importWizard?.refreshReference()
   }
 
   /// New rates (fetch, lazy history, manual rate): every screen converts with the new table.

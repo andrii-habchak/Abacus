@@ -50,6 +50,11 @@ public final class TransactionEditorModel {
   /// Days whose rates were asked for (R-EDIT-4, R-FX-1), and the request in flight.
   @ObservationIgnored private var requestedRateDays: Set<Day> = []
   @ObservationIgnored private var ratesTask: Task<Void, Never>?
+  /// N2: the stored row as the sheet read it (edit mode); Save compares it with the row now.
+  @ObservationIgnored private var storedFingerprint: TxnWithLines?
+  /// N2: Save found the row changed or deleted by another program; the sheet asks whether to
+  /// replace it (`replaceChangedRecord()`) or to reload (`reloadAfterConflict()`).
+  public private(set) var saveConflict: EditorSaveConflict?
 
   public init(mode: TransactionEditorMode, dependencies: TransactionEditorDependencies) {
     self.mode = mode
@@ -99,6 +104,7 @@ public final class TransactionEditorModel {
           return
         }
         draft = EditorDraft(editing: row, accounts: reference.accountsByID)
+        storedFingerprint = row
         await loadRefundOfLabel()
         await loadMovedNote(id)
       } catch {
@@ -742,10 +748,49 @@ public final class TransactionEditorModel {
   /// rule suggestion counts a hit (R-IMP-8). Returns nil when invalid or the save failed.
   @discardableResult
   public func save() async -> TransactionEditorResult? {
+    await save(replacingChanges: false)
+  }
+
+  /// N2: the conflict alert closes (before its Replace or Cancel work runs).
+  public func dismissSaveConflict() {
+    saveConflict = nil
+  }
+
+  /// N2: "Replace" in the conflict alert: saves this version over the other program's.
+  @discardableResult
+  public func replaceChangedRecord() async -> TransactionEditorResult? {
+    saveConflict = nil
+    return await save(replacingChanges: true)
+  }
+
+  /// N2: "Cancel" in the conflict alert: the sheet shows the row as stored now (or that it
+  /// no longer exists); the edits made here are dropped.
+  public func reloadAfterConflict() async {
+    saveConflict = nil
+    errorMessage = nil
+    isLoaded = false
+    storedFingerprint = nil
+    await load()
+  }
+
+  private func save(replacingChanges: Bool) async -> TransactionEditorResult? {
     guard canSave, let row = makeTransaction() else { return nil }
     let usedRule = suggestion.flatMap { row.txn.categoryID == $0.category.id ? $0.rule.id : nil }
     isWorking = true
     defer { isWorking = false }
+    if !replacingChanges, case .edit(let id) = mode, let fingerprint = storedFingerprint {
+      let current: TxnWithLines?
+      do {
+        current = try await dependencies.transaction(id)
+      } catch {
+        errorMessage = "Couldn't save the transaction."
+        return nil
+      }
+      if let conflict = EditorSaveConflict(opened: fingerprint, now: current) {
+        saveConflict = conflict
+        return nil
+      }
+    }
     do {
       try await dependencies.transactions.save(row.txn, lines: row.lines)
     } catch {
