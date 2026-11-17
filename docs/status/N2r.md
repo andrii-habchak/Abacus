@@ -20,6 +20,17 @@ items 1–4.
     `Database changed by another process; reloading screens` (subsystem
     `io.github.andrii-habchak.Abacus`, category `DatabaseChangeWatcher`).
 
+- **4 Stale-record warning.** `TransactionEditorModel` keeps the stored `TxnWithLines` read
+  when an edit sheet loads; Save re-reads it and `EditorSaveConflict(opened:now:)`
+  (`AbacusFeatures/Editor/EditorSaveConflict.swift`) compares every stored value, lines in any
+  order. Changed → `saveConflict = .changed`, deleted → `.deleted`; nothing is written. The sheet
+  (`App/macOS/Editor/TransactionEditorSheet.swift`) shows "This transaction was changed by another
+  program." / "Replace it with your version?" (deleted: "It was deleted there. Replace it with
+  your version?"); Replace → `replaceChangedRecord()` (upsert, also restores a deleted row);
+  Cancel → `reloadAfterConflict()` (the sheet re-reads the row, edits dropped; a deleted row shows
+  "This transaction no longer exists."). New and duplicated transactions are not checked.
+  No schema change.
+
 ## Interpretations (decided here, owner may revisit)
 
 - **`data_version` on a dedicated reader also moves for the app's own commits** (the app's writer
@@ -41,3 +52,5 @@ items 1–4.
 temporary file: own writes don't trigger, a foreign commit does once, the poll notices it, the
 Darwin notification triggers it, in-memory is not watched, the session's list drops a row deleted
 by another connection.
+`EditorSaveConflictTests.swift` — fingerprint match/changed/deleted, no-conflict save, Replace,
+Cancel reload, deleted + Replace, duplicate not checked.

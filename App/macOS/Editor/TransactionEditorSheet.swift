@@ -51,6 +51,27 @@ struct TransactionEditorSheet: View {
     } message: {
       Text(model.deleteMessage)
     }
+    // N2: the row was changed or deleted by another program since the sheet opened.
+    .alert(
+      model.saveConflict?.title ?? "",
+      isPresented: Binding(
+        get: { model.saveConflict != nil },
+        set: { _ in }),
+      presenting: model.saveConflict
+    ) { _ in
+      Button("Replace") {
+        model.dismissSaveConflict()
+        Task {
+          if let result = await model.replaceChangedRecord() { onDone(result) }
+        }
+      }
+      Button("Cancel", role: .cancel) {
+        model.dismissSaveConflict()
+        Task { await model.reloadAfterConflict() }
+      }
+    } message: { conflict in
+      Text(conflict.message)
+    }
   }
 
   private var form: some View {
