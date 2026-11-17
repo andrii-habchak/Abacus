@@ -26,6 +26,10 @@ public final class AppLockModel {
     return lastInput + TimeInterval(minutes * 60)
   }
 
+  /// Messages and results produced while locked, shown in order after unlock (R-LOCK-12).
+  public var queuedCount: Int { queued.count }
+  private var queued: [@MainActor () -> Void] = []
+
   private let store: LockSettingsStore
   private let authenticator: LockAuthenticator
   private let clock: LockClock
@@ -97,6 +101,25 @@ public final class AppLockModel {
 
   public func appDidResignActive() { isActive = false }
 
+  // MARK: Work finished while locked (R-LOCK-12)
+
+  /// Runs `show` now when unlocked; while locked it waits and runs after the next unlock, in the
+  /// order queued. Background work itself is never paused by the lock: only what it shows waits,
+  /// so no alert, sheet or message with data appears over the lock screen.
+  public func whenUnlocked(_ show: @escaping @MainActor () -> Void) {
+    if isLocked {
+      queued.append(show)
+    } else {
+      show()
+    }
+  }
+
+  private func deliverQueued() {
+    while !queued.isEmpty, !isLocked {
+      queued.removeFirst()()
+    }
+  }
+
   // MARK: Unlock
 
   /// The Unlock / Try again button: always prompts.
@@ -121,6 +144,7 @@ public final class AppLockModel {
     case .success:
       state = .unlocked
       lastInput = clock.now
+      deliverQueued()
     case .cancelled: state = .cancelled
     case .failed: state = .failed
     case .unavailable: state = .unavailable
@@ -142,7 +166,12 @@ public final class AppLockModel {
     settingsMessage = nil
     enabled = on
     store.enabled = on
-    if on { lastInput = clock.now } else { state = .unlocked }
+    if on {
+      lastInput = clock.now
+    } else {
+      state = .unlocked
+      deliverQueued()
+    }
   }
 
   /// Increasing the idle time needs authentication; decreasing does not.

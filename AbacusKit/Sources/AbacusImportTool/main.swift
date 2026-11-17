@@ -81,6 +81,8 @@ let pipeline = ImportPipeline(
   refunds: SQLiteRefundRepository(database: database, calendar: calendar),
   counterparts: SQLiteTransferCounterpartRepository(database: database, calendar: calendar))
 print("Database: \(url.path)\(options.dryRun ? " (dry run)" : "")")
+/// Set by every committed write; the running app is told once at the end (N2r).
+var wroteDatabase = false
 
 // Remembered PKO statement accounts per currency (same key the pipeline reads).
 for (currency, name) in options.rememberPKO {
@@ -95,6 +97,7 @@ for (currency, name) in options.rememberPKO {
     try ImportMapping.insert { ImportMapping(source: .pko, kind: .account, externalKey: key, targetID: target.id) }
       .execute(db)
   }
+  wroteDatabase = true
 }
 
 // Balance corrections at the start of a day.
@@ -114,6 +117,7 @@ for correction in options.corrections {
     accountID: target.id, amountMinor: abs(difference), categoryID: category.id, payee: "Balance correction",
     note: "Aligns the account with the bank statement balance on \(correction.day)", isBalanceCorrection: true)
   try await SQLiteTxnRepository(database: database, calendar: calendar).save(txn, lines: [])
+  wroteDatabase = true
   print("  booked a \(kind.rawValue) “Balance correction” on \(correction.day)")
 }
 
@@ -151,6 +155,7 @@ for file in options.files {
   print("  offers accepted: refunds \(offers.refunds) · estimated transfers completed \(offers.estimates)")
   guard ready.canCommit else { throw ToolError("Preview still has unresolved choices") }
   let summary = try await pipeline.commit(ready)
+  wroteDatabase = true
   print(
     "  committed: created \(summary.created) (paired transfers \(summary.transfersPaired)) · settled \(summary.settled)"
       + " · linked \(summary.linked) · duplicates skipped \(summary.duplicatesSkipped) · reviewed \(summary.reviewedImported)"
@@ -160,3 +165,11 @@ for file in options.files {
 
 let all = try await accounts.accounts(includeArchived: true)
 print("Accounts in database: \(all.count) (\(all.filter(\.isArchived).count) archived)")
+
+// The running app reloads at once instead of waiting for its file watcher (same Darwin
+// notification as `abacus-mcp`, `DatabaseChangeWatcher.darwinNotificationName`).
+if wroteDatabase && !options.dryRun {
+  CFNotificationCenterPostNotification(
+    CFNotificationCenterGetDarwinNotifyCenter(),
+    CFNotificationName("io.github.andrii-habchak.Abacus.database-changed" as CFString), nil, nil, true)
+}

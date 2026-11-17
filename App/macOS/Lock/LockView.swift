@@ -9,17 +9,25 @@ import SwiftUI
 final class LockController {
   let model: AppLockModel
   private let source = SystemLockEventSource()
+  private var shield: LockWindowShield?
   private var timer: Task<Void, Never>?
 
   init(previewData: Bool, lockTest: Bool) {
     if lockTest {
       // `-AbacusLockTest YES`: lock on, scripted authenticator, scratch preferences (R-LOCK-13).
-      let store = LockSettingsStore(defaults: UserDefaults(suiteName: "abacus.lock.test.\(UUID().uuidString)")!)
+      let store = LockSettingsStore(defaults: Self.scratchDefaults("abacus.lock.test"))
       store.enabled = true
-      model = AppLockModel(store: store, authenticator: ScriptedAuthenticator())
+      let authenticator = ScriptedAuthenticator()
+      model = AppLockModel(store: store, authenticator: authenticator)
+      #if DEBUG
+        if let plan = UserDefaults.standard.string(forKey: "AbacusLockTestPlan") {
+          authenticator.planned = true
+          runPlan(plan, authenticator: authenticator)
+        }
+      #endif
     } else if previewData {
       // Previews and screenshots never lock or prompt.
-      let store = LockSettingsStore(defaults: UserDefaults(suiteName: "abacus.lock.preview.\(UUID().uuidString)")!)
+      let store = LockSettingsStore(defaults: Self.scratchDefaults("abacus.lock.preview"))
       model = AppLockModel(store: store, authenticator: LAAuthenticator())
     } else {
       model = AppLockModel(store: LockSettingsStore(), authenticator: LAAuthenticator())
@@ -27,7 +35,25 @@ final class LockController {
     start()
   }
 
+  /// A throwaway preferences suite; its file in ~/Library/Preferences is removed at quit.
+  private static func scratchDefaults(_ prefix: String) -> UserDefaults {
+    let name = "\(prefix).\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+    ) { _ in
+      defaults.removePersistentDomain(forName: name)
+      // The account's real home: suites ignore CFFIXED_USER_HOME.
+      if let home = getpwuid(getuid())?.pointee.pw_dir {
+        let file = URL(filePath: String(cString: home)).appending(path: "Library/Preferences/\(name).plist")
+        try? FileManager.default.removeItem(at: file)
+      }
+    }
+    return defaults
+  }
+
   private func start() {
+    shield = LockWindowShield(model: model)
     source.onEvent = { [model] in model.handle($0) }
     source.onInput = { [model] in model.noteInput() }
     source.start()
@@ -52,20 +78,65 @@ final class LockController {
   }
 }
 
-/// Cancels the first prompt, then succeeds; for `-AbacusLockTest` screenshots.
+/// Cancels the first prompt, then succeeds; for `-AbacusLockTest` screenshots. With a test plan
+/// every prompt is cancelled except the plan's own unlock steps.
 @MainActor
 final class ScriptedAuthenticator: LockAuthenticator {
   private var count = 0
+  var planned = false
+  var allowNext = false
   func authenticate(reason: String) async -> LockAuthResult {
     count += 1
     try? await Task.sleep(for: .milliseconds(400))
+    if planned {
+      defer { allowNext = false }
+      return allowNext ? .success : .cancelled
+    }
     return count == 1 ? .cancelled : .success
   }
 }
 
+#if DEBUG
+  extension LockController {
+    /// `-AbacusLockTestPlan "2:unlock,4:lock"` (DEBUG, with `-AbacusLockTest YES`): unlocks or
+    /// locks at the given seconds after launch, to check sheet hiding with the in-app snapshot.
+    fileprivate func runPlan(_ plan: String, authenticator: ScriptedAuthenticator) {
+      let steps = plan.split(separator: ",").compactMap { step -> (Double, String)? in
+        let parts = step.split(separator: ":")
+        guard parts.count == 2, let at = Double(parts[0]) else { return nil }
+        return (at, String(parts[1]))
+      }
+      Task { @MainActor [model] in
+        var elapsed = 0.0
+        for (at, action) in steps {
+          try? await Task.sleep(for: .seconds(max(0, at - elapsed)))
+          elapsed = at
+          switch action {
+          case "unlock":
+            authenticator.allowNext = true
+            await model.unlock()
+          case "lock": model.lockNow()
+          default: break
+          }
+          let sheets = NSApp.windows.filter { $0.sheetParent != nil || $0.parent != nil }.map {
+            "\(type(of: $0)) [\(Bundle(for: type(of: $0)).bundleIdentifier ?? "?")] ours \(LockWindowShield.isOurs($0)) alpha \($0.alphaValue)"
+          }
+          let titles = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.title)
+          let restorable = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.isRestorable)
+          NSLog(
+            "LockTestPlan %@s %@: locked %d, attached %@, titles %@, restorable %@", "\(at)", action,
+            model.isLocked ? 1 : 0, "\(sheets)", "\(titles)", "\(restorable)")
+        }
+      }
+    }
+  }
+#endif
+
 /// The opaque lock screen that covers a window (approved prototype N7, R-LOCK-7).
 struct LockView: View {
   let model: AppLockModel
+  /// Identifies this lock screen's button frames for `LockWindowShield`.
+  @State private var frameID = UUID()
 
   var body: some View {
     VStack(spacing: 14) {
@@ -88,7 +159,13 @@ struct LockView: View {
         }
         .keyboardShortcut(.defaultAction)
         .disabled(model.state == .prompting)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+          LockButtonFrames.shared.set($0, for: .unlock, id: frameID)
+        }
         Button("Quit Abacus") { NSApp.terminate(nil) }
+          .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: {
+            LockButtonFrames.shared.set($0, for: .quit, id: frameID)
+          }
       }
       .padding(.top, 6)
       Text("Unlock uses Touch ID, Apple Watch or your Mac password.")
@@ -96,8 +173,13 @@ struct LockView: View {
     }
     .multilineTextAlignment(.center)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(LockAnchorView(id: frameID))
+    .coordinateSpace(.named(Self.space))
     .background(Color(nsColor: .windowBackgroundColor))
+    .onDisappear { LockButtonFrames.shared.remove(frameID) }
   }
+
+  private static let space = "abacus.lockView"
 
   private var buttonTitle: String { model.state == .unavailable ? "Try again" : "Unlock" }
 
@@ -128,6 +210,8 @@ struct LockGate<Content: View>: View {
         .disabled(model.isLocked)
         .allowsHitTesting(!model.isLocked)
         .accessibilityHidden(model.isLocked)
+        // Section title, currency pills and "New transaction" live in the window toolbar.
+        .toolbarVisibility(model.isLocked ? .hidden : .automatic, for: .windowToolbar)
       if model.isLocked {
         LockView(model: model)
       }
