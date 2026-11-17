@@ -387,7 +387,7 @@ public final class AppSession {
     if accounts.phase == .loaded { await accounts.refreshRates() }
     if budget.phase == .loaded { await budget.refreshRates() }
     if debts.phase == .loaded { await debts.refreshRates() }
-    if upcoming.phase == .loaded { await upcoming.refreshRates() }
+    await upcoming.refreshRates()
     await app.rates.load()
   }
 

@@ -140,16 +140,16 @@ struct ScheduledItemEditorSheet: View {
               }
             }
             GridRow {
-              Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+              label("Next dates")
               VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                  Text("Next dates").font(.caption.weight(.semibold))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                   let days = editor.nextDayTexts
                   if days.isEmpty {
                     Text("None").font(.caption).foregroundStyle(.secondary)
                   }
                   ForEach(days, id: \.self) { day in
                     Text(day).font(.caption).monospacedDigit()
+                      .fixedSize()
                       .padding(.horizontal, 6).padding(.vertical, 2)
                       .background(Capsule().fill(UpcomingPalette.evidence))
                   }
@@ -212,7 +212,7 @@ struct ScheduledItemEditorSheet: View {
       }
       .padding(20)
     }
-    .frame(width: 600, height: 680)
+    .frame(width: 660, height: 680)
   }
 
   private func label(_ text: String) -> some View {
