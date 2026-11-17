@@ -133,6 +133,94 @@ public enum DebtLegMatch {
   }
 }
 
+/// A real transaction (or import row) resolving an expected occurrence of a scheduled item
+/// (R-REC-6): same account (a transfer: the from-account), same type and flow direction, amount
+/// within the item's tolerance (the rule of `PendingSettlement.amountMatches`), day within
+/// `FuzzyDuplicate.dayWindow` of the expected day, and a similar description when both are
+/// non-empty (`DescriptionSimilarity`). Refunds and balance corrections never match.
+public enum ScheduledMatch {
+  public static let dayWindow = FuzzyDuplicate.dayWindow
+
+  /// The rule as a value for the store (`ScheduledMatching`).
+  public static let rule = Rule()
+
+  /// `PendingSettlement.amountMatches` with the item's tolerance instead of the fixed 5 %.
+  public static func amountMatches(expected: Int64, actual: Int64, tolerancePercent: Int) -> Bool {
+    if Int64(tolerancePercent) == PendingSettlement.amountTolerancePercent {
+      return PendingSettlement.amountMatches(pending: expected, settled: actual)
+    }
+    return abs(actual - expected) * 100 <= Int64(max(0, tolerancePercent)) * max(expected, actual)
+  }
+
+  /// The flow an occurrence of `type` has on the item's account.
+  static func flow(of type: TxnType) -> Flow { type == .income ? .in : .out }
+
+  /// The probe of a stored transaction, nil when it can never resolve an occurrence.
+  public static func probe(_ txn: Txn, calendar: Calendar) -> ScheduledProbe? {
+    guard !txn.isRefund, !txn.isBalanceCorrection, Flow.of(txn, on: txn.accountID) == flow(of: txn.type) else { return nil }
+    return ScheduledProbe(
+      key: txn.id.uuidString, accountID: txn.accountID, type: txn.type, amountMinor: txn.amountMinor, payee: txn.payee,
+      day: Day(txn.occurredAt, calendar: calendar))
+  }
+
+  /// R-REC-6 for one pair.
+  public static func matches(_ probe: ScheduledProbe, _ candidate: ScheduledCandidate) -> Bool {
+    let item = candidate.item
+    guard probe.accountID == item.accountID, probe.type == item.type,
+      abs(probe.day.daysUntil(candidate.day)) <= dayWindow,
+      amountMatches(expected: candidate.expectedAmountMinor, actual: probe.amountMinor, tolerancePercent: item.tolerancePercent)
+    else { return false }
+    return DescriptionSimilarity.isSimilar(probe.payee, item.payee)
+  }
+
+  /// One probe per occurrence and one occurrence per probe: the nearest day wins, then the
+  /// nearest amount, then the equal description, then the older item (spec §4).
+  public static func assign(_ probes: [ScheduledProbe], to candidates: [ScheduledCandidate]) -> [ScheduledAssignment] {
+    struct Claim {
+      var probe: Int
+      var candidate: Int
+      var dayGap: Int
+      var amountGap: Int64
+      var textGap: Int
+      var created: Date
+      var tie: String
+    }
+    var claims: [Claim] = []
+    for (i, probe) in probes.enumerated() {
+      for (j, candidate) in candidates.enumerated() where matches(probe, candidate) {
+        let sameText = DescriptionSimilarity.words(probe.payee) == DescriptionSimilarity.words(candidate.item.payee)
+        claims.append(
+          Claim(
+            probe: i, candidate: j, dayGap: abs(probe.day.daysUntil(candidate.day)),
+            amountGap: abs(probe.amountMinor - candidate.expectedAmountMinor), textGap: sameText ? 0 : 1,
+            created: candidate.item.createdAt, tie: candidate.day.string + probe.key + candidate.item.id.uuidString))
+      }
+    }
+    claims.sort {
+      ($0.dayGap, $0.amountGap, $0.textGap, $0.created, $0.tie) < ($1.dayGap, $1.amountGap, $1.textGap, $1.created, $1.tie)
+    }
+    var takenProbes = Set<Int>()
+    var takenCandidates = Set<Int>()
+    var result: [ScheduledAssignment] = []
+    for claim in claims where !takenProbes.contains(claim.probe) && !takenCandidates.contains(claim.candidate) {
+      takenProbes.insert(claim.probe)
+      takenCandidates.insert(claim.candidate)
+      let candidate = candidates[claim.candidate]
+      result.append(ScheduledAssignment(probeKey: probes[claim.probe].key, itemID: candidate.item.id, expectedDay: candidate.day))
+    }
+    return result
+  }
+
+  public struct Rule: ScheduledMatching {
+    public init() {}
+    public var dayWindow: Int { ScheduledMatch.dayWindow }
+    public func probe(_ txn: Txn, calendar: Calendar) -> ScheduledProbe? { ScheduledMatch.probe(txn, calendar: calendar) }
+    public func assign(_ probes: [ScheduledProbe], to candidates: [ScheduledCandidate]) -> [ScheduledAssignment] {
+      ScheduledMatch.assign(probes, to: candidates)
+    }
+  }
+}
+
 extension Day {
   /// Whole days from `self` to `other` (positive when `other` is later).
   func distance(to other: Day, calendar: Calendar) -> Int {

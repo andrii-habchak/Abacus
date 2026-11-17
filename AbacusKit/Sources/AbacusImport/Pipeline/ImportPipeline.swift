@@ -246,6 +246,11 @@ public struct ImportPipeline: Sendable {
     }
     let built = CommitBuilder(preview: preview, calendar: calendar, now: now()).build()
     try await store.commit(built.commit)
+    // R-REC-7a: the new transactions pay the occurrences the preview showed. A failure here leaves
+    // the import as it is; the launch sweep matches them later.
+    if let scheduled = store as? any ScheduledImportMatching {
+      _ = try? await scheduled.recordScheduledMatches(preview.scheduledImportMatches)
+    }
     return built.summary
   }
 
