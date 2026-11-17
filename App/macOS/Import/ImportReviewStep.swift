@@ -239,7 +239,16 @@ struct ImportCards: View {
       }
     }
     .padding(.horizontal, ImportMetrics.horizontalPadding)
-    .padding(.vertical, 14)
+    .padding(.top, 14)
+    .padding(.bottom, model.scheduledMatchNote == nil ? 14 : 6)
+    if let note = model.scheduledMatchNote {
+      Label(note, systemImage: "calendar.badge.checkmark")
+        .font(.system(size: 12))
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, ImportMetrics.horizontalPadding)
+        .padding(.bottom, 10)
+    }
   }
 }
 

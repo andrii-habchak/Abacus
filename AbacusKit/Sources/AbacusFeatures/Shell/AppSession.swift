@@ -51,6 +51,13 @@ public final class AppSession {
   @ObservationIgnored var pendingPayment: ScheduledPayment?
   /// N5: the sweep + snapshot in flight (never two at once).
   @ObservationIgnored private var maintenance: Task<Void, Never>?
+  /// A trigger (a foreign write, activation) arrived while `maintenance` ran: one more run follows
+  /// (coalesced, at most one pending; QA-N2 L4).
+  @ObservationIgnored private var maintenanceRerun = false
+  /// Finished sweep runs of this session (tests).
+  @ObservationIgnored private(set) var maintenanceRuns = 0
+  /// Called after each sweep, before the reload (tests: a write that lands mid-run).
+  @ObservationIgnored var afterMaintenanceSweep: (@MainActor () -> Void)?
   @ObservationIgnored private var calendar: Calendar = .current
   @ObservationIgnored private var activationObserver: (any NSObjectProtocol)?
   /// N2: reloads the screens when `abacus-mcp` or `abacus-import` writes the database file.
@@ -366,22 +373,33 @@ public final class AppSession {
 
   /// The matching sweep, then the daily forecast snapshot, off the main actor; then the
   /// Upcoming data (badge, widget) re-reads. Without a database (previews) only the reload.
+  /// A call while a run is in progress queues one more run after it (several such calls still
+  /// add only one), so a write that lands mid-sweep is matched too; the returned task ends after
+  /// that extra run.
   @discardableResult
   public func runScheduledMaintenance() -> Task<Void, Never> {
-    if let maintenance { return maintenance }
+    if let maintenance {
+      maintenanceRerun = true
+      return maintenance
+    }
     let task = Task { [weak self] in
       guard let self else { return }
-      if let database = self.database {
-        let today = self.app.environment.today()
-        let converter: (any CurrencyConverter)? = await self.refresher?.snapshot.table
-        let calendar = self.calendar
-        _ = await Task.detached(priority: .utility) {
-          await UpcomingMaintenance.run(database: database, today: today, converter: converter, calendar: calendar)
-        }.value
-      }
-      await self.upcoming.load()
-      // The sweep may have matched or missed occurrences; a shown forecast follows.
-      if self.forecast.phase == .loaded { await self.forecast.load() }
+      repeat {
+        self.maintenanceRerun = false
+        if let database = self.database {
+          let today = self.app.environment.today()
+          let converter: (any CurrencyConverter)? = await self.refresher?.snapshot.table
+          let calendar = self.calendar
+          _ = await Task.detached(priority: .utility) {
+            await UpcomingMaintenance.run(database: database, today: today, converter: converter, calendar: calendar)
+          }.value
+        }
+        self.afterMaintenanceSweep?()
+        await self.upcoming.load()
+        // The sweep may have matched or missed occurrences; a shown forecast follows.
+        if self.forecast.phase == .loaded { await self.forecast.load() }
+        self.maintenanceRuns += 1
+      } while self.maintenanceRerun
       self.maintenance = nil
     }
     maintenance = task
@@ -595,6 +613,8 @@ public final class AppSession {
     }
     do {
       if try await SampleData.loadIfEmpty(into: database) {
+        let today = app.environment.today()
+        let calendar = self.calendar
         // N5: a few scheduled items on the sample accounts (R-REC-10).
         #if DEBUG
           // `-AbacusForecastDemo YES`: the Forecast lane's demo items and past snapshots instead.
@@ -603,10 +623,10 @@ public final class AppSession {
               database: database, today: app.environment.today(), converter: await refresher?.snapshot.table,
               calendar: calendar)
           } else {
-            try? await database.write { try UpcomingSample.seedIfAbsent($0) }
+            try? await database.write { try UpcomingSample.seedIfAbsent($0, today: today, calendar: calendar) }
           }
         #else
-          try? await database.write { try UpcomingSample.seedIfAbsent($0) }
+          try? await database.write { try UpcomingSample.seedIfAbsent($0, today: today, calendar: calendar) }
         #endif
         await dataChanged()
         sampleDataMessage = "Sample data loaded: \(PreviewData.accounts.count) accounts and \(PreviewData.txns.count) transactions."

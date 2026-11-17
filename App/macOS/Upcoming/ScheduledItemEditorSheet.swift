@@ -108,9 +108,9 @@ struct ScheduledItemEditorSheet: View {
             GridRow {
               label("Starts")
               HStack(spacing: 12) {
-                DatePicker("Starts", selection: dayBinding($editor.draft.startDay), displayedComponents: .date)
-                  .labelsHidden()
-                  .fixedSize()
+                UpcomingDayField(
+                  title: "Starts", date: dayBinding($editor.draft.startDay),
+                  text: editor.fieldDayText(editor.draft.startDay))
                 if editor.draft.unit == .month {
                   Toggle("Last day of the month", isOn: $editor.draft.lastDayOfMonth)
                 }
@@ -128,9 +128,9 @@ struct ScheduledItemEditorSheet: View {
                 .fixedSize()
                 switch editor.draft.endKind {
                 case .onDay:
-                  DatePicker("End day", selection: dayBinding($editor.draft.endDay), displayedComponents: .date)
-                    .labelsHidden()
-                    .fixedSize()
+                  UpcomingDayField(
+                    title: "End day", date: dayBinding($editor.draft.endDay),
+                    text: editor.fieldDayText(editor.draft.endDay))
                 case .afterCount:
                   TextField("12", value: $editor.draft.endCount, format: .number).frame(width: 56)
                   Text("times")
@@ -184,6 +184,10 @@ struct ScheduledItemEditorSheet: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
       }
+      // As tall as the fields (no empty band above the footer); scrolls only when they don't fit.
+      .scrollBounceBehavior(.basedOnSize)
+      .frame(maxHeight: 640)
+      .fixedSize(horizontal: false, vertical: true)
       if let message = editor.errorMessage ?? editor.issues.first.map(\.message) {
         Text(message).font(.caption)
           .foregroundStyle(editor.errorMessage == nil ? Color.secondary : UpcomingPalette.negative)
@@ -212,7 +216,8 @@ struct ScheduledItemEditorSheet: View {
       }
       .padding(20)
     }
-    .frame(width: 660, height: 680)
+    .frame(width: 660)
+    .presentationSizing(.fitted)
   }
 
   private func label(_ text: String) -> some View {
@@ -244,5 +249,32 @@ struct ScheduledItemEditorSheet: View {
     Binding(
       get: { day.wrappedValue.date() },
       set: { day.wrappedValue = Day($0) })
+  }
+}
+
+/// A day as text in the app's style ("Sat, 5 Dec 2026") with a calendar to pick it (QA-N2 L5:
+/// the stepper field showed "5/ 1/2026").
+private struct UpcomingDayField: View {
+  let title: String
+  @Binding var date: Date
+  let text: String
+  @State private var showsCalendar = false
+
+  var body: some View {
+    Button {
+      showsCalendar.toggle()
+    } label: {
+      HStack(spacing: 6) {
+        Text(text).monospacedDigit()
+        Image(systemName: "calendar").foregroundStyle(.secondary)
+      }
+    }
+    .accessibilityLabel("\(title): \(text)")
+    .popover(isPresented: $showsCalendar, arrowEdge: .bottom) {
+      DatePicker(title, selection: $date, displayedComponents: .date)
+        .labelsHidden()
+        .datePickerStyle(.graphical)
+        .padding(12)
+    }
   }
 }

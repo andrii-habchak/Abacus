@@ -41,14 +41,17 @@ public enum UpcomingSample {
   }
 
   /// "Load Sample Data": the items, only when the sample accounts are there and no item exists.
-  public static func seedIfAbsent(_ db: Database) throws {
+  /// The items start two months before `today` (QA-N2 L3: a January start left dozens of missed
+  /// occurrences), and a few of their past occurrences get a matching synthetic transaction, so
+  /// the first sweep stores a mix of paid and missed.
+  public static func seedIfAbsent(_ db: Database, today: Day, calendar: Calendar = .current) throws {
     guard try ScheduledItem.fetchCount(db) == 0,
       try Account.find(PreviewData.pkoPersonal.id).fetchCount(db) > 0
     else { return }
     // Categories may have been mapped to the default set by name (`SampleData`): find the
     // stored category of the same name and kind.
     let stored = try AbacusDomain.Category.fetchAll(db)
-    let rows = items.map { item in
+    let rows = recent(today: today, calendar: calendar).map { item in
       var item = item
       if let wanted = PreviewData.categories.first(where: { $0.id == item.categoryID }) {
         item.categoryID =
@@ -57,9 +60,50 @@ public enum UpcomingSample {
       }
       return item
     }
+    let paid = paidTxns(rows, today: today, calendar: calendar)
     try db.seed {
       for item in rows { item }
+      for txn in paid { txn }
     }
+  }
+
+  /// The items moved to start in the month two months before `today` (same day of the month;
+  /// "last day of the month" items on that month's last day), created on their start day.
+  static func recent(today: Day, calendar: Calendar) -> [ScheduledItem] {
+    let month = today.yearMonth.adding(months: -2)
+    return items.map { item in
+      var item = item
+      guard let original = Day(item.startDay) else { return item }
+      let last = month.lastDay(calendar: calendar)
+      let start = item.lastDayOfMonth ? last : Day(year: month.year, month: month.month, day: min(original.day, last.day))
+      item.startDay = start.string
+      item.createdAt = start.date(calendar: calendar)
+      return item
+    }
+  }
+
+  /// Items whose past occurrences were paid in the sample (the rest end up missed).
+  static let paidItems = [901, 902, 903, 904]
+
+  /// One synthetic transaction per past monthly occurrence of `paidItems`: the item's account,
+  /// type, amount, description and category, on the expected day.
+  static func paidTxns(_ items: [ScheduledItem], today: Day, calendar: Calendar) -> [Txn] {
+    var result: [Txn] = []
+    for (index, n) in paidItems.enumerated() {
+      guard let item = items.first(where: { $0.id == id(n) }), let start = Day(item.startDay) else { continue }
+      for offset in 0..<3 {
+        let month = start.yearMonth.adding(months: offset)
+        let last = month.lastDay(calendar: calendar)
+        let day = Day(year: month.year, month: month.month, day: min(start.day, last.day))
+        guard day < today else { break }
+        let at = day.date(calendar: calendar).addingTimeInterval(10 * 3600)
+        result.append(
+          Txn(
+            id: id(960 + index * 10 + offset), type: item.type, occurredAt: at, accountID: item.accountID,
+            amountMinor: item.amountMinor, categoryID: item.categoryID, payee: item.payee, createdAt: at))
+      }
+    }
+    return result
   }
 
   /// `PreviewData` plus the items, in memory.
