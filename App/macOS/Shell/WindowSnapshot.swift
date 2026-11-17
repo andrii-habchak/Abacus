@@ -33,7 +33,21 @@ enum WindowSnapshot {
     try? await Task.sleep(for: .seconds(delay > 0 ? delay : 2))
     if defaults.bool(forKey: "AbacusSnapshotFullPage") { await growToFitContent() }
     await capture(to: URL(filePath: folder, directoryHint: .isDirectory), prefix: name)
+    await quit()
+  }
+
+  /// Ends the run after the files are written. An attached sheet keeps `terminate` from quitting
+  /// (scripted runs hung, QA-N L1), so sheets are closed first; if the app is still running a
+  /// moment later, it exits outright.
+  private static func quit() async {
+    for window in NSApp.windows {
+      for sheet in window.sheets.reversed() { window.endSheet(sheet) }
+    }
+    try? await Task.sleep(for: .milliseconds(300))
     NSApp.terminate(nil)
+    try? await Task.sleep(for: .seconds(3))
+    print("WindowSnapshot: still running after terminate; exiting")
+    exit(0)
   }
 
   private static var mainWindow: NSWindow? {
