@@ -4,14 +4,20 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
-_Updated 2026-11-17 23:05 CET (orchestrator)._ **Roadmap N1–N7 is merged on `main`** (N8 deferred). Tonight's lanes,
-all merged `--no-ff` with the gate green after each merge (last: 1,350 tests with real samples, app build):
-N5c forecast snapshots + overlay/accuracy maths, N2r app reloads after writes by `abacus-mcp`/`abacus-import`
-(+ stale-sheet warning in the editor), N5a scheduled-item repositories + matching + launch sweep, N7c lock finish
-(sheets/alerts and toolbar hidden while locked, `whenUnlocked` queue, not restorable while locked, README recovery
-line), N5d Forecast view, N5b Upcoming section (Bills, All items, suggestions, item editor, dashboard widget, sidebar
-badge, sweep + daily snapshot at launch/activation/foreign write). TA is v1.13 (R-REC §4.8, R-LOCK §4.9).
-QA-N (visual and flow check on scratch databases) is running: `docs/status/QA-N.md`.
+_Updated 2026-11-18 00:00 CET (orchestrator, run finished)._ **Roadmap N1–N7 is merged on `main`** (N8 deferred).
+No lane is running. Gate green after the last merge: 1,355 tests with real samples, app build.
+Merged tonight, each `--no-ff`, gate after each: N5c forecast snapshots + overlay/accuracy maths; N2r app reloads after
+writes by `abacus-mcp`/`abacus-import` (+ stale-sheet warning in the editor); N5a scheduled-item repositories, matching,
+launch sweep; N7c lock finish (sheets/alerts and toolbar hidden while locked, `whenUnlocked` queue, not restorable while
+locked, README recovery line); N5d Forecast view; N5b Upcoming section (Bills, All items, suggestions, item editor,
+dashboard widget, sidebar badge, sweep + daily snapshot at launch/activation/foreign write, import "Matches scheduled"
+badge); QA-N and QA-N2 reports (`docs/status/QA-N*.md`); QA-fix (`abacus-import` exits with an error line instead of
+crashing; snapshot runs quit with a sheet open); N5b-fix (Upcoming totals after rates arrive, sweep re-run on a write
+during a sweep, scheduled-match count in review and CLI, editor and sample-data fixes); N7d (lock screen looks active
+over a hidden sheet). TA is v1.13 (R-REC §4.8, R-LOCK §4.9).
+Not checked by anyone (no Accessibility permission for synthetic input): real clicks in Upcoming (Mark paid, Skip,
+Link existing…, suggestion buttons, calendar popover), clicks on Unlock/Quit over a hidden sheet, suggestions card with
+real patterns, the Forecast overlay picked by menu.
 
 **Migration:** the next build the owner runs applies **v18** (and v19 if not yet applied). Back up `abacus.sqlite`
 first (N1's pre-migration snapshot also covers it).
@@ -27,6 +33,9 @@ first (N1's pre-migration snapshot also covers it).
   later migration would be cleaner (N5a).
 - Try `abacus-mcp` in an AI client; further MCP write tools wanted?
 - Delete merged worktrees and branches (agents may not delete).
+- Five old `abacus-import` crash reports in `~/Library/Logs/DiagnosticReports` can be deleted (QA-fix).
+- Lock over a hidden sheet shows no traffic lights (title bar hidden with the toolbar); ⌘Q/⌘H/⌘M work (N7d).
+- Version 1.8.0 + DMG when you want to try it (adds migration v18 to your database).
 
 The 2026-11-17 plan below is kept for reference; every row in it is merged.
 
