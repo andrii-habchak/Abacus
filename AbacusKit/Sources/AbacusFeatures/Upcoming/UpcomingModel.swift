@@ -71,7 +71,12 @@ public final class UpcomingModel {
   public private(set) var dismissals: [SuggestionDismissal] = []
   public private(set) var today: Day
   public private(set) var graceDays = ScheduledOccurrences.defaultGraceDays
-  @ObservationIgnored public private(set) var converter: any CurrencyConverter = RateTable()
+  /// The rates both tabs (Bills and All items) convert with. Observed, so a new table redraws the
+  /// totals, the "≈" lines and the monthly average (QA-N2 H1).
+  public private(set) var converter: any CurrencyConverter = RateTable()
+  /// Bumped last whenever `converter` is replaced: an observed value that always changes, so views
+  /// that only read derived figures still recompute after new rates arrive.
+  public private(set) var ratesVersion = 0
   /// Evidence rows of the suggestions (day and amount).
   @ObservationIgnored private var evidence: [Txn.ID: Txn] = [:]
   /// "Not now": suggestion id → its newest row's day; shown again when a newer row arrives.
@@ -109,8 +114,9 @@ public final class UpcomingModel {
         try await (items, stored, accounts, categories, dismissals)
       graceDays = (try? await dependencies.settings.value(.scheduledGraceDays)).flatMap { $0.flatMap(Int.init) }
         ?? ScheduledOccurrences.defaultGraceDays
-      converter = await dependencies.converter()
+      let rates = await dependencies.converter()
       phase = .loaded
+      setRates(rates)
     } catch {
       phase = .failed("Couldn't load scheduled items: \(error.localizedDescription)")
       return
@@ -120,10 +126,12 @@ public final class UpcomingModel {
 
   /// New rates: totals and converted amounts follow.
   public func refreshRates() async {
-    converter = await dependencies.converter()
-    // Touch an observed value so the views recompute.
-    let currency = displayCurrency
-    displayCurrency = currency
+    setRates(await dependencies.converter())
+  }
+
+  private func setRates(_ rates: any CurrencyConverter) {
+    converter = rates
+    ratesVersion &+= 1
   }
 
   private func loadSuggestions() async {

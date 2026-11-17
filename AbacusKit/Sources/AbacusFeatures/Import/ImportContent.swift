@@ -261,6 +261,8 @@ struct ImportFormat: Sendable {
   func dayTime(_ date: Date) -> String { formatter("dd.MM.yyyy HH:mm").string(from: date) }
   /// "21 Oct 2026, 18:40"
   func stamp(_ date: Date) -> String { formatter("d MMM yyyy, HH:mm").string(from: date) }
+  /// "12 Nov" (the day style of the Upcoming screen).
+  func shortDay(_ day: Day) -> String { formatter("d MMM").string(from: day.date(calendar: calendar)) }
   /// "May 2025"
   func month(_ day: Day) -> String { formatter("MMM yyyy").string(from: day.date(calendar: calendar)) }
   /// "1 Jun 2024"
@@ -327,6 +329,14 @@ extension ImportWizardModel {
   public var targetRemembered: Bool { preview?.targetRemembered ?? false }
 
   // MARK: Cards and tabs
+
+  /// Under the summary cards when rows pay scheduled items (R-REC-7): "2 rows match scheduled
+  /// items · they are marked paid on import". Nil when none do.
+  public var scheduledMatchNote: String? {
+    guard let count = preview?.scheduledMatchCount, count > 0 else { return nil }
+    let rows = count == 1 ? "1 row matches a scheduled item" : "\(count) rows match scheduled items"
+    return rows + " · marked paid on import"
+  }
 
   /// Summary cards (they filter the rows). Already imported, possible duplicates and settle
   /// pending appear for PKO statements or when the file has such rows; Skipped only when there
@@ -404,7 +414,7 @@ extension ImportWizardModel {
     item.counterpart = counterpartItem(row)
     item.excludedByUser = row.excludedByUser
     item.debt = row.debt.map(debtLabel)
-    item.scheduledBadge = row.scheduledMatch.map { "Matches scheduled: \($0.payee) · \(format.day($0.expectedDay.date()))" }
+    item.scheduledBadge = row.scheduledMatch.map { "Matches scheduled: \($0.payee) · \(format.shortDay($0.expectedDay))" }
     if let debt = row.debt, row.review == nil, row.status != .alreadyImported, row.status != .skipped {
       item.note = ImportNote(
         debt.ruleID != nil ? "Transfer to debt by rule" : (debt.createsDebt ? "Creates the debt" : "Transfer to debt"), .info)

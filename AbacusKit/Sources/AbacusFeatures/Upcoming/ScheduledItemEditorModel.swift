@@ -195,6 +195,14 @@ public final class ScheduledItemEditorModel: Identifiable {
   }
 
   /// Changing the type drops a category of the other kind and the To side.
+  /// "Sat, 5 Dec 2026": the Starts / Ends day fields, in the style of the next-date chips.
+  public func fieldDayText(_ day: Day) -> String {
+    let calendar = dependencies.calendar
+    return day.date(calendar: calendar).formatted(
+      Date.FormatStyle(locale: dependencies.format.locale, calendar: calendar, timeZone: calendar.timeZone)
+        .weekday(.abbreviated).day().month(.abbreviated).year())
+  }
+
   public func setType(_ type: TxnType) {
     guard type != draft.type else { return }
     draft.type = type

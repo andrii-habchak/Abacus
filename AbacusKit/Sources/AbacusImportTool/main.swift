@@ -161,6 +161,7 @@ func run() async throws {
       "\(file.lastPathComponent) [\(source.rawValue)]: rows \(preview.rows.count) · new \(counts.new) · already imported \(counts.alreadyImported)"
         + " · possible duplicates \(counts.possibleDuplicate) · settles pending \(counts.settlesPending)"
         + " · needs review \(counts.needsReview) · skipped \(counts.skipped)")
+    print("  scheduled matches: \(preview.scheduledMatchCount)")
     if source == .pko && preview.targetAccountID == nil {
       throw ToolError.usage("PKO statement needs --pko-account <name> (no remembered account yet)")
     }
