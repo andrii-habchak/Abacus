@@ -50,6 +50,7 @@ final class LockWindowShield {
   private func observe() {
     withObservationTracking {
       _ = model.isLocked
+      _ = model.enabled
     } onChange: { [weak self] in
       Task { @MainActor in
         self?.refresh()
@@ -62,6 +63,7 @@ final class LockWindowShield {
   /// Hides what is new while locked; restores everything once unlocked.
   func refresh() {
     guard NSApp != nil else { return }  // the controller is made before the application
+    keepWindowImagesOutOfSavedState()
     if model.isLocked {
       hideAttachedWindows()
       neutralTitles()
@@ -90,6 +92,16 @@ final class LockWindowShield {
       window.contentView?.isHidden = true
     }
     if !hidden.isEmpty, monitor == nil { installMonitor() }
+  }
+
+  /// macOS keeps window state, including window images (`window_N.data`, hundreds of KB), in
+  /// Saved Application State, readable outside the lock. With the lock on, top-level windows are not
+  /// restorable, so no image of unlocked content is stored (R-LOCK-9, spec Q11).
+  private func keepWindowImagesOutOfSavedState() {
+    let restorable = !model.enabled
+    for window in NSApp.windows where window.sheetParent == nil && window.parent == nil {
+      if window.isRestorable != restorable { window.isRestorable = restorable }
+    }
   }
 
   /// The section name in the title bar becomes "Abacus" (Window menu, Mission Control).

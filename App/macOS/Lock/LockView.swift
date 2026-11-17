@@ -15,7 +15,7 @@ final class LockController {
   init(previewData: Bool, lockTest: Bool) {
     if lockTest {
       // `-AbacusLockTest YES`: lock on, scripted authenticator, scratch preferences (R-LOCK-13).
-      let store = LockSettingsStore(defaults: UserDefaults(suiteName: "abacus.lock.test.\(UUID().uuidString)")!)
+      let store = LockSettingsStore(defaults: Self.scratchDefaults("abacus.lock.test"))
       store.enabled = true
       let authenticator = ScriptedAuthenticator()
       model = AppLockModel(store: store, authenticator: authenticator)
@@ -27,12 +27,29 @@ final class LockController {
       #endif
     } else if previewData {
       // Previews and screenshots never lock or prompt.
-      let store = LockSettingsStore(defaults: UserDefaults(suiteName: "abacus.lock.preview.\(UUID().uuidString)")!)
+      let store = LockSettingsStore(defaults: Self.scratchDefaults("abacus.lock.preview"))
       model = AppLockModel(store: store, authenticator: LAAuthenticator())
     } else {
       model = AppLockModel(store: LockSettingsStore(), authenticator: LAAuthenticator())
     }
     start()
+  }
+
+  /// A throwaway preferences suite; its file in ~/Library/Preferences is removed at quit.
+  private static func scratchDefaults(_ prefix: String) -> UserDefaults {
+    let name = "\(prefix).\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: name)!
+    NotificationCenter.default.addObserver(
+      forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+    ) { _ in
+      defaults.removePersistentDomain(forName: name)
+      // The account's real home: suites ignore CFFIXED_USER_HOME.
+      if let home = getpwuid(getuid())?.pointee.pw_dir {
+        let file = URL(filePath: String(cString: home)).appending(path: "Library/Preferences/\(name).plist")
+        try? FileManager.default.removeItem(at: file)
+      }
+    }
+    return defaults
   }
 
   private func start() {
