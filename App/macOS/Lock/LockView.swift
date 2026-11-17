@@ -118,14 +118,18 @@ final class ScriptedAuthenticator: LockAuthenticator {
           case "lock": model.lockNow()
           default: break
           }
+          // The shield applies the new state on its observation callback, a run-loop turn
+          // later; apply it now so the log reports what the screen shows (QA-N L3).
+          shield?.refresh()
+          await Task.yield()
           let sheets = NSApp.windows.filter { $0.sheetParent != nil || $0.parent != nil }.map {
             "\(type(of: $0)) [\(Bundle(for: type(of: $0)).bundleIdentifier ?? "?")] ours \(LockWindowShield.isOurs($0)) alpha \($0.alphaValue)"
           }
           let titles = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.title)
           let restorable = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.isRestorable)
           NSLog(
-            "LockTestPlan %@s %@: locked %d, attached %@, titles %@, restorable %@", "\(at)", action,
-            model.isLocked ? 1 : 0, "\(sheets)", "\(titles)", "\(restorable)")
+            "LockTestPlan %@s %@: locked %d, hidden %d, attached %@, titles %@, restorable %@", "\(at)", action,
+            model.isLocked ? 1 : 0, shield?.hiddenCount ?? 0, "\(sheets)", "\(titles)", "\(restorable)")
         }
       }
     }
