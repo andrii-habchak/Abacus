@@ -101,6 +101,8 @@ public struct ImportRowItem: Identifiable, Hashable, Sendable {
   public var counterpart: ImportCounterpartItem? = nil
   /// C38: the row looks like, or was accepted as, the real figure of an estimated transfer.
   public var estimate: ImportEstimateItem? = nil
+  /// R-REC-7a: "Matches scheduled: Rent · 5 Nov 2026" (nothing is written before Import).
+  public var scheduledBadge: String? = nil
 
   /// An expense/income row that still has no category.
   public var needsCategory: Bool {
@@ -402,6 +404,7 @@ extension ImportWizardModel {
     item.counterpart = counterpartItem(row)
     item.excludedByUser = row.excludedByUser
     item.debt = row.debt.map(debtLabel)
+    item.scheduledBadge = row.scheduledMatch.map { "Matches scheduled: \($0.payee) · \(format.day($0.expectedDay.date()))" }
     if let debt = row.debt, row.review == nil, row.status != .alreadyImported, row.status != .skipped {
       item.note = ImportNote(
         debt.ruleID != nil ? "Transfer to debt by rule" : (debt.createsDebt ? "Creates the debt" : "Transfer to debt"), .info)

@@ -97,6 +97,9 @@ public final class TransactionEditorModel {
     case .newInAccount(let id):
       await applyDefaults()
       preselect(account: id)
+    case .newFromTemplate(let template):
+      await applyDefaults()
+      prefill(template)
     case .edit(let id):
       do {
         guard let row = try await dependencies.transaction(id) else {
@@ -154,6 +157,36 @@ public final class TransactionEditorModel {
     guard let account = reference.account(id), !account.isArchived else { return }
     draft.accountID = account.id
     draft.currencyCode = account.currency.rawValue
+  }
+
+  /// N5 "Mark paid" (R-REC-4): type, account(s), amount, category, event, description and note
+  /// of the scheduled item; the day stays today.
+  private func prefill(_ template: TransactionTemplate) {
+    draft.type = template.type
+    draft.isRefund = false
+    draft.payee = template.payee
+    draft.note = template.note
+    if let event = template.eventID {
+      draft.eventID = event
+      draft.eventChosen = true
+    }
+    let account = reference.account(template.accountID)
+    let code = account?.currency.rawValue ?? draft.currencyCode
+    draft.amountText = EditorAmount.text(minor: template.amountMinor, code: code)
+    if template.type == .transfer {
+      draft.fromID = template.accountID
+      draft.toID = template.toAccountID
+      if let to = template.toAccountID.flatMap(reference.account), let received = template.toAmountMinor {
+        draft.toAmountText = EditorAmount.text(minor: received, code: to.currency.rawValue)
+      }
+    } else {
+      draft.accountID = template.accountID
+      draft.currencyCode = code
+      if let category = template.categoryID {
+        draft.categoryID = category
+        draft.categoryChosen = true
+      }
+    }
   }
 
   /// An active account stored under `key`.

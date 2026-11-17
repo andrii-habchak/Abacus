@@ -19,6 +19,8 @@ struct DashboardView: View {
   let onEditBudget: () -> Void
   /// The Debts widget (full width), when the app has one.
   let debts: AnyView?
+  /// N5: the "Upcoming (30 days)" widget (R-REC-11), when the app has one.
+  let upcoming: AnyView?
   private let initiallyShowsAccounts: Bool
   @State private var model: DashboardModel
   /// Two half-width widgets per row (false at narrow widths: one per row).
@@ -31,22 +33,24 @@ struct DashboardView: View {
 
   init(
     displayCurrency: Currency, dependencies: DashboardDependencies,
-    debts: AnyView? = nil,
+    debts: AnyView? = nil, upcoming: AnyView? = nil,
     onEditBudget: @escaping () -> Void = {},
     onDrillDown: @escaping (DashboardDrillDown.Target) -> Void
   ) {
     self.init(
       model: DashboardModel(dependencies: dependencies, displayCurrency: displayCurrency),
-      displayCurrency: displayCurrency, debts: debts, onEditBudget: onEditBudget, onDrillDown: onDrillDown)
+      displayCurrency: displayCurrency, debts: debts, upcoming: upcoming, onEditBudget: onEditBudget,
+      onDrillDown: onDrillDown)
   }
 
   /// With a model the shell keeps, so the selected month survives switching sections.
   init(
     model: DashboardModel, displayCurrency: Currency, initiallyShowsAccounts: Bool = false,
-    debts: AnyView? = nil,
+    debts: AnyView? = nil, upcoming: AnyView? = nil,
     onEditBudget: @escaping () -> Void = {},
     onDrillDown: @escaping (DashboardDrillDown.Target) -> Void
   ) {
+    self.upcoming = upcoming
     self.displayCurrency = displayCurrency
     self.onDrillDown = onDrillDown
     self.onEditBudget = onEditBudget
@@ -158,6 +162,7 @@ struct DashboardView: View {
       case .expenses: model.expenses != nil
       case .income: model.income != nil
       case .debts: debts != nil
+      case .upcoming: upcoming != nil
       }
     }
   }
@@ -194,6 +199,8 @@ struct DashboardView: View {
       }
     case .debts:
       if let debts { debts }
+    case .upcoming:
+      if let upcoming { upcoming }
     }
   }
 }

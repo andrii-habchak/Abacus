@@ -12,7 +12,7 @@ struct RootView: View {
     @Bindable var app = session.app
     @Bindable var session = session
     NavigationSplitView {
-      SidebarView(selection: $app.section)
+      SidebarView(selection: $app.section, upcomingBadge: session.upcoming.badgeCount)
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
     } detail: {
       SectionDetail(section: app.section ?? .dashboard)
@@ -85,6 +85,11 @@ struct SectionDetail: View {
       DashboardView(
         model: session.dashboard, displayCurrency: app.displayCurrency,
         debts: AnyView(DashboardDebtsCard(model: session.dashboard, debts: session.debts) { app.section = .debts }),
+        upcoming: AnyView(
+          DashboardUpcomingCard(model: session.upcoming, displayCurrency: app.displayCurrency) {
+            session.upcoming.tab = .bills
+            app.section = .upcoming
+          }),
         onEditBudget: { app.openBudget() }
       ) { target in
         app.showTransactions(.drillDown(target))
@@ -122,6 +127,9 @@ struct SectionDetail: View {
         .shellToolbar()
     case .debts:
       DebtsView(model: session.debts, displayCurrency: app.displayCurrency)
+        .shellToolbar()
+    case .upcoming:
+      UpcomingView(model: session.upcoming, displayCurrency: app.displayCurrency)
         .shellToolbar()
     case .importFiles:
       if let wizard = session.importWizard {

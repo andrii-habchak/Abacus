@@ -155,6 +155,12 @@ struct ImportRowCells: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
         }
+        // R-REC-7a: the row pays an expected occurrence of a scheduled item.
+        if let scheduled = row.scheduledBadge {
+          ImportBadge(text: scheduled, colors: ImportPalette.badge(.settlesPending))
+            .lineLimit(1)
+            .help(scheduled)
+        }
       }
       .frame(width: columns.description, alignment: .leading)
       .help(row.detail)

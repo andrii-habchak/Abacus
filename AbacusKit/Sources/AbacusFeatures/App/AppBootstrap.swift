@@ -58,7 +58,7 @@ public enum AppBootstrap {
 
 /// Sidebar sections of the main window (approved prototype group 1).
 public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
-  case dashboard, transactions, events, debts
+  case dashboard, transactions, events, upcoming, debts
   case accounts, categories, budget, importFiles, rates, rules
 
   public var id: Self { self }
@@ -68,6 +68,7 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .dashboard: "Dashboard"
     case .transactions: "Transactions"
     case .events: "Events"
+    case .upcoming: "Upcoming"
     case .debts: "Debts"
     case .accounts: "Accounts"
     case .categories: "Categories"
@@ -83,6 +84,7 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case .dashboard: "house"
     case .transactions: "list.bullet"
     case .events: "calendar"
+    case .upcoming: "clock"
     case .debts: "person.2"
     case .accounts: "creditcard"
     case .categories: "square.grid.2x2"
@@ -98,7 +100,7 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
   /// Accounts, Budget.
   public var usesDisplayCurrency: Bool {
     switch self {
-    case .dashboard, .transactions, .accounts, .events, .budget, .debts: true
+    case .dashboard, .transactions, .accounts, .events, .budget, .debts, .upcoming: true
     case .categories, .importFiles, .rates, .rules: false
     }
   }
@@ -108,11 +110,13 @@ public enum AppSection: String, CaseIterable, Identifiable, Hashable, Sendable {
   /// (R-SHELL, TA v1.6).
   public var offersNewTransaction: Bool {
     switch self {
-    case .budget, .rules, .debts: false
+    // Upcoming adds scheduled items instead (R-REC-10).
+    case .budget, .rules, .debts, .upcoming: false
     case .dashboard, .transactions, .events, .accounts, .categories, .importFiles, .rates: true
     }
   }
 
-  public static let overview: [AppSection] = [.dashboard, .transactions, .events, .debts]
+  /// R-REC-10: Upcoming after Events.
+  public static let overview: [AppSection] = [.dashboard, .transactions, .events, .upcoming, .debts]
   public static let manage: [AppSection] = [.accounts, .categories, .budget, .rules, .rates, .importFiles]
 }
