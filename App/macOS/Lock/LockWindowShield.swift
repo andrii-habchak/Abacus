@@ -30,6 +30,8 @@ final class LockWindowShield {
   private var hidden: [ObjectIdentifier: Hidden] = [:]
   /// Titles of top-level windows replaced by "Abacus" while locked (R-LOCK-9).
   private var titles: [ObjectIdentifier: (window: Weak, title: String)] = [:]
+  /// Sheet dimming views of parent windows hidden while their sheet is (QA-N L2).
+  private var dimming: [ObjectIdentifier: (view: WeakView, wasHidden: Bool)] = [:]
   private var monitor: Any?
   private var observers: [NSObjectProtocol] = []
 
@@ -67,7 +69,7 @@ final class LockWindowShield {
     if model.isLocked {
       hideAttachedWindows()
       neutralTitles()
-    } else if !hidden.isEmpty || !titles.isEmpty {
+    } else if !hidden.isEmpty || !titles.isEmpty || !dimming.isEmpty {
       restoreAll()
     }
   }
@@ -103,6 +105,26 @@ final class LockWindowShield {
       window.contentView?.isHidden = true
     }
     if !hidden.isEmpty, monitor == nil { installMonitor() }
+    undimSheetParents()
+    LockShieldState.shared.set(hiddenCount > 0)
+  }
+
+  /// A window with an attached sheet is drawn as a modal parent: AppKit lays a dimming view
+  /// (`NSSheetEffectDimmingView`, in the frame view above the content) over it and the window
+  /// is not key (the hidden sheet is; AppKit refuses `makeKey` on the parent). Over a hidden
+  /// sheet that made the lock screen look disabled (QA-N L2). The dimming view is hidden while
+  /// the sheet is; it only draws, so input handling is unchanged. `LockView` draws its
+  /// controls as in a key window (`LockShieldState.hidesSheets`).
+  private func undimSheetParents() {
+    for entry in hidden.values {
+      guard let window = entry.window, let parent = window.sheetParent, let frame = parent.contentView?.superview
+      else { continue }
+      for view in frame.subviews where NSStringFromClass(type(of: view)).contains("SheetEffectDimming") {
+        guard dimming[ObjectIdentifier(view)] == nil else { continue }
+        dimming[ObjectIdentifier(view)] = (WeakView(view), view.isHidden)
+        view.isHidden = true
+      }
+    }
   }
 
   /// macOS keeps window state, including window images (`window_N.data`, hundreds of KB), in
@@ -129,6 +151,9 @@ final class LockWindowShield {
   private func restoreAll() {
     for entry in titles.values { entry.window.window?.title = entry.title }
     titles.removeAll()
+    for entry in dimming.values { entry.view.view?.isHidden = entry.wasHidden }
+    dimming.removeAll()
+    LockShieldState.shared.set(false)
     let entries = hidden.values
     hidden.removeAll()
     for entry in entries {
@@ -204,6 +229,24 @@ final class LockWindowShield {
 final class Weak {
   weak var window: NSWindow?
   init(_ window: NSWindow) { self.window = window }
+}
+
+final class WeakView {
+  weak var view: NSView?
+  init(_ view: NSView) { self.view = view }
+}
+
+/// Whether the shield hides a sheet now; `LockView` then draws its controls as active (QA-N L2).
+@MainActor
+@Observable
+final class LockShieldState {
+  static let shared = LockShieldState()
+  private(set) var hidesSheets = false
+
+  /// Window updates call this often; only a change notifies observers.
+  func set(_ value: Bool) {
+    if hidesSheets != value { hidesSheets = value }
+  }
 }
 
 /// Where the lock screens' Unlock and Quit buttons are, so `LockWindowShield` can route clicks

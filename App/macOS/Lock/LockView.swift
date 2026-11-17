@@ -176,6 +176,7 @@ struct LockView: View {
         .font(.caption).foregroundStyle(.secondary)
     }
     .multilineTextAlignment(.center)
+    .modifier(ActiveOverHiddenSheet())
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(LockAnchorView(id: frameID))
     .coordinateSpace(.named(Self.space))
@@ -198,6 +199,17 @@ struct LockView: View {
       )
     default: nil
     }
+  }
+}
+
+/// Over a hidden sheet the window is not key (the invisible sheet is), so controls would draw
+/// as inactive and Unlock / Quit look disabled (QA-N L2). While the shield hides a sheet the lock
+/// screen draws as in the key window; clicks still go through `LockWindowShield`'s routing.
+private struct ActiveOverHiddenSheet: ViewModifier {
+  @Environment(\.controlActiveState) private var state
+
+  func body(content: Content) -> some View {
+    content.environment(\.controlActiveState, LockShieldState.shared.hidesSheets ? .key : state)
   }
 }
 
