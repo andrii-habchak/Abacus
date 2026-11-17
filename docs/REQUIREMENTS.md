@@ -1,6 +1,6 @@
 # Abacus — tech assignment (TA)
 
-_Status: **v1.12 — agreed** (2026-11-03). All open questions closed (§9). Changes after this point
+_Status: **v1.13 — agreed** (2026-11-17). All open questions closed (§9). Changes after this point
 are recorded in §10._
 
 Requirement IDs (`R-…`) are stable: plans, commits and tests refer to them.
@@ -15,7 +15,7 @@ accounts, with as little manual entry as possible (bank and Saldo imports).
 - **Data:** stored locally. Network is used only for exchange rates. No bank connections,
   no telemetry.
 - **Out of scope for v1:** iOS, sync, investments/stock prices, shared budgets,
-  receipts/attachments, multi-user, recurring transactions.
+  receipts/attachments, multi-user. (Recurring transactions moved into scope in v1.13, §4.8.)
 
 ## 2. Tech stack (see `DECISIONS.md` D5–D8)
 
@@ -659,6 +659,279 @@ PKO's `Saldo po transakcji` is the balance after each booked row; Saldo files ha
 | Two hand-typed rows match one bank row | One match per existing row (D31); the second stays uncleared, shown in Reconcile. |
 | Saldo-then-PKO overlap | Saldo rows are already cleared; the PKO row is a possible duplicate with default Skip (unchanged). |
 
+### 4.8 Recurring transactions and forecast — `R-REC` (v1.13, N5, D71)
+
+Approved defaults: `docs/status/N5-spec.md` §7 (horizon 90 days, budget not in the forecast, snapshots daily 120 days then weekly to 2 years, grace 14 days, no notifications in v1, transfers and income included, tolerance 5 %, forecast is the second tab of Upcoming, overdue counted on today, gap split shown). Schema: migration v18.
+
+#### 4.8.1 Scheduled items — `R-REC`
+
+- `R-REC-1` A **scheduled item** is a template plus a schedule. Template: type (expense, income or
+  transfer), account (for a transfer: from-account, to-account and the amount received), amount in
+  the account's currency, category (expense/income only, same rules as R-TX-3), description
+  (payee), optional event, optional note. Schedule: **repeat unit** (day, week, month, year), **every
+  N** units (N ≥ 1), **start day**, **end** (never, on a day, or after N occurrences), and **mode**
+  (see R-REC-3). An item is *active*, *paused* or *ended*. CRUD from the Upcoming section; deleting an
+  item never touches transactions it was matched to.
+- `R-REC-2` **Occurrence dates** are computed from the start day only, never from the previous
+  occurrence (no drift): weekly keeps the weekday of the start day; monthly keeps its day-of-month,
+  and a month without that day uses the **last day of the month** (31st → 30 Nov, 28/29 Feb); an
+  item can also be set to **"last day of the month"** explicitly; yearly 29 Feb → 28 Feb in non-leap
+  years; every N months/years counts months from the start month. The editor shows the next five
+  dates as a preview.
+- `R-REC-3` **Mode: remind.** The only mode in v1 (decided 2026-11-03). Each occurrence is *expected*
+  until it is **paid** (a real transaction matched or linked), **skipped** by the owner ("not this
+  time"), or **missed** (see R-REC-9). The field `mode` is stored (`remind`) so an "auto-create"
+  mode can be added later without a migration; no UI offers it now.
+- `R-REC-4` **Row actions** on an expected occurrence: *Mark paid* (opens the New transaction editor
+  pre-filled from the template; saving it matches the occurrence), *Link existing…* (pick a
+  transaction within the match window), *Skip this one*, *Edit item…*. Editing the item changes
+  future occurrences only; resolved ones keep the amount and day they were expected with.
+- `R-REC-5` **Account rules.** Items on an **archived account** are *paused* automatically with the
+  label "Account archived" and leave Upcoming and the forecast (R-ACC-4); unarchiving resumes them. An
+  account that has scheduled items cannot change currency (R-ACC-1 extended). Deleting an account
+  (R-ACC-5) also asks to delete its items; it is blocked only by transactions, as today. An item
+  whose account is later missing is shown as "Account missing" and excluded.
+
+#### 4.8.2 Matching a real transaction — `R-REC-MATCH`
+
+- `R-REC-6` A transaction **matches an expected occurrence** when: same account (a transfer: the
+  from-account), same type and flow direction (`Flow.of`), amount within the item's **tolerance**
+  (default **5 %**, editable per item; the same rule as `PendingSettlement.amountMatches`), day
+  within **±3 days** of the expected day (`FuzzyDuplicate.dayWindow`), and, when both descriptions
+  are non-empty, **similar description** (`DescriptionSimilarity.isSimilar`, which already folds case
+  and diacritics via `TextFolding`). One transaction resolves at most one occurrence and one
+  occurrence takes at most one transaction; when two occurrences compete, the nearer day wins, then
+  the nearer amount. A matched occurrence stores the transaction id and the actual day and amount.
+- `R-REC-7` **Where matching runs:** (a) import commit, in `AbacusImport/Dedupe/RowAnalyzer` next to
+  the pending-hold and duplicate checks: the preview shows a "Matches scheduled: <item> · <day>"
+  badge per row and counts them in the summary; nothing changes before the owner confirms; (b) after
+  a manual save or edit of a transaction; (c) once at launch for transactions not yet examined
+  (covers `abacus-import` and, later, MCP writes; N2). Undoing an import un-matches its occurrences
+  (they become expected again). The match **never changes the transaction** (no category, description or
+  amount edit), it only records the link; the owner can unlink from the row.
+  *Code to reuse:* `AbacusImport/Dedupe/Matching.swift` — `FuzzyDuplicate.dayWindow`,
+  `PendingSettlement.amountMatches`, `DescriptionSimilarity`, `Flow`; `Day.distance` for the gap.
+  `FuzzyDuplicate.matches` itself is not reused as is (it requires another *source*); a sibling
+  `ScheduledMatch` enum in the same file composes the same pieces.
+
+#### 4.8.3 Subscription detection — `R-REC-SUB`
+
+- `R-REC-8` **Suggestions.** The app proposes a scheduled item when it finds **three or more
+  expense (or income) transactions** on one account, in one currency, with the **same normalised
+  description**, **similar amounts** (all within 10 % of the median) and **regular intervals**.
+  Normalised description = `TextFolding.fold` + words without digits (drops card numbers, dates,
+  reference ids) + collapsed spaces; two rows share a key when the normalised text is equal.
+  Regular = every gap within ±20 % of the median gap, and the median gap is near a known period
+  (7 ± 1, 14 ± 2, 30 ± 4 monthly, 91 ± 6 quarterly, 365 ± 10 days); monthly rows also need their
+  day-of-month within a 4-day spread. The newest row must be no older than 1.5 periods (an ended
+  subscription is not suggested). Rows already matched to an item, refunds, transfers, balance
+  corrections and archived accounts are ignored; the last 24 months are examined.
+  A suggestion carries: description, account, category (most common), amount (latest), period,
+  next expected day (newest + period), confidence (high = ≥ 4 rows with exact-ish amounts, medium
+  otherwise) and its evidence rows. **Accept** opens the item editor pre-filled; **Dismiss** hides it
+  for good (stored, R-REC-16); **Not now** hides until a new matching row arrives. Suggestions are
+  computed on demand, never stored, never create anything alone.
+- `R-REC-9` **Missed and overdue.** An expected occurrence whose day is past is *overdue* (shown in red
+  at the top of Upcoming, counted in the sidebar badge, and in the forecast on **today**). After a
+  grace period (default 14 days, `scheduledGraceDays`) an unresolved occurrence becomes *missed*: it
+  stays visible in the accuracy panel, leaves Upcoming and the forecast, and offers "Mark paid / Skip".
+
+#### 4.8.4 Upcoming screen and widget — `R-REC-UP`
+
+- `R-REC-10` **Upcoming** is a sidebar item under Overview (after Events) with a count badge
+  (overdue + due in the next 7 days). The page has two tabs, **Bills** and **Forecast**. Bills lists
+  expected occurrences for the next 30 days (range selectable: 7 / 30 / 90 days) grouped Overdue,
+  Today, This week, Later, each row: tile in the category colour, description, account, repeat label,
+  day (relative: "in 3 days"), amount (account currency, income green) with the converted amount in
+  the display currency when it differs; actions per R-REC-4. A second view lists **All items**
+  (active, paused, ended; search; next date; monthly cost in the display currency) with the
+  suggestions card on top ("3 suggestions"). Header totals for the range: money out, money in, net
+  (display currency, latest rate; "rates as of <date>" per R-FX-4; amount without a rate left out and
+  named, as D27).
+- `R-REC-11` **Dashboard widget "Upcoming (30 days)"**: half width (R-HOME-6 widths); next up to six
+  occurrences (overdue first), "money out / money in / net" totals in the display currency, "N more…"
+  and "Open Upcoming". It takes part in widget reordering. Hidden state: when no item exists it shows
+  one line "No scheduled items. Set up your bills in Upcoming." with a button.
+- `R-REC-12` **Editor** is a sheet (D55 pattern), primary action bottom-right (R-MGMT-10): fields per
+  R-REC-1, a "Repeat" row ("Every [N] [days|weeks|months|years]"), "Last day of the month" checkbox
+  when the unit is month, Starts, Ends, tolerance, next-dates preview, and Pause / Delete… at the
+  left of the footer. Opening it from a suggestion shows the evidence rows.
+
+#### 4.8.5 Forecast — `R-REC-FC`
+
+- `R-REC-13` **Forecast** (Upcoming › Forecast tab). For every non-archived account the projected
+  **balance per day** for the horizon = today's balance (R-ACC-3) + the effects of the expected
+  occurrences up to that day, using the same account-effect rule as a real transaction (so liabilities
+  and transfers behave as today). **Net worth** per day = the same sum over all accounts converted at
+  **today's latest rates for the whole horizon** (R-FX-3; no rate forecast), plus debts that count in
+  net worth held at today's value, minus liabilities. The page says "at today's rates" and "rates as
+  of <date>".
+- `R-REC-14` **Horizon** 30 / 60 / 90 days, **default 90** (owner default; setting
+  `forecastHorizonDays`). Selector for the series: Net worth (default) or one account; display
+  currency switch as elsewhere (R-HOME-4); the account series is in the account's own currency.
+- `R-REC-15` **Warnings.** The page lists the lowest projected point and the first day on which a
+  non-liability account's projected balance goes **below zero** ("Main account goes below 0 on 18 Dec,
+  −120.00"), with the occurrences that cause it. Threshold fixed at 0 in v1.
+- `R-REC-16` **Dismissed suggestions** are remembered (table `suggestionDismissals`, §3) so a
+  dismissed pattern is not offered again; "Show dismissed" in the suggestions card restores it.
+
+#### 4.8.6 Forecast snapshots and forecast vs reality — `R-REC-SNAP`
+
+- `R-REC-17` **Daily snapshot.** At launch and whenever the app becomes active, if no snapshot exists
+  for today's day and at least one active item exists, the app stores a **forecast snapshot** for the
+  full 90-day horizon (always 90, whatever the screen's selector shows): the day, each account's
+  starting balance, the rates used, and the expected occurrences with day, account, signed amount
+  and item id. A day on which the app was not opened has no snapshot (no back-filling; a past
+  forecast cannot be reconstructed truthfully). Matching (R-REC-7c) runs **before** the snapshot so
+  today's snapshot starts from resolved occurrences.
+- `R-REC-18` **Retention** (default): one snapshot per day for the last **120 days**, then **one per
+  week** (the first of each ISO week) up to **2 years**, older ones deleted. Pruning runs after
+  taking a snapshot. A snapshot costs a few kilobytes.
+- `R-REC-19` **Overlay chart.** The Forecast tab has "Compare with a past forecast": pick a snapshot
+  (list: day, "N days ago", forecast end value). The chart then draws **actual** balance or net worth
+  from the snapshot day to today (daily end-of-day balances from transactions), the **snapshot's
+  forecast** as a dashed line over its whole horizon, today's forecast as a lighter dashed line from
+  today, a "today" marker, and the **gap** at today as a shaded band with the amount. Actual and
+  forecast are converted at the **snapshot's stored rates** so exchange-rate moves do not appear as a
+  gap (a note says so). The caption splits the gap: "scheduled items paid differently: X · everything
+  else (unscheduled spending and income): Y" — Y is what the optional "include average spending"
+  toggle (later) would have to cover.
+- `R-REC-20` **Accuracy panel** (below the chart, scoped to the chosen snapshot's period or "All
+  time"): per scheduled item the resolved occurrences with **expected vs actual day** and **expected
+  vs actual amount**, differences (+2 days, +3.1 %), counts of paid / skipped / missed, on-time share
+  (|Δ day| ≤ 1), average absolute amount deviation; an overall line over all items. When the last
+  three paid amounts all differ from the template by more than 2 % the row offers "Update amount to
+  X". Data comes from resolved occurrences (`scheduledOccurrences`), not from snapshots, so it works
+  even before the first snapshot exists.
+
+#### 4.8.7 Non-functional
+
+- `R-REC-21` Forecast of 90 days for 30 accounts and 100 items computes in < 100 ms (pure function over
+  items and balances, nothing per-day in SQL); subscription detection over 20 000 transactions
+  < 1 s and runs off the main actor (R-NF-2).
+- `R-REC-22` Everything is offline and local (R-NF-1); no notification in v1 beyond the sidebar badge
+  and the widget (open question Q5).
+
+### 4.9 App lock — `R-LOCK` (v1.13, N7)
+
+Approved defaults: `docs/status/N7-spec.md` §6 (off by default, idle 5 minutes, sheets hidden in place, recovery by `defaults write` in the README). No schema change. Settings: a Security tab in Settings.
+
+
+- `R-LOCK-1` **Authentication.** Unlocking uses the system's `LocalAuthentication` with the
+  `.deviceOwnerAuthentication` policy: Touch ID or Apple Watch when available, otherwise (or on
+  "Use Password…") the Mac login password. Each attempt uses a fresh `LAContext` with no reuse
+  window. The lock stores **no secret and uses no Keychain item**; it must work unchanged with an
+  ad-hoc signed build whose code identity changes on every rebuild (N4 §7).
+  - Unit: `Authenticator` protocol with a fake; model never touches `LAContext` directly. Manual:
+    Touch ID path, password path, on an ad-hoc build, across two rebuilds.
+- `R-LOCK-2` **Off by default; Settings switch.** New Settings tab **Security** (prototype) holds the
+  switch "Require Touch ID or password to open Abacus", the **Lock after** picker and **Lock now**.
+  Turning the lock **on** first runs one authentication ("prove it works"); if it fails, is
+  cancelled, or is unavailable the switch stays off and a message says why. Turning it **off**, and
+  **increasing** the idle time, also require a successful authentication (someone at an unlocked Mac
+  cannot weaken the lock without the password). Decreasing the idle time needs none.
+  - Unit: enable requires `.success`; cancel/failure/unavailable leave state unchanged with the
+    right message; disable and idle-increase require auth, decrease does not.
+- `R-LOCK-3` **Per device, not synced, not in backups.** The setting (enabled, idle minutes) is kept
+  in `UserDefaults` on this Mac, **not** in the `app_setting` table: that table is part of the
+  database, which is backed up (R-SET-2), moved with the data folder and will be synced (D66). A
+  restore, a data-folder change or a second device must not turn the lock on or off.
+  - Unit: the lock settings store reads/writes only its `UserDefaults` suite keys
+    (`appLock.enabled`, `appLock.idleMinutes`); a backup export/restore round-trip leaves them
+    untouched (test against the existing `Backup` with a scratch suite).
+- `R-LOCK-4` **Lock after.** Picker: 1 minute, **5 minutes (default)**, 15 minutes, 30 minutes,
+  1 hour, Never (idle never locks; launch, sleep, screen lock and Lock now still do).
+  - Unit: each value maps to the configured interval; unknown stored value falls back to 5.
+- `R-LOCK-5` **Lock triggers** (when the lock is on): (a) **at launch**, before any content is
+  shown; (b) **idle**: the time since the last user input to Abacus (key, click, scroll) reaches the
+  picker value, counted also while Abacus is in the background or hidden; (c) **sleep**: system sleep
+  and display sleep; (d) **screen lock and screensaver start**; (e) **Lock now**: menu item
+  "Lock Abacus" (⌥⌘L, proposed) and the Settings button. A trigger while already locked does nothing
+  (idempotent). The idle deadline uses a monotonic clock that keeps counting through sleep, and the
+  deadline is re-checked when the app becomes active, so a missed timer cannot leave the app
+  unlocked.
+  - Unit (fake clock + fake event source): lock at launch; lock exactly at the deadline, not before;
+    input resets the deadline; background time counts; sleep/display sleep/screen lock/screensaver/
+    manual each lock; duplicate triggers produce one lock; picker "Never" disables idle only;
+    deadline re-check on activation locks when overdue; trigger while an unlock prompt is open
+    cancels the prompt and stays locked. Manual: each real trigger on the built app.
+- `R-LOCK-6` **First launch after turning it on is not locked.** Enabling authenticates already; the
+  window stays usable and the idle clock starts.
+  - Unit: enabling leaves state unlocked and sets `lastInput = now`.
+- `R-LOCK-7` **Lock screen.** An opaque view covers the whole window (prototype): lock icon, "Abacus
+  is locked", the reason ("Locked after 5 minutes idle."), an **Unlock** button, **Quit Abacus**,
+  and a one-line note. When the lock appears and Abacus is the active app it **asks to authenticate
+  once automatically**; it does not re-prompt in a loop. After a cancel it shows "Unlock was
+  cancelled. Click Unlock to try again." and waits. It prompts again when the user clicks Unlock, and
+  once more when Abacus becomes active again after having been inactive while locked (no prompt
+  while asleep or the screen is locked). On success the previous screen reappears exactly as left
+  (section, filters, scroll, open import wizard). Standard Quit (⌘Q) works while locked.
+  - Unit: state machine `locked → prompting → (unlocked | cancelled | failed | unavailable)`;
+    exactly one automatic prompt per lock and per activation; no prompt while the screen is locked
+    or asleep; success returns `unlocked`. Manual: screenshots of each state against the prototype.
+- `R-LOCK-8` **Authentication fails or is unavailable.** *Cancelled* (`userCancel`, `systemCancel`,
+  `appCancel`): stays locked, "cancelled" message, Unlock button. *Failed* (wrong password; the system
+  dialog normally handles retries, an `authenticationFailed` result is shown as "That didn't work"):
+  stays locked. *Unavailable* (`canEvaluatePolicy` false or an error such as `passcodeNotSet`,
+  `notInteractive`, anything unexpected): stays locked, shows "Authentication isn't available right
+  now…" with **Try again** and **Quit Abacus**. **There is no bypass or "turn the lock off" button on
+  the lock screen**: a bypass would make the lock meaningless. Recovery if the owner is locked out
+  of the system method for good: quit and set the preference from Terminal
+  (`defaults write <bundle id> appLock.enabled -bool NO`), documented in the README. This is
+  acceptable because the lock is only a UI gate and the owner owns the Mac (N4 §7).
+  - Unit: each `LAError` code maps to the right state and message; unavailable never unlocks;
+    unknown errors are "unavailable"; Try again re-queries availability.
+- `R-LOCK-9` **What is hidden while locked.** Everything the app draws: the main window and the
+  Settings window (both show the lock screen); the window contents seen in **Mission Control /
+  Exposé thumbnails** and screenshots (they show the lock screen because it is composited into the
+  window itself); any **sheet or alert** (`R-LOCK-11`); the **menu bar**: items that open, create,
+  import, export, back up, restore or otherwise act on data are disabled (no menu shows data in the
+  first place); **window titles** and the Window menu never contain data (titles stay "Abacus");
+  **keyboard input** is not delivered to the hidden screens (shortcuts such as ⌘N do nothing). The
+  **Dock icon** is the normal icon with no badge, and the **app switcher** (⌘Tab) shows only the
+  icon, so neither leaks content. If macOS's saved window state turns out to store window images,
+  restorable state is disabled for the window (spike item, §1).
+  - Unit: `LockModel.isLocked` drives a `commandsEnabled` value that is false while locked (tested
+    on the model). Manual checklist: Mission Control, ⌘Tab, Dock, a screenshot, VoiceOver reading
+    the window (the hidden screens are not in the accessibility tree: `.accessibilityHidden`), ⌘N and
+    ⌘, while locked, Window menu.
+- `R-LOCK-10` **Honest scope, stated in the UI.** The Security tab says: the lock hides the
+  window; it does not encrypt data; the database file stays readable by other apps and tools; the
+  **MCP server (`abacus-mcp`) and `abacus-import` are separate processes that open the file directly
+  and are **not** gated** by the lock; FileVault protects the disk. The README says the same. This
+  is **not database encryption**: that was researched in N4 (decision: FileVault now; SQLCipher only
+  after Developer ID signing, with the key obtained at unlock). Nothing in N7 may be described as
+  "encrypted".
+  - Unit: none (text). Manual: wording check against this section.
+- `R-LOCK-11` **Open editors, sheets and unsaved edits.** Locking never discards work. While locked,
+  attached sheets (transaction editor, account/category sheets, confirmation dialogs) are hidden and
+  ignore input, and come back with their unsaved edits unchanged after unlock. Recommended
+  mechanism (spike first): at lock, hide every attached sheet window of the app's windows (alpha 0,
+  ignore mouse events) and restore it at unlock; the views underneath stay mounted, disabled and
+  hidden from accessibility. Fallback if that is unreliable: dismiss the sheet after saving its draft
+  in memory and reopen it with the draft after unlock. System **open/save panels** (for example
+  "Choose file…" in the import wizard) are separate system UI and may stay on screen; they show file
+  names, not Abacus data (accepted, listed under open questions).
+  - Unit: the draft-stash fallback (if used) round-trips a draft. Manual: lock with the editor
+    open and a typed amount, unlock, the sheet and the typed text are back; same for the import
+    wizard at "Review" and for a confirmation dialog.
+- `R-LOCK-12` **Background work continues.** Locking does not cancel or pause an import, a rate
+  refresh, a backup (N1) or a headless MCP write. Their outcome is shown after unlock in the usual
+  places; while locked, **no alert, sheet, notification or Dock bounce carries data** (a generic
+  "Abacus finished a task" is allowed only if it contains no amounts, names or counts). An import
+  wizard in progress keeps its state (`R-LOCK-11`). Database access, the repositories and `AppSession`
+  are unchanged by the lock.
+  - Unit: locking while a fake long task runs leaves it running; the task's completion while locked
+    queues its message and delivers it on unlock. Manual: start an import, let it lock, unlock.
+- `R-LOCK-13` **Architecture hook (N4 §7).** Lock state is an app-level model (`AppLockModel`:
+  `isLocked`, `state`, `reason`) owned beside the session host and independent of the database: the
+  database is opened as today and **not** lazily at unlock. A later encryption step may add an
+  "on unlock" step (fetch a key, then open) without changing the lock UI. The model sees time, input
+  and system events only through injected protocols (`Authenticator`, `Clock`,
+  `LockEventSource`), so it is fully unit-testable and a launch flag can run the UI with a fake
+  authenticator for screenshots.
+  - Unit: the whole `R-LOCK-5…8` suite above, with fakes.
+
 ## 5. Non-functional
 - `R-NF-1` Offline-first; only the FX fetch uses the network.
 - `R-NF-2` Smooth with 20 000 transactions (list scroll, filter < 200 ms); importing the
@@ -683,7 +956,7 @@ PKO's `Saldo po transakcji` is the balance after each booked row; Saldo files ha
 - **v2 iOS + iCloud sync:** same core package, iPhone UI, CloudKit sync via SQLiteData.
 
 ### Backlog (v2+)
-Per-category budget rollover · recurring/scheduled transactions (spec in `docs/status/N5-spec.md`) · tags
+Per-category budget rollover · tags
 ("cleared" flag, statement balance check) · CSV export · more bank
 formats (Monobank, Revolut) · rates and charged-amount pre-fill for purchase currencies beyond
 the four (D24).
@@ -741,6 +1014,7 @@ No open questions.
 | 1.1 | 2026-10-21 | `R-HOME-1`: net worth is a monthly chart ending at today (owner's prototype review); removed from backlog. |
 | 1.7 | 2026-10-27 | Debts (`R-DEBT`, owner interview, D51). |
 | 1.11 | 2026-10-30 | Refund links (`R-TX-4`), import bulk assignment and Category assignment tab, category re-assign and show-transactions, searchable category pickers, rule kind select and debt picker. |
+| 1.13 | 2026-11-17 | Recurring transactions, subscriptions, upcoming bills, forecast and forecast snapshots (`R-REC-1…22`, §4.8, migration v18); app lock (`R-LOCK-1…13`, §4.9). Recurring removed from out of scope and backlog. |
 | 1.12 | 2026-11-03 | Reconciliation (`R-CLR-1…9`, §4.7, migration v19, D74): cleared flag per transaction side, Reconcile screen, stale pending holds and balance gaps at import; automatic snapshots (`R-SET-4`, N1). |
 | 1.10 | 2026-10-30 | Owner testing of 1.4.0: one total on widget and rows (`R-DEBT-21a`); debt filter chip and accounts menu rules (`R-DEBT-22`). |
 | 1.9 | 2026-10-30 | Accounts drive debts: one debt per person without currency, linked external/virtual accounts, transfers instead of record legs, edit/rename, debt filter on Transactions, sign display, widget (`R-DEBT-16…22`, D59–D61). |
