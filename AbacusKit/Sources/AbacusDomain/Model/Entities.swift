@@ -748,6 +748,11 @@ public enum SettingKey: String, CaseIterable, Sendable {
   case accountSort
   /// The dashboard widget order (`DashboardLayout`): a JSON array of widget ids (R-HOME-6).
   case dashboardLayout
+  /// Days after the expected day before an unresolved scheduled occurrence is stored as missed;
+  /// default 14 (R-REC, N5 spec Q4).
+  case scheduledGraceDays
+  /// Forecast horizon in days stored in forecast snapshots; default 90 (R-REC, N5 spec Q1).
+  case forecastHorizonDays
 }
 
 @Table("appSettings")
