@@ -143,6 +143,8 @@ extension SQLiteScheduledStore: ScheduledMaintenance {
         try ScheduledItem.upsert { ScheduledItem.Draft(item) }.execute(db)
       }
 
+      let endedBefore = Set(try ScheduledRules.items(db).filter { $0.status == .ended }.map(\.id))
+
       // 2. Matches whose transaction is gone are expected again.
       result.reopened = try ScheduledRules.reopenOrphans(db)
 
@@ -181,7 +183,12 @@ extension SQLiteScheduledStore: ScheduledMaintenance {
 
       // 4. Unresolved past the grace period → missed (R-REC-9). Occurrences before the item was
       // created are not generated (spec §4 "Item starts in the past").
-      let items = try ScheduledRules.items(db).filter { $0.status == .active }
+      // An ended item can still have earlier unresolved occurrences (it ended when its last one was paid).
+      let items = try ScheduledRules.items(db).filter { $0.status != .paused }.map { item in
+        var item = item
+        item.status = .active
+        return item
+      }
       let resolved = try ScheduledRules.resolvedKeys(db)
       for (item, day) in ScheduledOccurrences.missed(items: items, resolved: resolved, today: today, graceDays: grace)
       where day >= Day(item.createdAt, calendar: calendar) {
@@ -193,10 +200,12 @@ extension SQLiteScheduledStore: ScheduledMaintenance {
         result.missed += 1
       }
 
-      // 5. Finite series whose last occurrence is resolved end.
+      // 5. Finite series whose last occurrence is resolved end (also counted when paying ended them).
       for item in try ScheduledRules.items(db) where item.status == .active {
         try ScheduledRules.endIfFinished(item.id, db)
-        if try ScheduledItem.find(item.id).fetchOne(db)?.status == .ended { result.ended += 1 }
+      }
+      for item in try ScheduledRules.items(db) where item.status == .ended && !endedBefore.contains(item.id) {
+        result.ended += 1
       }
       return result
     }
@@ -214,7 +223,8 @@ extension SQLiteScheduledStore: ScheduledMaintenance {
       if byKey[key] == nil { byKey[key] = row }
     }
     var result: [ScheduledCandidate] = []
-    for item in try ScheduledRules.items(db) where item.status == .active && usable.contains(item.accountID) {
+    // Ended items keep their past occurrences open to a late transaction.
+    for item in try ScheduledRules.items(db) where item.status != .paused && usable.contains(item.accountID) {
       guard let schedule = item.schedule else { continue }
       for day in schedule.occurrences(from: from, through: through) {
         if let row = byKey[OccurrenceKey(itemID: item.id, day: day)] {
@@ -261,7 +271,7 @@ extension SQLiteImportStore: ScheduledImportMatching {
         guard !keys.isEmpty,
           let txnID = try ImportFingerprint.where({ $0.id.in(keys) }).fetchAll(db).first?.txnID,
           let txn = try Txn.find(txnID).fetchOne(db),
-          let item = try ScheduledItem.find(match.itemID).fetchOne(db), item.status == .active
+          let item = try ScheduledItem.find(match.itemID).fetchOne(db), item.status != .paused
         else { continue }
         let rows = try ScheduledRules.rows(itemID: item.id, day: match.expectedDay, db)
         // Resolved meanwhile (other than missed) or the transaction is taken: leave it.

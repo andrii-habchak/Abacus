@@ -42,6 +42,8 @@ struct RowAnalysis: Sendable {
   var pairRows: [String] = []
   /// Existing expenses that may be the other side of an incoming half.
   var pairExisting: [Txn] = []
+  /// R-REC-7a: the expected occurrence of a scheduled item the new transaction would pay.
+  var scheduled: ScheduledRowMatch?
 }
 
 /// Flow of a row on its own account.
@@ -185,7 +187,57 @@ struct RowAnalyzer {
     }
 
     pairHalves(&result)
+    try await matchScheduled(&result)
     return result
+  }
+
+  // MARK: - Scheduled items (R-REC-6, R-REC-7a)
+
+  /// Rows that create a transaction and look like an expected occurrence of a scheduled item.
+  /// Read-only: the commit records the matches (`ScheduledImportMatching`). Each occurrence goes to
+  /// one row, the nearest day then the nearest amount first (`ScheduledMatch.assign`).
+  private func matchScheduled(_ result: inout [RowAnalysis]) async throws {
+    guard let scheduled = store as? any ScheduledImportMatching else { return }
+    var probes: [ScheduledProbe] = []
+    for (i, row) in rows.enumerated() {
+      let found = result[i]
+      guard found.exactTxnID == nil, found.review == nil, found.settles == nil, found.sameTransfer == nil,
+        found.completesTransfer == nil, found.debtLeg == nil, found.duplicate == nil,
+        let probe = scheduledProbe(row, transfer: found.ownTransfer)
+      else { continue }
+      probes.append(probe)
+    }
+    guard let first = probes.map(\.day).min(), let last = probes.map(\.day).max() else { return }
+    let candidates = try await scheduled.scheduledCandidates(
+      from: first.plusDays(-ScheduledMatch.dayWindow), through: last.plusDays(ScheduledMatch.dayWindow))
+    guard !candidates.isEmpty else { return }
+    let index = Dictionary(rows.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+    let items = Dictionary(candidates.map { ($0.item.id, $0.item) }, uniquingKeysWith: { a, _ in a })
+    for match in ScheduledMatch.assign(probes, to: candidates) {
+      guard let i = index[match.probeKey], let item = items[match.itemID] else { continue }
+      result[i].scheduled = ScheduledRowMatch(
+        itemID: item.id, payee: item.payee, type: item.type, expectedDay: match.expectedDay)
+    }
+  }
+
+  /// The probe of a row: money out on an existing account (expense, transfer) or in (income).
+  private func scheduledProbe(_ row: NormalizedRow, transfer: OwnTransfer?) -> ScheduledProbe? {
+    let rowDay = day(row)
+    if let transfer {
+      guard case .existing(let from) = transfer.from, transfer.amountMinor > 0 else { return nil }
+      return ScheduledProbe(
+        key: row.id, accountID: from, type: .transfer, amountMinor: transfer.amountMinor, payee: row.payee, day: rowDay)
+    }
+    guard case .existing(let accountID) = ref(row.account), !row.isRefund else { return nil }
+    let type: TxnType
+    switch row.kind {
+    case .expense: type = .expense
+    case .income: type = .income
+    case .transfer: type = .transfer
+    case .transferHalf, .openingBalance: return nil
+    }
+    guard row.flow == ScheduledMatch.flow(of: type) else { return nil }
+    return ScheduledProbe(key: row.id, accountID: accountID, type: type, amountMinor: row.amountMinor, payee: row.payee, day: rowDay)
   }
 
   // MARK: - Pending holds

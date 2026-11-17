@@ -214,6 +214,23 @@ public enum ImportRefundDecision: Hashable, Sendable {
   case declined
 }
 
+/// R-REC-7a: the expected occurrence of a scheduled item an import row would pay ("Matches
+/// scheduled: <item> · <day>"). Nothing is written before the commit.
+public struct ScheduledRowMatch: Hashable, Sendable {
+  public var itemID: ScheduledItem.ID
+  /// The item's description, for the badge.
+  public var payee: String
+  public var type: TxnType
+  public var expectedDay: Day
+
+  public init(itemID: ScheduledItem.ID, payee: String, type: TxnType, expectedDay: Day) {
+    self.itemID = itemID
+    self.payee = payee
+    self.type = type
+    self.expectedDay = expectedDay
+  }
+}
+
 /// One source row in the preview.
 public struct PreviewRow: Identifiable, Hashable, Sendable {
   public var id: String { source.id }
@@ -276,6 +293,8 @@ public struct PreviewRow: Identifiable, Hashable, Sendable {
   public internal(set) var estimateDeclined = false
   /// C38: the row can be offered, or already is, as the other side of an estimated transfer.
   public internal(set) var canMatchEstimate = false
+  /// R-REC-7a: the scheduled occurrence the new transaction pays (badge "Matches scheduled").
+  public internal(set) var scheduledMatch: ScheduledRowMatch?
 
   public var warnings: [String] { source.warnings }
   public var day: Date { source.occurredAt }

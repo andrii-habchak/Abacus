@@ -37,6 +37,18 @@ public struct ImportPreview: Sendable {
   /// New transactions the commit creates ("Import N transactions").
   public private(set) var transactionsToCreate = 0
 
+  /// R-REC-7a: rows whose new transaction pays a scheduled occurrence (summary count).
+  public var scheduledMatchCount: Int { rows.reduce(0) { $0 + ($1.scheduledMatch == nil ? 0 : 1) } }
+
+  /// What the commit records after the transactions are written (found by the rows' fingerprints).
+  public var scheduledImportMatches: [ScheduledImportMatch] {
+    rows.compactMap { row in
+      row.scheduledMatch.map {
+        ScheduledImportMatch(fingerprints: row.source.fingerprints, itemID: $0.itemID, expectedDay: $0.expectedDay)
+      }
+    }
+  }
+
   public var canCommit: Bool { unresolvedReviewCount == 0 && issues.isEmpty && undecidedStaleHolds.isEmpty }
 
   // MARK: N6: stale holds and balance gaps (R-CLR-8, R-CLR-9)
@@ -608,6 +620,7 @@ private struct Resolver {
     learnRules()
     finishRefundCategories()
     checkConflicts()
+    markScheduled()
   }
 
   // MARK: Refunds (C35)
@@ -669,6 +682,19 @@ private struct Resolver {
       shape.category = original.category
       plans[i] = .create(shape)
       rows[i].category = original.category
+    }
+  }
+
+  // MARK: Scheduled items (R-REC-7a)
+
+  /// The badge goes to rows that create a transaction of the item's type, not turned into a
+  /// refund or a debt record by a choice.
+  private mutating func markScheduled() {
+    for i in rows.indices {
+      guard let match = analysis[i].scheduled, rows[i].createsTransaction, rows[i].type == match.type,
+        rows[i].refundOf == nil, rows[i].debt == nil
+      else { continue }
+      rows[i].scheduledMatch = match
     }
   }
 
