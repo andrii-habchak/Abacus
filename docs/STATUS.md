@@ -4,6 +4,34 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-17 23:05 CET (orchestrator)._ **Roadmap N1–N7 is merged on `main`** (N8 deferred). Tonight's lanes,
+all merged `--no-ff` with the gate green after each merge (last: 1,350 tests with real samples, app build):
+N5c forecast snapshots + overlay/accuracy maths, N2r app reloads after writes by `abacus-mcp`/`abacus-import`
+(+ stale-sheet warning in the editor), N5a scheduled-item repositories + matching + launch sweep, N7c lock finish
+(sheets/alerts and toolbar hidden while locked, `whenUnlocked` queue, not restorable while locked, README recovery
+line), N5d Forecast view, N5b Upcoming section (Bills, All items, suggestions, item editor, dashboard widget, sidebar
+badge, sweep + daily snapshot at launch/activation/foreign write). TA is v1.13 (R-REC §4.8, R-LOCK §4.9).
+QA-N (visual and flow check on scratch databases) is running: `docs/status/QA-N.md`.
+
+**Migration:** the next build the owner runs applies **v18** (and v19 if not yet applied). Back up `abacus.sqlite`
+first (N1's pre-migration snapshot also covers it).
+
+**Owner to decide or check** (details in the lane notes):
+- Real Touch ID / password prompt; with the editor open, type an amount, ⌥⌘L, Unlock, amount still there (N7c).
+- Leftover `abacus.lock.test.<uuid>.plist` files (65 bytes) in `~/Library/Preferences` from earlier lock test runs
+  can be deleted; new runs clean up at quit (N7c).
+- Upcoming tabs follow the prototype (toolbar Bills · Forecast, Bills has Upcoming · All items); Import lost its
+  ⌘-digit shortcut with 11 sidebar sections; sidebar badge is grey (system badge) (N5b).
+- "Not now" on a suggestion lasts for the session only (a setting key would be a Model change); Mark paid uses today (N5b).
+- Unlinking an occurrence is remembered as a `suggestionDismissals` row keyed `unlinked-txn|<id>`; a column in a
+  later migration would be cleaner (N5a).
+- Try `abacus-mcp` in an AI client; further MCP write tools wanted?
+- Delete merged worktrees and branches (agents may not delete).
+
+The 2026-11-17 plan below is kept for reference; every row in it is merged.
+
+### Plan of 2026-11-17 (done)
+
 _Updated 2026-11-17 (orchestrator)._ **Execution plan for the rest of the roadmap** (N1, N3, N4, N6 done;
 N2 merged; N5 first slice and N7 partial merged; N8 deferred). Nothing is running yet; wave A starts on the
 owner's go. Leftover branches `wp/N1-backups`, `wp/N2-mcp`, `wp/N5-spec` carry only commits already on

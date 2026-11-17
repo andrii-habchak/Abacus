@@ -100,9 +100,9 @@ Status values: `proposed` (defaults below await the owner's approval), `approved
 | N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | done, merged 2026-11-03 (read + write tools, live rates, N1 snapshots); app-side refresh open as lane N2r (`docs/STATUS.md`) |
 | N3 | Stabilisation pass | M | scope below | done, merged 2026-11-03 (two owner questions open, `docs/status/N3.md`) |
 | N4 | Database encryption research (document only, no code) | S | none | done, merged 2026-11-03 (`docs/status/N4.md`: FileVault now, revisit SQLCipher with Developer ID signing) |
-| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved 2026-11-04; first slice merged 2026-11-04 (migration v18, logic; UI and repositories open, `docs/status/N5.md`) |
+| N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | done, merged 2026-11-17 (migration v18; core N5a, Upcoming UI N5b, snapshots N5c, Forecast UI N5d; `docs/status/N5*.md`) |
 | N6 | Reconciliation: cleared flag, statement-balance check, balance-continuity detection | M | TA text + approved prototypes; migration v19 reserved | done, merged 2026-11-03 (migration v19; `docs/status/N6.md`) |
-| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | approved 2026-11-04; partly merged 2026-11-04 (core, lock screen, Security tab; sheet hiding, toolbar, R-LOCK-12 open, `docs/status/N7.md`) |
+| N7 | App lock (Touch ID / password) | S | TA text; encryption follows N4 | done, merged 2026-11-17 (N7c: sheets and toolbar hidden while locked, queued messages, README; real Touch ID prompt for the owner, `docs/status/N7c.md`) |
 | N8 | Quick actions: ⌘K command palette, menu-bar quick add, Shortcuts / App Intents "add expense" | M | TA text + approved prototypes | deferred (owner, 2026-11-03) |
 
 Readiness: N1, N2, N3, N4 can start as soon as the owner approves them (nothing blocks them in the
