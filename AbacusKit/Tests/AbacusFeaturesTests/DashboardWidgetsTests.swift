@@ -124,7 +124,7 @@ struct DashboardWidgetsTests {
   @Test("R-HOME-6: the default order; widths: net worth and income vs expenses are full width, debts half")
   func defaultLayout() {
     let layout = DashboardLayout.default
-    #expect(layout.order == [.netWorth, .budget, .expenses, .incomeVsExpenses, .income, .debts])
+    #expect(layout.order == [.netWorth, .budget, .expenses, .incomeVsExpenses, .income, .debts, .upcoming])
     #expect(layout.isDefault)
     #expect(DashboardWidget.allCases.filter(\.isFullWidth) == [.netWorth, .incomeVsExpenses])
     #expect(Set(DashboardLayout.defaultOrder) == Set(DashboardWidget.allCases))
@@ -134,7 +134,7 @@ struct DashboardWidgetsTests {
   func storedLayout() {
     let stored = #"["income","futureWidget","netWorth","income","expenses"]"#
     let layout = DashboardLayout(stored: stored)
-    #expect(layout.order == [.income, .netWorth, .expenses, .budget, .incomeVsExpenses, .debts])
+    #expect(layout.order == [.income, .netWorth, .expenses, .budget, .incomeVsExpenses, .debts, .upcoming])
     #expect(DashboardLayout(stored: layout.stored) == layout)
     #expect(DashboardLayout(stored: nil) == .default)
     #expect(DashboardLayout(stored: "") == .default)
@@ -147,20 +147,20 @@ struct DashboardWidgetsTests {
     let start = DashboardLayout(stored: #"["netWorth","budget","expenses","income","incomeVsExpenses","debts"]"#)
     var layout = start
     layout.move(.netWorth, to: .income)
-    #expect(layout.order == [.budget, .expenses, .income, .netWorth, .incomeVsExpenses, .debts])
+    #expect(layout.order == [.budget, .expenses, .income, .netWorth, .incomeVsExpenses, .debts, .upcoming])
     layout.move(.incomeVsExpenses, to: .budget)
-    #expect(layout.order == [.incomeVsExpenses, .budget, .expenses, .income, .netWorth, .debts])
+    #expect(layout.order == [.incomeVsExpenses, .budget, .expenses, .income, .netWorth, .debts, .upcoming])
     layout.move(.budget, to: .budget)
-    #expect(layout.order == [.incomeVsExpenses, .budget, .expenses, .income, .netWorth, .debts])
+    #expect(layout.order == [.incomeVsExpenses, .budget, .expenses, .income, .netWorth, .debts, .upcoming])
 
     var stepped = start
     let visible: [DashboardWidget] = [.netWorth, .budget, .expenses, .income, .incomeVsExpenses]
     stepped.move(.incomeVsExpenses, by: 1, among: visible)  // last visible: no change
     #expect(stepped == start)
     stepped.move(.income, by: -1, among: visible)
-    #expect(stepped.order == [.netWorth, .budget, .income, .expenses, .incomeVsExpenses, .debts])
+    #expect(stepped.order == [.netWorth, .budget, .income, .expenses, .incomeVsExpenses, .debts, .upcoming])
     stepped.move(.netWorth, by: -1, among: visible)
-    #expect(stepped.order == [.netWorth, .budget, .income, .expenses, .incomeVsExpenses, .debts])
+    #expect(stepped.order == [.netWorth, .budget, .income, .expenses, .incomeVsExpenses, .debts, .upcoming])
   }
 
   @Test("R-HOME-6: rows — full width alone, half width two by two when wide, one per row when narrow")
@@ -194,7 +194,7 @@ struct DashboardWidgetsTests {
     #expect(second.layout == first.layout)
 
     await second.moveWidget(.budget, by: 1, among: [.incomeVsExpenses, .netWorth, .budget, .expenses, .income])
-    #expect(second.layout.order == [.incomeVsExpenses, .netWorth, .expenses, .budget, .income, .debts])
+    #expect(second.layout.order == [.incomeVsExpenses, .netWorth, .expenses, .budget, .income, .debts, .upcoming])
 
     await second.resetLayout()
     #expect(second.layout == .default)
@@ -207,6 +207,6 @@ struct DashboardWidgetsTests {
     try await store.settingsRepository.set(.dashboardLayout, #"["debts","savingsGoals","budget"]"#)
     let model = await model(store: store)
     #expect(model.phase == .loaded)
-    #expect(model.layout.order == [.debts, .budget, .netWorth, .expenses, .incomeVsExpenses, .income])
+    #expect(model.layout.order == [.debts, .budget, .netWorth, .expenses, .incomeVsExpenses, .income, .upcoming])
   }
 }

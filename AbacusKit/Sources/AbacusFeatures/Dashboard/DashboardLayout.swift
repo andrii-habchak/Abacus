@@ -11,6 +11,8 @@ public enum DashboardWidget: String, CaseIterable, Codable, Hashable, Sendable, 
   case incomeVsExpenses
   /// Shown only when the dashboard is given a debts view (R-DEBT, C14).
   case debts
+  /// "Upcoming (30 days)" (R-REC-11); shown when the dashboard is given its view.
+  case upcoming
 
   public var id: String { rawValue }
 
@@ -20,7 +22,7 @@ public enum DashboardWidget: String, CaseIterable, Codable, Hashable, Sendable, 
     switch self {
     case .netWorth, .incomeVsExpenses: true
     // Debts is half width (owner, 2026-10-27).
-    case .budget, .expenses, .income, .debts: false
+    case .budget, .expenses, .income, .debts, .upcoming: false
     }
   }
 
@@ -32,6 +34,7 @@ public enum DashboardWidget: String, CaseIterable, Codable, Hashable, Sendable, 
     case .income: "Monthly income"
     case .incomeVsExpenses: "Income vs expenses"
     case .debts: "Debts"
+    case .upcoming: "Upcoming (30 days)"
     }
   }
 }
@@ -45,7 +48,7 @@ public struct DashboardLayout: Hashable, Sendable {
 
   /// The owner's order (D53): full-width rows between pairs of half-width widgets.
   public static let defaultOrder: [DashboardWidget] = [
-    .netWorth, .budget, .expenses, .incomeVsExpenses, .income, .debts,
+    .netWorth, .budget, .expenses, .incomeVsExpenses, .income, .debts, .upcoming,
   ]
   public static let `default` = DashboardLayout(order: defaultOrder)
 

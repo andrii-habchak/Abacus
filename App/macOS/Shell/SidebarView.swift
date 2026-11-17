@@ -4,12 +4,15 @@ import SwiftUI
 /// Overview (Dashboard, Transactions, Events), Manage (Accounts … Rules), Settings at the bottom.
 struct SidebarView: View {
   @Binding var selection: AppSection?
+  /// N5: overdue + due in the next 7 days on Upcoming (R-REC-10); 0 hides the badge.
+  var upcomingBadge = 0
 
   var body: some View {
     List(selection: $selection) {
       Section("Overview") {
         ForEach(AppSection.overview) { item in
           Label(item.title, systemImage: item.systemImage).tag(item)
+            .badge(item == .upcoming ? upcomingBadge : 0)
         }
       }
       Section("Manage") {

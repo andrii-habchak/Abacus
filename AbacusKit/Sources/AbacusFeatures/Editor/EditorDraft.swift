@@ -10,6 +10,8 @@ public enum TransactionEditorMode: Hashable, Sendable, Identifiable {
   /// A new transaction starting on this account (and its currency): "New transaction" while an
   /// account is selected on the Accounts page (D55).
   case newInAccount(Account.ID)
+  /// N5 "Mark paid" (R-REC-4): a new transaction pre-filled from a scheduled item's template.
+  case newFromTemplate(TransactionTemplate)
   case edit(Txn.ID)
 
   public var id: String {
@@ -17,6 +19,7 @@ public enum TransactionEditorMode: Hashable, Sendable, Identifiable {
     case .new: "new"
     case .newInCategory(let id): "new-\(id.uuidString)"
     case .newInAccount(let id): "new-account-\(id.uuidString)"
+    case .newFromTemplate(let template): "new-template-\(template.hashValue)"
     case .edit(let id): "edit-\(id.uuidString)"
     }
   }

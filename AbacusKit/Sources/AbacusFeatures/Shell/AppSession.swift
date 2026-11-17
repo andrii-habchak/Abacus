@@ -1,6 +1,10 @@
 import AbacusDomain
 import AbacusFX
+import AbacusImport
 import AbacusStore
+#if canImport(AppKit)
+  import AppKit
+#endif
 import Foundation
 import Observation
 import SQLiteData
@@ -23,6 +27,10 @@ public final class AppSession {
   public let rules: RulesModel
   /// Debts tab (C14, R-DEBT-5).
   public let debts: DebtsModel
+  /// N5 Upcoming section, sidebar badge and dashboard widget (R-REC-10…12).
+  public let upcoming: UpcomingModel
+  /// N5d: the Upcoming section's Forecast tab (R-REC-13…20).
+  public let forecast: ForecastModel
   /// Import wizard (WP B6); nil in previews without a database.
   public let importWizard: ImportWizardModel?
   /// N6: the open Reconcile screen (shown in place of Accounts); nil when closed.
@@ -39,6 +47,12 @@ public final class AppSession {
   @ObservationIgnored private var tasks: [Task<Void, Never>] = []
   @ObservationIgnored private var started = false
   @ObservationIgnored private var ratesStartup: Task<Void, Never>?
+  /// N5: the "Mark paid" the open editor pays (R-REC-4); nil for any other editor.
+  @ObservationIgnored var pendingPayment: ScheduledPayment?
+  /// N5: the sweep + snapshot in flight (never two at once).
+  @ObservationIgnored private var maintenance: Task<Void, Never>?
+  @ObservationIgnored private var calendar: Calendar = .current
+  @ObservationIgnored private var activationObserver: (any NSObjectProtocol)?
   /// N2: reloads the screens when `abacus-mcp` or `abacus-import` writes the database file.
   @ObservationIgnored private(set) var changeWatcher: DatabaseChangeWatcher?
   /// False in tests that drive `DatabaseChangeWatcher` themselves (no `NSApplication`).
@@ -53,7 +67,9 @@ public final class AppSession {
   init(
     app: AppModel, dashboard: DashboardModel, transactions: TransactionsViewModel,
     editorDependencies: TransactionEditorDependencies, manage: ManageDependencies,
-    debts: DebtsDependencies, database: (any DatabaseWriter)?, refresher: RateRefresher?
+    debts: DebtsDependencies, upcoming: UpcomingDependencies, forecast: ForecastDependencies,
+    database: (any DatabaseWriter)?,
+    refresher: RateRefresher?
   ) {
     self.app = app
     self.dashboard = dashboard
@@ -64,6 +80,8 @@ public final class AppSession {
     events = EventsModel(dependencies: manage)
     rules = RulesModel(dependencies: manage)
     self.debts = DebtsModel(dependencies: debts)
+    self.upcoming = UpcomingModel(dependencies: upcoming)
+    self.forecast = ForecastModel(dependencies: forecast, displayCurrency: app.displayCurrency)
     // Debt records in another currency than the row's account convert at the day's rate (C17).
     importWizard = database.map { database in
       ImportWizardModel(
@@ -131,6 +149,19 @@ public final class AppSession {
       self.app.section = .debts
       Task { await self.debts.show(recordID: recordID) }
       return true
+    }
+    // N5 "Mark paid" (R-REC-4): the New transaction editor pre-filled from the item.
+    self.upcoming.onMarkPaid = { [weak self] payment in
+      guard let self else { return }
+      self.pendingPayment = payment
+      self.app.editor = .newFromTemplate(payment.template)
+    }
+    // "Update amount to X" on the Forecast tab saved an item: the lists follow.
+    self.forecast.onDataChange = { [weak self] in await self?.upcoming.load() }
+    // Items or occurrences changed on Upcoming: the forecast follows when it was shown.
+    self.upcoming.onDataChange = { [weak self] in
+      guard let self, self.forecast.phase == .loaded else { return }
+      await self.forecast.load()
     }
     app.onRefundsChange = { [weak self] on in
       guard let self else { return }
@@ -200,7 +231,11 @@ public final class AppSession {
       dashboard: DashboardModel(dependencies: .live(database: database, refresher: refresher)),
       transactions: transactions, editorDependencies: editor,
       manage: .live(database: database, refresher: refresher, now: now),
-      debts: .live(database: database, refresher: refresher), database: database, refresher: refresher)
+      debts: .live(database: database, refresher: refresher),
+      upcoming: .live(database: database, refresher: refresher),
+      forecast: .live(database: database, refresher: refresher, format: DashboardFormat(calendar: calendar)),
+      database: database, refresher: refresher)
+    session.calendar = calendar
     session.launchSnapshots = liveSnapshots
     relay.session = session
     session.rebuild = { moved in
@@ -235,7 +270,14 @@ public final class AppSession {
       app: AppModel(environment: .preview(offline: offline)),
       dashboard: DashboardModel(dependencies: .preview(fetchFailed: offline)),
       transactions: .preview(displayCurrency: .UAH), editorDependencies: .preview(), manage: .preview(),
-      debts: .preview(), database: nil, refresher: nil)
+      debts: .preview(), upcoming: .preview(), forecast: previewForecast(), database: nil, refresher: nil)
+  }
+
+  /// The Forecast tab on `UpcomingSample` in memory at the preview day.
+  private static func previewForecast() -> ForecastDependencies {
+    let database = (try? UpcomingSample.database()) ?? (try! AbacusDatabase.open(at: nil))
+    let rates = RateTable(rates: PreviewData.fxRates, today: PreviewData.today)
+    return .database(database, rates: { rates }, today: { PreviewData.today })
   }
 
   // MARK: Lifecycle
@@ -265,6 +307,9 @@ public final class AppSession {
     // The cache loads at once; the fetch runs in the background so a slow network never holds
     // up the window.
     await refresher.loadCache()
+    // N5: sweep, then the daily snapshot (R-REC-7c, R-REC-17), with the cached rates.
+    runScheduledMaintenance()
+    observeActivation()
     let startup = Task {
       await refresher.start()
     }
@@ -286,6 +331,8 @@ public final class AppSession {
   public func stop() {
     tasks.forEach { $0.cancel() }
     tasks = []
+    if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) }
+    activationObserver = nil
     changeWatcher?.stop()
     changeWatcher = nil
   }
@@ -311,6 +358,46 @@ public final class AppSession {
     if dashboard.phase == .loaded { await dashboard.load() }
     await reloadManageScreens()
     await importWizard?.refreshReference()
+    // N5 (R-REC-7c): `abacus-import` / MCP writes are matched here.
+    runScheduledMaintenance()
+  }
+
+  // MARK: Scheduled items (N5)
+
+  /// The matching sweep, then the daily forecast snapshot, off the main actor; then the
+  /// Upcoming data (badge, widget) re-reads. Without a database (previews) only the reload.
+  @discardableResult
+  public func runScheduledMaintenance() -> Task<Void, Never> {
+    if let maintenance { return maintenance }
+    let task = Task { [weak self] in
+      guard let self else { return }
+      if let database = self.database {
+        let today = self.app.environment.today()
+        let converter: (any CurrencyConverter)? = await self.refresher?.snapshot.table
+        let calendar = self.calendar
+        _ = await Task.detached(priority: .utility) {
+          await UpcomingMaintenance.run(database: database, today: today, converter: converter, calendar: calendar)
+        }.value
+      }
+      await self.upcoming.load()
+      // The sweep may have matched or missed occurrences; a shown forecast follows.
+      if self.forecast.phase == .loaded { await self.forecast.load() }
+      self.maintenance = nil
+    }
+    maintenance = task
+    return task
+  }
+
+  /// R-REC-17: "whenever the app becomes active" (a new day while the app stayed open).
+  private func observeActivation() {
+    #if canImport(AppKit)
+      guard watchesApplication, activationObserver == nil else { return }
+      activationObserver = NotificationCenter.default.addObserver(
+        forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { _ = self?.runScheduledMaintenance() }
+      }
+    #endif
   }
 
   /// New rates (fetch, lazy history, manual rate): every screen converts with the new table.
@@ -322,6 +409,8 @@ public final class AppSession {
     if accounts.phase == .loaded { await accounts.refreshRates() }
     if budget.phase == .loaded { await budget.refreshRates() }
     if debts.phase == .loaded { await debts.refreshRates() }
+    await upcoming.refreshRates()
+    if forecast.phase == .loaded { await forecast.load() }
     await app.rates.load()
   }
 
@@ -349,6 +438,8 @@ public final class AppSession {
     await dashboard.load()
     await transactions.load()
     await reloadManageScreens(all: true)
+    await runScheduledMaintenance().value
+    if forecast.phase != .idle { await forecast.load() }
   }
 
   /// Accounts, categories or events changed on a manage screen.
@@ -383,6 +474,7 @@ public final class AppSession {
     case .rules: if rules.phase == .loaded { await rules.load() }
     case .rates: await app.rates.load()
     case .debts: await debts.load()
+    case .upcoming: await upcoming.load()
     case .importFiles: break
     }
   }
@@ -459,7 +551,22 @@ public final class AppSession {
 
   /// The editor closed: after a save or delete the list and the dashboard re-read the data.
   public func editorFinished(_ result: TransactionEditorResult) async {
+    let payment = pendingPayment
+    pendingPayment = nil
     guard result != .cancelled else { return }
+    // N5: a "Mark paid" pays its occurrence; any other save is matched (R-REC-4, R-REC-7b).
+    if case .saved(let id) = result {
+      if let payment {
+        await upcoming.paid(payment, txnID: id)
+      } else if let database {
+        let calendar = self.calendar
+        _ = try? await SQLiteScheduledStore(database: database, calendar: calendar)
+          .matchTransaction(id, matcher: ScheduledMatch.rule)
+        await upcoming.load()
+      }
+    } else {
+      await upcoming.load()
+    }
     await transactions.reload()
     await dashboard.load()
     await reloadManageScreens()
@@ -488,6 +595,19 @@ public final class AppSession {
     }
     do {
       if try await SampleData.loadIfEmpty(into: database) {
+        // N5: a few scheduled items on the sample accounts (R-REC-10).
+        #if DEBUG
+          // `-AbacusForecastDemo YES`: the Forecast lane's demo items and past snapshots instead.
+          if UserDefaults.standard.bool(forKey: "AbacusForecastDemo") {
+            try? await ForecastDemoSeed.seed(
+              database: database, today: app.environment.today(), converter: await refresher?.snapshot.table,
+              calendar: calendar)
+          } else {
+            try? await database.write { try UpcomingSample.seedIfAbsent($0) }
+          }
+        #else
+          try? await database.write { try UpcomingSample.seedIfAbsent($0) }
+        #endif
         await dataChanged()
         sampleDataMessage = "Sample data loaded: \(PreviewData.accounts.count) accounts and \(PreviewData.txns.count) transactions."
       } else {
