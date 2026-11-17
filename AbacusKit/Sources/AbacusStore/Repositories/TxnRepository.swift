@@ -110,12 +110,15 @@ public struct SQLiteTxnRepository: TxnRepository {
       if let recordID = try Txn.find(id).fetchOne(db)?.debtRecordID {
         try DebtRecord.find(recordID).delete().execute(db)
         try RefundLinks.repair(db)
+        try ScheduledRules.reopenOrphans(db)
         return
       }
       try Txn.find(id).delete().execute(db)
       guard db.changesCount > 0 else { throw RepositoryError.notFound }
       // C30: refunds linked to the deleted expense become unlinked and keep their own category.
       try RefundLinks.repair(db)
+      // N5 (R-REC-7): an occurrence it paid is expected again.
+      try ScheduledRules.reopenOrphans(db)
     }
   }
 

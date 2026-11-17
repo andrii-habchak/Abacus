@@ -241,6 +241,8 @@ public struct SQLiteImportStore: ImportStore {
       try DebtRecord.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
       try Txn.where { $0.importBatchID.eq(batchID) }.delete().execute(db)
       try RefundLinks.repair(db)
+      // N5 (R-REC-7): occurrences the batch's transactions paid are expected again.
+      try ScheduledRules.reopenOrphans(db)
       try ImportFingerprint.where { $0.batchID.eq(batchID) }.delete().execute(db)
       // C38: transactions the batch turned into transfers (or completed) come back as they were.
       for snapshot in try ImportTxnSnapshot.where({ $0.batchID.eq(batchID) }).fetchAll(db) {

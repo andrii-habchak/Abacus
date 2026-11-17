@@ -26,7 +26,8 @@ public struct SQLiteAccountRepository: AccountRepository {
     try await database.write { db in
       if let existing = try Account.find(account.id).fetchOne(db),
         existing.currency != account.currency,
-        try Self.hasTransactions(account.id, db)
+        // N5 (R-REC-5): scheduled items on the account fix its currency too.
+        try Self.hasTransactions(account.id, db) || ScheduledRules.hasItems(onAccount: account.id, db)
       {
         throw StoreError.currencyLocked
       }
@@ -38,9 +39,13 @@ public struct SQLiteAccountRepository: AccountRepository {
 
   /// R-ACC-4: archived accounts keep their history; callers confirm a non-zero balance first.
   public func setArchived(_ id: Account.ID, _ isArchived: Bool) async throws {
+    let calendar = self.calendar
+    let now = Date()
     try await database.write { db in
       try Account.find(id).update { $0.isArchived = isArchived }.execute(db)
       guard db.changesCount > 0 else { throw RepositoryError.notFound }
+      // N5 (R-REC-5): its scheduled items pause ("Account archived") and resume with it.
+      try ScheduledRules.accountArchived(id, isArchived, today: Day(now, calendar: calendar), now: now, calendar: calendar, db)
     }
   }
 
@@ -53,6 +58,8 @@ public struct SQLiteAccountRepository: AccountRepository {
       try ImportMapping
         .where { $0.kind.eq(MappingKind.account) && $0.targetID.eq(id) }
         .delete().execute(db)
+      // N5 (R-REC-5): its scheduled items go too (their resolved history stays).
+      try ScheduledRules.accountDeleted(id, db)
       try Account.find(id).delete().execute(db)
     }
   }
