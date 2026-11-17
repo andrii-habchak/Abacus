@@ -119,7 +119,11 @@ final class ScriptedAuthenticator: LockAuthenticator {
           default: break
           }
           let sheets = LockWindowShield.attachedWindows().map { "\(type(of: $0)) alpha \($0.alphaValue)" }
-          print("LockTestPlan \(at)s \(action): locked \(model.isLocked), attached \(sheets)")
+          let titles = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.title)
+          let restorable = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.isRestorable)
+          NSLog(
+            "LockTestPlan %@s %@: locked %d, attached %@, titles %@, restorable %@", "\(at)", action,
+            model.isLocked ? 1 : 0, "\(sheets)", "\(titles)", "\(restorable)")
         }
       }
     }
