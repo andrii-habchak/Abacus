@@ -73,8 +73,19 @@ final class LockWindowShield {
   }
 
   /// Sheets (any depth) and child windows of the app's windows.
+  /// Only windows of AppKit, SwiftUI or the app itself: the system authentication dialog must
+  /// never be hidden, even if a future macOS shows it as an in-process sheet.
   static func attachedWindows() -> [NSWindow] {
-    NSApp.windows.filter { $0.sheetParent != nil || $0.parent != nil || $0.isSheet }
+    NSApp.windows.filter {
+      ($0.sheetParent != nil || $0.parent != nil || $0.isSheet) && isOurs($0)
+    }
+  }
+
+  static func isOurs(_ window: NSWindow) -> Bool {
+    let bundle = Bundle(for: type(of: window))
+    if bundle == Bundle.main { return true }
+    let id = bundle.bundleIdentifier ?? ""
+    return ["com.apple.AppKit", "com.apple.SwiftUI", "com.apple.SwiftUICore"].contains(id)
   }
 
   private func hideAttachedWindows() {

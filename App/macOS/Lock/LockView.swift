@@ -118,7 +118,9 @@ final class ScriptedAuthenticator: LockAuthenticator {
           case "lock": model.lockNow()
           default: break
           }
-          let sheets = LockWindowShield.attachedWindows().map { "\(type(of: $0)) alpha \($0.alphaValue)" }
+          let sheets = NSApp.windows.filter { $0.sheetParent != nil || $0.parent != nil }.map {
+            "\(type(of: $0)) [\(Bundle(for: type(of: $0)).bundleIdentifier ?? "?")] ours \(LockWindowShield.isOurs($0)) alpha \($0.alphaValue)"
+          }
           let titles = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.title)
           let restorable = NSApp.windows.filter { $0.isVisible && $0.sheetParent == nil }.map(\.isRestorable)
           NSLog(
