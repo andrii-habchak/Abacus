@@ -97,7 +97,7 @@ Status values: `proposed` (defaults below await the owner's approval), `approved
 | Id | Item | Size | Needs | Status |
 |----|------|------|-------|--------|
 | N1 | Automatic backups and pre-migration snapshot | M | defaults below | done, merged 2026-11-03 (`docs/status/N1.md`) |
-| N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | in progress (lane `wp/N2-mcp`: read + write tools built; wiring live rates and N1 snapshots, then merge) |
+| N2 | Local MCP server (read tools, then write tools) | M | defaults below; needs N1's snapshot API for writes | done, merged 2026-11-03 (read + write tools, live rates, N1 snapshots); app-side refresh open as lane N2r (`docs/STATUS.md`) |
 | N3 | Stabilisation pass | M | scope below | done, merged 2026-11-03 (two owner questions open, `docs/status/N3.md`) |
 | N4 | Database encryption research (document only, no code) | S | none | done, merged 2026-11-03 (`docs/status/N4.md`: FileVault now, revisit SQLCipher with Developer ID signing) |
 | N5 | Recurring transactions, subscription detection, upcoming bills, cash-flow forecast | L | TA text + approved prototypes; migration v18 reserved | approved 2026-11-04; first slice merged 2026-11-04 (migration v18, logic; UI and repositories open, `docs/status/N5.md`) |

@@ -4,6 +4,45 @@ _Last updated: 2026-10-30 (orchestrator)_
 
 ## Now
 
+_Updated 2026-11-17 (orchestrator)._ **Execution plan for the rest of the roadmap** (N1, N3, N4, N6 done;
+N2 merged; N5 first slice and N7 partial merged; N8 deferred). Nothing is running yet; wave A starts on the
+owner's go. Leftover branches `wp/N1-backups`, `wp/N2-mcp`, `wp/N5-spec` carry only commits already on
+`main` (patch-equivalent; `main`'s `MCPDatabase.swift` is newer) — safe to delete with the other merged
+worktrees (owner, deletes are blocked for agents).
+
+**What is not done** (from `docs/status/N2.md`, `N5.md`, `N7.md`):
+1. N5 steps 1–7: repositories, `ScheduledMatch` + import hook, launch sweep, forecast snapshots, overlay and
+   accuracy maths, Upcoming UI, Forecast UI. Spec §2 (`R-REC-1…22`) not folded into the TA.
+2. N7: sheet hiding at lock (`R-LOCK-11`, security gap), toolbar visible while locked, queued messages
+   (`R-LOCK-12`), saved-state / Mission Control spike (`R-LOCK-9`), README lock + recovery text; real Touch ID
+   prompt unchecked. `R-LOCK-…` not folded into the TA.
+3. N2 app side: the running app does not notice writes by `abacus-mcp` / `abacus-import` (no
+   `PRAGMA data_version` poll, no Darwin-notification observer, no stale-sheet warning); spec in
+   `docs/status/N2.md`. End-to-end check with a real MCP client not run. Further write tools await the owner.
+4. Docs: `docs/ROADMAP.md` N2 row still said "in progress".
+
+**Waves** (max 4 lanes, `docs/PLAN.md` §4; branches `wp/<id>-<slug>`; each lane writes `docs/status/<id>.md`):
+
+| Wave | Lane | Content | Owned paths | Must not touch | Effort |
+|------|------|---------|-------------|----------------|--------|
+| 0 | orchestrator | Fold N5 spec §2 and N7 spec into the TA (v1.13, change log, remove "recurring" from §1/§7); N5 protocol contracts (`ScheduledItemRepository`, occurrence + dismissal + snapshot repositories) in `AbacusDomain/Protocols/`; `SettingKey.scheduledGraceDays` (14), `.forecastHorizonDays` (90); ROADMAP N2 → done | shared files | — | — |
+| A | **N5a** core | N5 steps 1–3: repositories, `ScheduledMatch` in `AbacusImport/Dedupe/Matching.swift` + `RowAnalyzer` hook (preview badge, undo un-matches, manual save/edit), launch sweep (missed, end, pause/resume; never creates a `Txn`). Tests R-REC-1, 3, 5, 6, 7, 16 | `AbacusStore/Repositories/Scheduled*`, `AbacusImport/Dedupe/Matching.swift`, `RowAnalyzer.swift`, tests | UI, `Schema.swift`, Forecast files | high |
+| A | **N5c** forecast data | N5 steps 4–5: `ForecastSnapshotRepository` (daily take, 90 days, retention 120 daily then weekly to 2 years, read dedupe by `takenDay`), overlay + gap split + accuracy maths (pure). Tests R-REC-13…15, 17–20 | `AbacusStore/Repositories/ForecastSnapshotRepository.swift`, `AbacusDomain/Calc/Forecast*`, `Calc/ForecastOverlay*`, tests | N5a paths, UI | high |
+| A | **N2r** app refresh | App side of cross-process changes: `data_version` poll on a separate reader (1 s, foreground only), Darwin observer for `io.github.andrii-habchak.Abacus.database-changed`, reload on activate, stale-sheet warning on Save (editor). Tests with two connections on a temp DB | `AbacusFeatures/Shell/AppSession*.swift` (refresh part), new `Shell/DatabaseChangeWatcher.swift`, editor save check in `AbacusFeatures/Editor/` | Lock files, Upcoming/Forecast, `AbacusMCP` | standard |
+| A | **N7c** lock finish | Spike + fix `R-LOCK-11` (hide attached sheets/alerts at lock, restore on unlock, never discard drafts), hide toolbar while locked, `R-LOCK-12` queue, `R-LOCK-9` saved-state spike (disable restorable state if images are saved), README lock + `defaults write` recovery text | `App/macOS/Lock/**`, `AbacusFeatures/Lock/**`, `AbacusApp.swift` / `AppCommands` lock lines only, README lock section | `AppSession` refresh code (N2r), editor | standard |
+| B | **N5b** Upcoming UI | After N5a. Against approved `docs/design/N5-upcoming.dc.html`: Bills, All items, suggestions card, editor sheet (next five dates), dashboard widget "Upcoming (30 days)". Orchestrator lands sidebar item + badge and dashboard slot first | `AbacusFeatures/Upcoming/**`, `App/macOS/Upcoming/**`, widget file under `Dashboard/` | Shell/sidebar (orchestrator), Lock | high |
+| C | **N5d** Forecast UI | After N5b and N5c. Forecast tab of Upcoming against `N5-forecast.dc.html`: horizon/series/currency, warnings, overlay chart, accuracy panel; net worth adds `DebtBook` terms (R-REC-13) | `AbacusFeatures/Forecast/**`, `App/macOS/Forecast/**` | N5b files except the tab hook | high |
+| C | **QA-N** | Visual pass on a scratch DB with sample data (light/dark): Upcoming, Forecast, lock screen with an open sheet, MCP write → app refresh. Report only, fixes go back to lanes | `docs/status/QA-N.md`, screenshots | code | standard |
+
+**Merge order:** N2r → N5a → N5c → N5b → N5d → N7c (lock merges last per N7 spec; it rebases on `main` first),
+then QA-N. Each merge: diff inside owned paths, tests cite requirement IDs, gate green (`swift test` with
+`ABACUS_SAMPLES`, app build), `--no-ff`, ticks in ROADMAP/PLAN, STATUS updated, push.
+**Migrations:** none new (v18 and v19 already on `main`). The first build the owner runs with v18 needs a
+backup of `abacus.sqlite` (N1's pre-migration snapshot also covers it).
+**Owner, when convenient (not blocking):** check the real Touch ID prompt after N7c; try `abacus-mcp` in an
+AI client after N2r; say whether any further MCP write tools are wanted; delete merged worktrees/branches;
+ask for version 1.8.0 + DMG when the waves are in.
+
 _Updated 2026-11-03 23:55 CET (orchestrator, **paused**)._ Execution is paused until the weekly limit resets
 (Wed 2026-11-04 02:00 CET); nothing runs before 01:59 CET. State: `main` is green (`swift test` with real samples passes,
 Release build + DMG build 16 done), no lane is running, every lane worktree is clean (the N2 branch commits are duplicates of
