@@ -29,6 +29,8 @@ public final class AppSession {
   public let debts: DebtsModel
   /// N5 Upcoming section, sidebar badge and dashboard widget (R-REC-10…12).
   public let upcoming: UpcomingModel
+  /// N5d: the Upcoming section's Forecast tab (R-REC-13…20).
+  public let forecast: ForecastModel
   /// Import wizard (WP B6); nil in previews without a database.
   public let importWizard: ImportWizardModel?
   /// N6: the open Reconcile screen (shown in place of Accounts); nil when closed.
@@ -65,7 +67,8 @@ public final class AppSession {
   init(
     app: AppModel, dashboard: DashboardModel, transactions: TransactionsViewModel,
     editorDependencies: TransactionEditorDependencies, manage: ManageDependencies,
-    debts: DebtsDependencies, upcoming: UpcomingDependencies, database: (any DatabaseWriter)?,
+    debts: DebtsDependencies, upcoming: UpcomingDependencies, forecast: ForecastDependencies,
+    database: (any DatabaseWriter)?,
     refresher: RateRefresher?
   ) {
     self.app = app
@@ -78,6 +81,7 @@ public final class AppSession {
     rules = RulesModel(dependencies: manage)
     self.debts = DebtsModel(dependencies: debts)
     self.upcoming = UpcomingModel(dependencies: upcoming)
+    self.forecast = ForecastModel(dependencies: forecast, displayCurrency: app.displayCurrency)
     // Debt records in another currency than the row's account convert at the day's rate (C17).
     importWizard = database.map { database in
       ImportWizardModel(
@@ -152,6 +156,13 @@ public final class AppSession {
       self.pendingPayment = payment
       self.app.editor = .newFromTemplate(payment.template)
     }
+    // "Update amount to X" on the Forecast tab saved an item: the lists follow.
+    self.forecast.onDataChange = { [weak self] in await self?.upcoming.load() }
+    // Items or occurrences changed on Upcoming: the forecast follows when it was shown.
+    self.upcoming.onDataChange = { [weak self] in
+      guard let self, self.forecast.phase == .loaded else { return }
+      await self.forecast.load()
+    }
     app.onRefundsChange = { [weak self] on in
       guard let self else { return }
       self.transactions.refundsReduceSpending = on
@@ -221,7 +232,9 @@ public final class AppSession {
       transactions: transactions, editorDependencies: editor,
       manage: .live(database: database, refresher: refresher, now: now),
       debts: .live(database: database, refresher: refresher),
-      upcoming: .live(database: database, refresher: refresher), database: database, refresher: refresher)
+      upcoming: .live(database: database, refresher: refresher),
+      forecast: .live(database: database, refresher: refresher, format: DashboardFormat(calendar: calendar)),
+      database: database, refresher: refresher)
     session.calendar = calendar
     session.launchSnapshots = liveSnapshots
     relay.session = session
@@ -257,7 +270,14 @@ public final class AppSession {
       app: AppModel(environment: .preview(offline: offline)),
       dashboard: DashboardModel(dependencies: .preview(fetchFailed: offline)),
       transactions: .preview(displayCurrency: .UAH), editorDependencies: .preview(), manage: .preview(),
-      debts: .preview(), upcoming: .preview(), database: nil, refresher: nil)
+      debts: .preview(), upcoming: .preview(), forecast: previewForecast(), database: nil, refresher: nil)
+  }
+
+  /// The Forecast tab on `UpcomingSample` in memory at the preview day.
+  private static func previewForecast() -> ForecastDependencies {
+    let database = (try? UpcomingSample.database()) ?? (try! AbacusDatabase.open(at: nil))
+    let rates = RateTable(rates: PreviewData.fxRates, today: PreviewData.today)
+    return .database(database, rates: { rates }, today: { PreviewData.today })
   }
 
   // MARK: Lifecycle
@@ -360,6 +380,8 @@ public final class AppSession {
         }.value
       }
       await self.upcoming.load()
+      // The sweep may have matched or missed occurrences; a shown forecast follows.
+      if self.forecast.phase == .loaded { await self.forecast.load() }
       self.maintenance = nil
     }
     maintenance = task
@@ -388,6 +410,7 @@ public final class AppSession {
     if budget.phase == .loaded { await budget.refreshRates() }
     if debts.phase == .loaded { await debts.refreshRates() }
     await upcoming.refreshRates()
+    if forecast.phase == .loaded { await forecast.load() }
     await app.rates.load()
   }
 
@@ -416,6 +439,7 @@ public final class AppSession {
     await transactions.load()
     await reloadManageScreens(all: true)
     await runScheduledMaintenance().value
+    if forecast.phase != .idle { await forecast.load() }
   }
 
   /// Accounts, categories or events changed on a manage screen.
@@ -572,7 +596,18 @@ public final class AppSession {
     do {
       if try await SampleData.loadIfEmpty(into: database) {
         // N5: a few scheduled items on the sample accounts (R-REC-10).
-        try? await database.write { try UpcomingSample.seedIfAbsent($0) }
+        #if DEBUG
+          // `-AbacusForecastDemo YES`: the Forecast lane's demo items and past snapshots instead.
+          if UserDefaults.standard.bool(forKey: "AbacusForecastDemo") {
+            try? await ForecastDemoSeed.seed(
+              database: database, today: app.environment.today(), converter: await refresher?.snapshot.table,
+              calendar: calendar)
+          } else {
+            try? await database.write { try UpcomingSample.seedIfAbsent($0) }
+          }
+        #else
+          try? await database.write { try UpcomingSample.seedIfAbsent($0) }
+        #endif
         await dataChanged()
         sampleDataMessage = "Sample data loaded: \(PreviewData.accounts.count) accounts and \(PreviewData.txns.count) transactions."
       } else {

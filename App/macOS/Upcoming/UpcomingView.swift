@@ -7,6 +7,8 @@ import SwiftUI
 /// grouped occurrences with row actions) and All items; the item editor is a sheet (R-REC-12).
 struct UpcomingView: View {
   @Bindable var model: UpcomingModel
+  /// The Forecast tab (N5d, R-REC-13…20).
+  let forecast: ForecastModel
   var displayCurrency: Currency
 
   var body: some View {
@@ -46,7 +48,7 @@ struct UpcomingView: View {
   @ViewBuilder private var content: some View {
     switch model.tab {
     case .forecast:
-      UpcomingForecastPlaceholder()
+      ForecastView(model: forecast, displayCurrency: displayCurrency)
     case .bills:
       switch model.phase {
       case .failed(let message):
@@ -84,16 +86,6 @@ struct UpcomingView: View {
         }
       }
     }
-  }
-}
-
-/// The Forecast tab until the Forecast lane's view replaces it (N5d builds `ForecastView`).
-struct UpcomingForecastPlaceholder: View {
-  var body: some View {
-    Text("Forecast")
-      .font(.title3)
-      .foregroundStyle(.secondary)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
@@ -596,7 +588,7 @@ struct UpcomingNotice: View {
 #endif
 
 #Preview("Upcoming") {
-  let model = UpcomingModel(dependencies: .preview())
-  return UpcomingView(model: model, displayCurrency: .PLN)
+  let session = AppSession.preview()
+  return UpcomingView(model: session.upcoming, forecast: session.forecast, displayCurrency: .PLN)
     .frame(width: 1100, height: 800)
 }

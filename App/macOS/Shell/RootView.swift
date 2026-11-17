@@ -129,7 +129,7 @@ struct SectionDetail: View {
       DebtsView(model: session.debts, displayCurrency: app.displayCurrency)
         .shellToolbar()
     case .upcoming:
-      UpcomingView(model: session.upcoming, displayCurrency: app.displayCurrency)
+      UpcomingView(model: session.upcoming, forecast: session.forecast, displayCurrency: app.displayCurrency)
         .shellToolbar()
     case .importFiles:
       if let wizard = session.importWizard {
