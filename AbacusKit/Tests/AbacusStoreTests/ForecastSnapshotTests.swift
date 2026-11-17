@@ -176,4 +176,38 @@ struct ForecastSnapshotTests {
     #expect(itemSnapshotIDs.isSubset(of: headerIDs))
     #expect(headerIDs.count == days.count)
   }
+
+  @Test("R-REC-19: overlay from a stored snapshot; actual from daily balances equals the balance calculator")
+  func overlayFromStore() async throws {
+    let f = try await fixture()
+    let repo = repository(f)
+    let taken = try #require(try await repo.takeIfNeeded(today: Self.today, rates: Self.rates, debts: [:]))
+    // After the snapshot: rent paid 310.00 on 11-16 (matched), groceries 20.00 on 11-17.
+    try await f.insert(F.expense(201, "2026-11-16", 310_00, nil, payee: "Rent"))
+    try await f.insert(F.expense(202, "2026-11-17", 20_00, F.groceries))
+    let occurrence = ScheduledOccurrence(
+      itemID: Self.rent.id, expectedDay: "2026-11-15", expectedAmountMinor: 300_00, status: .paid, txnID: F.id(201),
+      actualDay: "2026-11-16", actualAmountMinor: 310_00, matchKind: .auto)
+    try await f.database.write { db in try ScheduledOccurrence.insert { occurrence }.execute(db) }
+    let today = Day("2026-11-18")!
+    let days = (0...Self.today.daysUntil(today)).map { Self.today.plusDays($0) }
+    let series = try await f.reports.balances(on: days)
+    let actual = ActualDailyBalances(
+      days: series.days, currencies: Dictionary(uniqueKeysWithValues: series.accounts.map { ($0.id, $0.currency) }),
+      balances: series.balances)
+    let content = try #require(try await repo.snapshot(taken.id))
+    let overlay = try #require(ForecastOverlay.make(
+      snapshot: content, actual: actual, occurrences: [occurrence], selection: .account(F.bank.id), today: today))
+    for point in overlay.actual {
+      #expect(point.valueMinor == (try await f.accounts.balances(asOf: point.day))[F.bank.id])
+    }
+    // Forecast 950 − 300 (rent 11-15); actual 950 − 310 − 20.
+    #expect(overlay.forecastAtGap == 650_00)
+    #expect(overlay.actualAtGap == 620_00)
+    #expect(overlay.split == ForecastGapSplit(scheduledMinor: -10_00, otherMinor: -20_00))
+    let worth = try #require(ForecastOverlay.make(
+      snapshot: content, actual: actual, occurrences: [occurrence], selection: .netWorth(.PLN), today: today))
+    #expect(worth.gapMinor == -30_00)
+    #expect(worth.split?.scheduledMinor == -10_00)
+  }
 }
